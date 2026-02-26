@@ -1,0 +1,128 @@
+import { useCallback, useEffect } from 'react';
+import { useSettingsStore } from '@/store/settingsStore';
+import {
+  getOAuthAuthorizationUrl,
+  exchangeCodeForToken,
+  refreshAccessToken,
+} from '@/api/feishu';
+
+export const useFeishuOAuth = () => {
+  const {
+    feishuAppId,
+    feishuAppSecret,
+    feishuCorsProxy,
+    feishuUserAccessToken,
+    feishuRefreshToken,
+    setFeishuUserAccessToken,
+    setFeishuRefreshToken,
+  } = useSettingsStore();
+
+  // Handle OAuth callback - check for code in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+
+    if (code && state?.startsWith('feishu_oauth') && feishuAppId && feishuAppSecret) {
+      if (!feishuCorsProxy) {
+        alert('CORS Proxy is required for OAuth. Please configure it in Settings and try again.');
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+
+      // Parse return view from state (format: feishu_oauth:settings)
+      const returnView = state.includes(':') ? state.split(':')[1] : null;
+
+      // Exchange code for token
+      const redirectUri = window.location.origin + window.location.pathname;
+      console.log('Exchanging OAuth code for token...');
+      exchangeCodeForToken(code, feishuAppId, feishuAppSecret, redirectUri, feishuCorsProxy)
+        .then((tokens) => {
+          setFeishuUserAccessToken(tokens.accessToken);
+          setFeishuRefreshToken(tokens.refreshToken);
+          // Clear the code from URL, keep hash for return view
+          const newUrl = returnView
+            ? `${window.location.pathname}#${returnView}`
+            : window.location.pathname;
+          window.history.replaceState({}, '', newUrl);
+          console.log('OAuth login successful!');
+        })
+        .catch((error) => {
+          console.error('OAuth error:', error);
+          let message = error.message;
+          if (message.includes('Failed to fetch') || message.includes('Network error')) {
+            message = 'Network error: Cannot reach Feishu API. Make sure CORS proxy is running.';
+          }
+          alert(`OAuth failed: ${message}`);
+          const newUrl = returnView
+            ? `${window.location.pathname}#${returnView}`
+            : window.location.pathname;
+          window.history.replaceState({}, '', newUrl);
+        });
+    }
+  }, [feishuAppId, feishuAppSecret, feishuCorsProxy, setFeishuUserAccessToken, setFeishuRefreshToken]);
+
+  // Start OAuth flow
+  const startOAuth = useCallback((returnTo?: string) => {
+    if (!feishuAppId) {
+      alert('Please enter Feishu App ID first');
+      return;
+    }
+
+    const redirectUri = window.location.origin + window.location.pathname;
+    console.log('Starting OAuth with redirect_uri:', redirectUri);
+    console.log('Make sure this exact URL is configured in Feishu app settings');
+
+    // Include return view in state
+    const state = returnTo ? `feishu_oauth:${returnTo}` : 'feishu_oauth';
+    const authUrl = getOAuthAuthorizationUrl(feishuAppId, redirectUri, state);
+    console.log('Authorization URL:', authUrl);
+
+    window.location.href = authUrl;
+  }, [feishuAppId]);
+
+  // Refresh token
+  const refreshTokenIfNeeded = useCallback(async () => {
+    if (!feishuRefreshToken || !feishuAppId || !feishuAppSecret) {
+      return false;
+    }
+
+    try {
+      const tokens = await refreshAccessToken(
+        feishuRefreshToken,
+        feishuAppId,
+        feishuAppSecret,
+        feishuCorsProxy
+      );
+      setFeishuUserAccessToken(tokens.accessToken);
+      setFeishuRefreshToken(tokens.refreshToken);
+      return true;
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      // Clear invalid tokens
+      setFeishuUserAccessToken('');
+      setFeishuRefreshToken('');
+      return false;
+    }
+  }, [
+    feishuRefreshToken,
+    feishuAppId,
+    feishuAppSecret,
+    feishuCorsProxy,
+    setFeishuUserAccessToken,
+    setFeishuRefreshToken,
+  ]);
+
+  // Logout - clear tokens
+  const logout = useCallback(() => {
+    setFeishuUserAccessToken('');
+    setFeishuRefreshToken('');
+  }, [setFeishuUserAccessToken, setFeishuRefreshToken]);
+
+  return {
+    isAuthenticated: !!feishuUserAccessToken,
+    startOAuth,
+    refreshTokenIfNeeded,
+    logout,
+  };
+};
