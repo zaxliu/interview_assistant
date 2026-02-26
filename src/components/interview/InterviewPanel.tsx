@@ -159,11 +159,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
                 </CardBody>
               </Card>
 
-              {/* Instructions */}
-              <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
-                💡 Click a question to select it, then select text in the PDF to add it as a quote.
-              </div>
-
               {/* Question Generation */}
               <div className="flex gap-2">
                 <Button
