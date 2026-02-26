@@ -133,6 +133,22 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               </div>
             </div>
 
+            {/* Quick Notes */}
+            <Card>
+              <CardHeader>
+                <h3 className="text-sm font-medium text-gray-700">Quick Notes</h3>
+              </CardHeader>
+              <CardBody>
+                <Textarea
+                  placeholder="Jot down quick observations..."
+                  value={candidate.quickNotes || ''}
+                  onChange={(e) => handleQuickNotesChange(e.target.value)}
+                  rows={3}
+                  className="text-sm"
+                />
+              </CardBody>
+            </Card>
+
             {/* Instructions */}
             <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
               💡 Click a question to select it, then select text in the PDF to add it as a quote.
