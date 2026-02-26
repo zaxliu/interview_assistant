@@ -192,7 +192,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
                     Back to Candidates
                   </Button>
                   <Button onClick={onGenerateSummary}>
-                    Generate Summary
+                    {candidate.interviewResult ? 'View Summary' : 'Generate Summary'}
                   </Button>
                 </div>
               )}
@@ -322,7 +322,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
             Back to Candidates
           </Button>
           <Button onClick={onGenerateSummary}>
-            Generate Summary
+            {candidate.interviewResult ? 'View Summary' : 'Generate Summary'}
           </Button>
         </div>
       )}
