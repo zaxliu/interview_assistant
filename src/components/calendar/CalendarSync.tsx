@@ -17,6 +17,9 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
     if (result) {
       const { events, positions: positionMap } = result;
 
+      // Collect all calendar event IDs from this sync
+      const syncedEventIds = new Set(events.map(e => e.eventId));
+
       // Create or update positions and candidates
       positionMap.forEach((posInfo, key) => {
         // Check if position already exists
@@ -60,11 +63,26 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
                 });
               } else {
                 // Update existing candidate's interview time (in case format changed)
+                // Also restore status from cancelled if event is back
                 updateCandidate(positionId, existingCandidate.id, {
                   interviewTime: event.startTime,
+                  ...(existingCandidate.status === 'cancelled' ? { status: 'scheduled' } : {}),
                 });
               }
             }
+          }
+        });
+
+        // Mark candidates as cancelled if their calendar event was deleted
+        const pos = usePositionStore.getState().getPosition(positionId);
+        pos?.candidates.forEach((candidate) => {
+          if (
+            candidate.calendarEventId &&
+            !syncedEventIds.has(candidate.calendarEventId) &&
+            candidate.status !== 'completed' &&
+            candidate.status !== 'cancelled'
+          ) {
+            updateCandidate(positionId, candidate.id, { status: 'cancelled' });
           }
         });
       });

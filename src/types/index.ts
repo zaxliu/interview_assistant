@@ -34,7 +34,7 @@ export interface Candidate {
   resumeText?: string;
   resumeFilename?: string;
   resumeUrl?: string;
-  status: 'pending' | 'scheduled' | 'in_progress' | 'completed';
+  status: 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   calendarEventId?: string;
   interviewTime?: string;
   questions: Question[];
