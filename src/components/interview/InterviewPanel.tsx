@@ -164,6 +164,23 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
                 💡 Click a question to select it, then select text in the PDF to add it as a quote.
               </div>
 
+              {/* Question Generation */}
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={handleGenerateQuestions}
+                  isLoading={aiLoading}
+                  disabled={!canGenerateQuestions || aiLoading}
+                  title={!canGenerateQuestions ? 'Add job description and resume first' : ''}
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Generate Questions
+                </Button>
+                <AddQuestionForm positionId={position.id} candidateId={candidate.id} />
+              </div>
+
               {/* Questions List */}
               <QuestionList
                 positionId={position.id}
