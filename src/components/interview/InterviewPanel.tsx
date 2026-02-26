@@ -153,7 +153,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
                     placeholder="Jot down quick observations..."
                     value={candidate.quickNotes || ''}
                     onChange={(e) => handleQuickNotesChange(e.target.value)}
-                    rows={3}
+                    autoResize
                     className="text-sm"
                   />
                 </CardBody>
@@ -285,7 +285,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
             placeholder="Jot down quick observations, impressions, or reminders during the interview..."
             value={candidate.quickNotes || ''}
             onChange={(e) => handleQuickNotesChange(e.target.value)}
-            rows={3}
+            autoResize
             className="text-sm"
           />
         </CardBody>

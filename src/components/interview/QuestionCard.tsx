@@ -137,7 +137,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
           placeholder="Take notes here during the interview..."
           value={question.notes || ''}
           onChange={(e) => handleNotesChange(e.target.value)}
-          rows={3}
+          autoResize
           className="text-sm"
           disabled={question.status !== 'asked'}
         />
