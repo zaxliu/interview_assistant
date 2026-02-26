@@ -316,7 +316,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
                 summary: { ...result.summary, overall_comment: e.target.value },
               })
             }
-            rows={4}
+            autoResize
             placeholder="Comprehensive evaluation of the candidate..."
           />
         </CardBody>

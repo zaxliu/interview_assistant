@@ -62,7 +62,7 @@ export const EvaluationDimensionCard: React.FC<EvaluationDimensionCardProps> = (
               value={dimension.assessment_points}
               onChange={(e) => onUpdate({ assessment_points: e.target.value })}
               placeholder="Detailed assessment points..."
-              rows={2}
+              autoResize
               className="text-sm"
             />
           </div>
