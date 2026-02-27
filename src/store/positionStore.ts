@@ -19,6 +19,7 @@ interface PositionState {
 
   // Question actions
   addQuestion: (positionId: string, candidateId: string, question: Omit<Question, 'id'>) => void;
+  insertQuestion: (positionId: string, candidateId: string, index: number, question: Omit<Question, 'id'>) => string;
   updateQuestion: (positionId: string, candidateId: string, questionId: string, updates: Partial<Question>) => void;
   deleteQuestion: (positionId: string, candidateId: string, questionId: string) => void;
   setQuestions: (positionId: string, candidateId: string, questions: Question[]) => void;
@@ -165,6 +166,34 @@ export const usePositionStore = create<PositionState>((set, get) => ({
       saveToStorage({ positions: newState.positions, settings: {} });
       return newState;
     });
+  },
+
+  insertQuestion: (positionId, candidateId, index, questionData) => {
+    const question: Question = {
+      ...questionData,
+      id: generateId(),
+      status: questionData.status || 'not_reached',
+    };
+    set((state) => {
+      const newState = {
+        positions: state.positions.map((p) =>
+          p.id === positionId
+            ? {
+                ...p,
+                candidates: p.candidates.map((c) => {
+                  if (c.id !== candidateId) return c;
+                  const newQuestions = [...c.questions];
+                  newQuestions.splice(index, 0, question);
+                  return { ...c, questions: newQuestions };
+                }),
+              }
+            : p
+        ),
+      };
+      saveToStorage({ positions: newState.positions, settings: {} });
+      return newState;
+    });
+    return question.id;
   },
 
   updateQuestion: (positionId, candidateId, questionId, updates) => {

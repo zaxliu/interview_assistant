@@ -9,6 +9,7 @@ interface QuestionCardProps {
   question: Question;
   onClick?: () => void;
   isActive?: boolean;
+  autoEdit?: boolean;
 }
 
 // Evaluation dimension colors
@@ -25,6 +26,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   question,
   onClick,
   isActive,
+  autoEdit,
 }) => {
   const { updateQuestion, deleteQuestion } = usePositionStore();
   const [isEditing, setIsEditing] = useState(false);
@@ -41,6 +43,14 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
       editInputRef.current.select();
     }
   }, [isEditing]);
+
+  // Auto-enter edit mode when autoEdit prop is true
+  useEffect(() => {
+    if (autoEdit && !isEditing) {
+      setEditText(question.text);
+      setIsEditing(true);
+    }
+  }, [autoEdit]);
 
   const handleStartEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
