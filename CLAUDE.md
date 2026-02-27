@@ -53,6 +53,15 @@ npm run dev
 - `VITE_AI_MODEL`: Model name (e.g., gpt-4)
 - `VITE_FEISHU_APP_ID`, `VITE_FEISHU_APP_SECRET`: For calendar sync
 
+## Common Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server |
+| `npm run build` | Type-check and build for production |
+| `npm run preview` | Preview production build locally |
+| `npm run lint` | Run ESLint on TypeScript files |
+
 ## Architecture
 
 ### State Management
