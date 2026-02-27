@@ -4,15 +4,21 @@ import { saveToStorage, loadFromStorage } from '@/utils/storage';
 
 interface PositionState {
   positions: Position[];
+  currentUserId: string | null;
+
+  // User context actions
+  setCurrentUserId: (userId: string | null) => void;
+  loadForUser: (userId: string) => void;
+  clearCurrentUser: () => void;
 
   // Position actions
-  addPosition: (position: Omit<Position, 'id' | 'createdAt' | 'candidates'>) => Position;
+  addPosition: (position: Omit<Position, 'id' | 'createdAt' | 'candidates' | 'userId'>) => Position;
   updatePosition: (id: string, updates: Partial<Position>) => void;
   deletePosition: (id: string) => void;
   getPosition: (id: string) => Position | undefined;
 
   // Candidate actions
-  addCandidate: (positionId: string, candidate: Omit<Candidate, 'id' | 'questions'>) => Candidate;
+  addCandidate: (positionId: string, candidate: Omit<Candidate, 'id' | 'questions' | 'userId'>) => Candidate;
   updateCandidate: (positionId: string, candidateId: string, updates: Partial<Candidate>) => void;
   deleteCandidate: (positionId: string, candidateId: string) => void;
   getCandidate: (positionId: string, candidateId: string) => Candidate | undefined;
@@ -42,40 +48,62 @@ const generateId = () => Math.random().toString(36).substring(2, 15);
 
 export const usePositionStore = create<PositionState>((set, get) => ({
   positions: [],
+  currentUserId: null,
+
+  setCurrentUserId: (userId) => {
+    set({ currentUserId: userId });
+  },
+
+  loadForUser: (userId) => {
+    const data = loadFromStorage(userId);
+    if (data?.positions) {
+      set({ positions: data.positions as Position[], currentUserId: userId });
+    } else {
+      set({ positions: [], currentUserId: userId });
+    }
+  },
+
+  clearCurrentUser: () => {
+    set({ positions: [], currentUserId: null });
+  },
 
   addPosition: (positionData) => {
+    const { currentUserId } = get();
     const position: Position = {
       ...positionData,
       id: generateId(),
       createdAt: new Date().toISOString(),
       candidates: [],
+      userId: currentUserId || undefined,
     };
     set((state) => {
       const newState = { positions: [...state.positions, position] };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
     return position;
   },
 
   updatePosition: (id, updates) => {
+    const { currentUserId } = get();
     set((state) => {
       const newState = {
         positions: state.positions.map((p) =>
           p.id === id ? { ...p, ...updates } : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
 
   deletePosition: (id) => {
+    const { currentUserId } = get();
     set((state) => {
       const newState = {
         positions: state.positions.filter((p) => p.id !== id),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
@@ -85,10 +113,12 @@ export const usePositionStore = create<PositionState>((set, get) => ({
   },
 
   addCandidate: (positionId, candidateData) => {
+    const { currentUserId } = get();
     const candidate: Candidate = {
       ...candidateData,
       id: generateId(),
       questions: [],
+      userId: currentUserId || undefined,
     };
     set((state) => {
       const newState = {
@@ -98,13 +128,14 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
     return candidate;
   },
 
   updateCandidate: (positionId, candidateId, updates) => {
+    const { currentUserId } = get();
     set((state) => {
       const newState = {
         positions: state.positions.map((p) =>
@@ -118,12 +149,13 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
 
   deleteCandidate: (positionId, candidateId) => {
+    const { currentUserId } = get();
     set((state) => {
       const newState = {
         positions: state.positions.map((p) =>
@@ -132,7 +164,7 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
@@ -143,6 +175,7 @@ export const usePositionStore = create<PositionState>((set, get) => ({
   },
 
   addQuestion: (positionId, candidateId, questionData) => {
+    const { currentUserId } = get();
     const question: Question = {
       ...questionData,
       id: generateId(),
@@ -163,12 +196,13 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
 
   insertQuestion: (positionId, candidateId, index, questionData) => {
+    const { currentUserId } = get();
     const question: Question = {
       ...questionData,
       id: generateId(),
@@ -190,13 +224,14 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
     return question.id;
   },
 
   updateQuestion: (positionId, candidateId, questionId, updates) => {
+    const { currentUserId } = get();
     set((state) => {
       const newState = {
         positions: state.positions.map((p) =>
@@ -217,12 +252,13 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
 
   deleteQuestion: (positionId, candidateId, questionId) => {
+    const { currentUserId } = get();
     set((state) => {
       const newState = {
         positions: state.positions.map((p) =>
@@ -241,12 +277,13 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
 
   setQuestions: (positionId, candidateId, questions) => {
+    const { currentUserId } = get();
     set((state) => {
       const newState = {
         positions: state.positions.map((p) =>
@@ -260,12 +297,13 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
 
   addCodingChallenge: (positionId, candidateId) => {
+    const { currentUserId } = get();
     const challenge: CodingChallenge = {
       id: generateId(),
       problem: '',
@@ -286,12 +324,13 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
 
   updateCodingChallenge: (positionId, candidateId, challengeId, updates) => {
+    const { currentUserId } = get();
     set((state) => {
       const newState = {
         positions: state.positions.map((p) =>
@@ -312,12 +351,13 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
 
   deleteCodingChallenge: (positionId, candidateId, challengeId) => {
+    const { currentUserId } = get();
     set((state) => {
       const newState = {
         positions: state.positions.map((p) =>
@@ -333,12 +373,13 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
 
   setInterviewResult: (positionId, candidateId, result) => {
+    const { currentUserId } = get();
     set((state) => {
       const newState = {
         positions: state.positions.map((p) =>
@@ -352,12 +393,13 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
 
   completeInterview: (positionId, candidateId, result) => {
+    const { currentUserId } = get();
     set((state) => {
       const newState = {
         positions: state.positions.map((p) =>
@@ -371,7 +413,7 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             : p
         ),
       };
-      saveToStorage({ positions: newState.positions, settings: {} });
+      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
       return newState;
     });
   },
@@ -384,6 +426,7 @@ export const usePositionStore = create<PositionState>((set, get) => ({
   },
 
   saveToStorage: () => {
-    saveToStorage({ positions: get().positions, settings: {} });
+    const { currentUserId } = get();
+    saveToStorage({ positions: get().positions, settings: {} }, currentUserId || undefined);
   },
 }));

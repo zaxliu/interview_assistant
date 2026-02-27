@@ -1,12 +1,8 @@
 import React from 'react';
 import { useSettingsStore } from '@/store/settingsStore';
-import { Card, CardBody, Button } from '@/components/ui';
+import { Card, CardBody } from '@/components/ui';
 
-interface SettingsWarningProps {
-  onOpenSettings: () => void;
-}
-
-export const SettingsWarning: React.FC<SettingsWarningProps> = ({ onOpenSettings }) => {
+export const SettingsWarning: React.FC = () => {
   const {
     aiApiKey,
     feishuAppId,
@@ -50,9 +46,6 @@ export const SettingsWarning: React.FC<SettingsWarningProps> = ({ onOpenSettings
               Please configure: {missingItems.join(', ')}
             </p>
           </div>
-          <Button size="sm" onClick={onOpenSettings}>
-            Open Settings
-          </Button>
         </div>
       </CardBody>
     </Card>

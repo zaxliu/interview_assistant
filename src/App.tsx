@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
+import { useTokenValidation } from '@/hooks/useTokenValidation';
+import { useFeishuOAuth } from '@/hooks/useFeishuOAuth';
+import { migrateLegacyData } from '@/utils/migration';
 import { CalendarSync } from '@/components/calendar/CalendarSync';
 import { UpcomingInterviews } from '@/components/calendar/UpcomingInterviews';
 import { PositionList } from '@/components/positions/PositionList';
@@ -11,6 +14,7 @@ import { InterviewPanel } from '@/components/interview/InterviewPanel';
 import { SummaryEditor } from '@/components/summary/SummaryEditor';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { SettingsWarning } from '@/components/settings/SettingsWarning';
+import { UserLoginBanner } from '@/components/auth/UserLoginBanner';
 import { Button } from '@/components/ui';
 
 type View =
@@ -40,8 +44,44 @@ const getInitialView = (): View => {
 };
 
 function App() {
-  const { loadFromStorage, getPosition } = usePositionStore();
-  const { loadFromStorage: loadSettings } = useSettingsStore();
+  const { loadForUser, clearCurrentUser, getPosition } = usePositionStore();
+  const { loadFromStorage: loadSettings, feishuUser } = useSettingsStore();
+  const { isAuthenticated } = useFeishuOAuth();
+
+  // Token validation for Feishu login
+  useTokenValidation();
+
+  // Track previous user to detect login/logout changes
+  const prevUserIdRef = useRef<string | null>(null);
+
+  // Handle user login/logout and data loading
+  useEffect(() => {
+    const currentLoggedInUserId = feishuUser?.id || null;
+    const prevUserId = prevUserIdRef.current;
+
+    // Only act if user changed
+    if (currentLoggedInUserId !== prevUserId) {
+      prevUserIdRef.current = currentLoggedInUserId;
+
+      if (currentLoggedInUserId) {
+        // User logged in
+        console.log('User logged in:', currentLoggedInUserId);
+
+        // Try to migrate legacy data on first login
+        const migrated = migrateLegacyData(currentLoggedInUserId);
+        if (migrated) {
+          console.log('Legacy data migrated for user:', currentLoggedInUserId);
+        }
+
+        // Load user's data
+        loadForUser(currentLoggedInUserId);
+      } else {
+        // User logged out
+        console.log('User logged out, clearing data');
+        clearCurrentUser();
+      }
+    }
+  }, [feishuUser, loadForUser, clearCurrentUser]);
 
   const [view, setView] = useState<View>(getInitialView);
   const [selectedPositionId, setSelectedPositionId] = useState<string | null>(null);
@@ -55,11 +95,10 @@ function App() {
     setInterviewPdfData(layout.pdfData);
   };
 
-  // Load data from storage on mount
+  // Load settings on mount
   useEffect(() => {
-    loadFromStorage();
     loadSettings();
-  }, [loadFromStorage, loadSettings]);
+  }, [loadSettings]);
 
   const selectedPosition = selectedPositionId ? getPosition(selectedPositionId) : null;
   const selectedCandidate = selectedPosition?.candidates.find(
@@ -149,6 +188,7 @@ function App() {
             <h1 className="text-lg font-semibold text-gray-900">Interview Assistant</h1>
           </div>
           <div className="flex items-center gap-3">
+            <UserLoginBanner />
             {view === 'interview' && selectedCandidate && (
               <>
                 {interviewPdfData && (
@@ -177,7 +217,7 @@ function App() {
                 )}
               </>
             )}
-            {view === 'dashboard' && <CalendarSync />}
+            {view === 'dashboard' && isAuthenticated && <CalendarSync />}
             <Button
               variant="ghost"
               size="sm"
@@ -200,7 +240,7 @@ function App() {
 
         {view === 'dashboard' && (
           <div className="space-y-6">
-            <SettingsWarning onOpenSettings={() => setView('settings')} />
+            <SettingsWarning />
             <UpcomingInterviews onStartInterview={handleStartInterview} />
             <PositionList
               onSelectPosition={handleSelectPosition}

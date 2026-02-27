@@ -23,7 +23,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
     setFeishuCorsProxy,
   } = useSettingsStore();
 
-  const { isAuthenticated, startOAuth, logout } = useFeishuOAuth();
+  const { isAuthenticated, user, logout } = useFeishuOAuth();
 
   return (
     <div className="space-y-4">
@@ -106,23 +106,19 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">
                 {isAuthenticated ? (
-                  <span className="text-green-600">Connected to Feishu</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-600">Connected</span>
+                    {user && (
+                      <span className="text-gray-500">as {user.name}</span>
+                    )}
+                  </div>
                 ) : (
-                  <span className="text-gray-500">Not connected</span>
+                  <span className="text-gray-500">Not connected - Login via header</span>
                 )}
               </span>
-              {isAuthenticated ? (
+              {isAuthenticated && (
                 <Button variant="secondary" size="sm" onClick={logout}>
                   Logout
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => startOAuth('settings')}
-                  disabled={!feishuAppId || !feishuAppSecret || !feishuCorsProxy}
-                >
-                  Login with Feishu
                 </Button>
               )}
             </div>

@@ -1,4 +1,4 @@
-import type { CalendarEvent, InterviewResult } from '@/types';
+import type { CalendarEvent, InterviewResult, User } from '@/types';
 import { parseEventTitle, isInterviewEvent, extractLinksFromDescription } from '@/utils/titleParser';
 
 // Feishu API base URL
@@ -158,6 +158,48 @@ export const refreshAccessToken = async (
     accessToken: data.access_token,
     refreshToken: data.refresh_token || '',
     expiresIn: data.expires_in || 7200,
+  };
+};
+
+/**
+ * Get user info from Feishu using user access token
+ */
+export const getUserInfo = async (
+  userAccessToken: string,
+  corsProxy?: string
+): Promise<User> => {
+  const url = corsProxy
+    ? buildUrl('/authen/v1/user_info', corsProxy)
+    : `${FEISHU_API_BASE}/authen/v1/user_info`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${userAccessToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Get user info error:', errorText);
+    throw new Error(`Failed to get user info: ${response.status}`);
+  }
+
+  const data = await response.json();
+  console.log('User info response:', data);
+
+  if (data.code !== 0) {
+    throw new Error(data.msg || 'Failed to get user info');
+  }
+
+  // Response structure: { code: 0, data: { user_id, name, avatar_url, ... } }
+  const userData = data.data;
+  return {
+    id: userData.user_id || userData.open_id || '',
+    name: userData.name || 'Unknown User',
+    avatarUrl: userData.avatar_url || userData.avatar_thumb || undefined,
+    loginTime: new Date().toISOString(),
   };
 };
 

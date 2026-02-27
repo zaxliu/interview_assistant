@@ -1,3 +1,11 @@
+// User info from Feishu
+export interface User {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  loginTime: string;
+}
+
 // Calendar Event from Feishu
 export interface CalendarEvent {
   eventId: string;
@@ -25,6 +33,7 @@ export interface Position {
   createdAt: string;
   source: 'calendar' | 'manual';
   candidates: Candidate[];
+  userId?: string; // Owner of this position
 }
 
 // Candidate
@@ -41,6 +50,7 @@ export interface Candidate {
   quickNotes?: string;
   codingChallenges?: CodingChallenge[];
   interviewResult?: InterviewResult;
+  userId?: string; // Owner of this candidate
 }
 
 // Question source type

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import type { Settings } from '@/types';
+import type { Settings, User } from '@/types';
 
 interface SettingsState extends Settings {
+  feishuUser: User | null;
   setApiKey: (key: string) => void;
   setBaseUrl: (url: string) => void;
   setModel: (model: string) => void;
@@ -10,6 +11,7 @@ interface SettingsState extends Settings {
   setFeishuCorsProxy: (proxy: string) => void;
   setFeishuUserAccessToken: (token: string) => void;
   setFeishuRefreshToken: (token: string) => void;
+  setFeishuUser: (user: User | null) => void;
   loadFromStorage: () => void;
   saveToStorage: () => void;
 }
@@ -25,6 +27,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   feishuCorsProxy: import.meta.env.VITE_CORS_PROXY || '',
   feishuUserAccessToken: '',
   feishuRefreshToken: '',
+  feishuUser: null,
 
   setApiKey: (key) => {
     set({ aiApiKey: key });
@@ -66,11 +69,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     get().saveToStorage();
   },
 
+  setFeishuUser: (user) => {
+    set({ feishuUser: user });
+    get().saveToStorage();
+  },
+
   loadFromStorage: () => {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
       if (data) {
-        const settings = JSON.parse(data) as Partial<Settings>;
+        const parsed = JSON.parse(data);
+        const settings = parsed as Partial<Settings> & { feishuUser?: User | null };
         set({
           aiApiKey: settings.aiApiKey || import.meta.env.VITE_AI_API_KEY || '',
           aiBaseUrl: settings.aiBaseUrl || import.meta.env.VITE_AI_BASE_URL || 'https://api.openai.com/v1',
@@ -80,6 +89,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           feishuCorsProxy: settings.feishuCorsProxy || import.meta.env.VITE_CORS_PROXY || '',
           feishuUserAccessToken: settings.feishuUserAccessToken || '',
           feishuRefreshToken: settings.feishuRefreshToken || '',
+          feishuUser: settings.feishuUser || null,
         });
       }
     } catch (error) {
@@ -90,7 +100,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   saveToStorage: () => {
     try {
       const state = get();
-      const settings: Settings = {
+      const settings: Settings & { feishuUser: User | null } = {
         aiApiKey: state.aiApiKey,
         aiBaseUrl: state.aiBaseUrl,
         aiModel: state.aiModel,
@@ -99,6 +109,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         feishuCorsProxy: state.feishuCorsProxy,
         feishuUserAccessToken: state.feishuUserAccessToken,
         feishuRefreshToken: state.feishuRefreshToken,
+        feishuUser: state.feishuUser,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     } catch (error) {

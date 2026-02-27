@@ -1,5 +1,6 @@
 import React from 'react';
 import { usePositionStore } from '@/store/positionStore';
+import { useFeishuOAuth } from '@/hooks/useFeishuOAuth';
 import { PositionCard } from './PositionCard';
 import { Card, CardBody, Button } from '@/components/ui';
 
@@ -15,6 +16,7 @@ export const PositionList: React.FC<PositionListProps> = ({
   onAddPosition,
 }) => {
   const { positions } = usePositionStore();
+  const { isAuthenticated } = useFeishuOAuth();
 
   if (positions.length === 0) {
     return (
@@ -23,7 +25,7 @@ export const PositionList: React.FC<PositionListProps> = ({
           <p className="text-gray-500 mb-4">No positions yet</p>
           <div className="flex gap-2 justify-center">
             <Button onClick={onAddPosition}>Add Position</Button>
-            <Button variant="secondary">Sync from Calendar</Button>
+            {isAuthenticated && <Button variant="secondary">Sync from Calendar</Button>}
           </div>
         </CardBody>
       </Card>
