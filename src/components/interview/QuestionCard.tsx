@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Question, EvaluationDimensionName } from '@/types';
 import { usePositionStore } from '@/store/positionStore';
-import { Card, CardBody, Textarea, Button, Select } from '@/components/ui';
+import { Card, CardBody, Textarea, Button } from '@/components/ui';
 
 interface QuestionCardProps {
   positionId: string;
@@ -10,12 +10,6 @@ interface QuestionCardProps {
   onClick?: () => void;
   isActive?: boolean;
 }
-
-const statusOptions = [
-  { value: 'asked', label: 'Asked' },
-  { value: 'skipped', label: 'Skipped' },
-  { value: 'not_reached', label: 'Not Reached' },
-];
 
 // Evaluation dimension colors
 const dimensionColors: Record<EvaluationDimensionName, string> = {
@@ -35,28 +29,38 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   const { updateQuestion, deleteQuestion } = usePositionStore();
 
   const handleNotesChange = (notes: string) => {
-    updateQuestion(positionId, candidateId, question.id, { notes });
+    // Auto-mark as "asked" when user adds notes
+    const updates: Partial<Question> = { notes };
+    if (notes.trim() && question.status !== 'asked' && question.status !== 'skipped') {
+      updates.status = 'asked';
+    }
+    updateQuestion(positionId, candidateId, question.id, updates);
   };
 
-  const handleStatusChange = (status: string) => {
+  const handleStatusToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Cycle: not_reached → asked → skipped → not_reached
+    const nextStatus = question.status === 'asked' ? 'skipped' :
+                       question.status === 'skipped' ? 'not_reached' : 'asked';
     updateQuestion(positionId, candidateId, question.id, {
-      status: status as 'asked' | 'skipped' | 'not_reached'
+      status: nextStatus as 'asked' | 'skipped' | 'not_reached'
     });
   };
 
-  const handleDelete = () => {
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (confirm('Delete this question?')) {
       deleteQuestion(positionId, candidateId, question.id);
     }
   };
 
-  const statusColors = {
-    asked: 'bg-green-100 text-green-700',
-    skipped: 'bg-yellow-100 text-yellow-700',
-    not_reached: 'bg-gray-100 text-gray-500',
+  const statusConfig = {
+    asked: { bg: 'bg-green-100 text-green-700 hover:bg-green-200', icon: '✓', label: 'Asked' },
+    skipped: { bg: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200', icon: '○', label: 'Skipped' },
+    not_reached: { bg: 'bg-gray-100 text-gray-500 hover:bg-gray-200', icon: '—', label: 'Pending' },
   };
 
-  // Get evaluation dimension from question
+  const currentStatus = statusConfig[question.status || 'not_reached'];
   const evaluationDimension = question.evaluationDimension;
 
   return (
@@ -82,10 +86,14 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               </span>
             )}
 
-            {/* Status badge */}
-            <span className={`text-xs px-1.5 py-0.5 rounded ${statusColors[question.status || 'not_reached']}`}>
-              {question.status === 'asked' ? '✓' : question.status === 'skipped' ? '○' : '—'}
-            </span>
+            {/* Status badge - clickable to toggle */}
+            <button
+              onClick={handleStatusToggle}
+              className={`text-xs px-1.5 py-0.5 rounded transition-colors ${currentStatus.bg}`}
+              title={`${currentStatus.label} - click to change`}
+            >
+              {currentStatus.icon}
+            </button>
           </div>
 
           <Button
@@ -123,23 +131,13 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
           </div>
         )}
 
-        {/* Status selector */}
-        <div className="mb-2">
-          <Select
-            value={question.status || 'not_reached'}
-            onChange={(e) => handleStatusChange(e.target.value)}
-            options={statusOptions}
-            className="text-xs"
-          />
-        </div>
-
         <Textarea
-          placeholder="Take notes here during the interview..."
+          placeholder={question.status === 'skipped' ? 'Skipped' : 'Take notes here during the interview...'}
           value={question.notes || ''}
           onChange={(e) => handleNotesChange(e.target.value)}
           autoResize
           className="text-sm"
-          disabled={question.status !== 'asked'}
+          disabled={question.status === 'skipped'}
         />
       </CardBody>
     </Card>
