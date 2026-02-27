@@ -11,15 +11,15 @@ import { getPDF } from '@/utils/pdfStorage';
 interface InterviewPanelProps {
   position: Position;
   candidate: Candidate;
-  onGenerateSummary: () => void;
-  onEditCandidate: () => void;
+  showPdfViewer?: boolean;  // Controlled by parent
+  onLayoutChange?: (layout: { pdfData: ArrayBuffer | null }) => void;
 }
 
 export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   position,
   candidate,
-  onGenerateSummary,
-  onEditCandidate,
+  showPdfViewer: showPdfViewerProp = true,
+  onLayoutChange,
 }) => {
   const { isLoading: aiLoading, generateInterviewQuestions } = useAI();
   const {
@@ -28,11 +28,15 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     updateQuestion,
   } = usePositionStore();
 
-  // PDF Viewer state - open by default when PDF is available
-  const [showPdfViewer, setShowPdfViewer] = useState(true);
+  // PDF Viewer state - visibility controlled by parent via prop
   const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
   const [pdfFilename, setPdfFilename] = useState<string>('');
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
+
+  // Report PDF data to parent when loaded
+  useEffect(() => {
+    onLayoutChange?.({ pdfData });
+  }, [pdfData, onLayoutChange]);
 
   // Load PDF from IndexedDB on mount
   useEffect(() => {
@@ -71,10 +75,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     }
   };
 
-  const handleStartInterview = () => {
-    updateCandidate(position.id, candidate.id, { status: 'in_progress' });
-  };
-
   const handleQuickNotesChange = (quickNotes: string) => {
     updateCandidate(position.id, candidate.id, { quickNotes });
   };
@@ -96,7 +96,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const canGenerateQuestions = position.description && candidate.resumeText;
 
   // Layout with side panel for PDF viewer
-  if (showPdfViewer && pdfData) {
+  if (showPdfViewerProp && pdfData) {
     return (
       <div className="flex gap-4 h-[calc(100vh-120px)] w-full">
           {/* PDF Viewer - Left side */}
@@ -112,24 +112,9 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
           <div className="flex-1 min-w-[400px] max-w-[600px] shrink-0 overflow-auto">
             <div className="space-y-4">
               {/* Header */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
-                  <p className="text-xs text-gray-500">{position.title}</p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setShowPdfViewer(false)}
-                  >
-                    Hide Resume
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={onEditCandidate}>
-                    Edit Candidate
-                  </Button>
-                </div>
+              <div>
+                <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
+                <p className="text-xs text-gray-500">{position.title}</p>
               </div>
 
               {/* Quick Notes */}
@@ -173,15 +158,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
                 onQuestionClick={setActiveQuestionId}
                 activeQuestionId={activeQuestionId}
               />
-
-              {/* Actions */}
-              {candidate.questions.length > 0 && (
-                <div className="flex justify-end gap-2 pt-4 border-t">
-                  <Button onClick={onGenerateSummary}>
-                    {candidate.interviewResult ? 'View Summary' : 'Generate Summary'}
-                  </Button>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -191,39 +167,10 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   // Normal layout without PDF viewer
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
-          <p className="text-xs text-gray-500">{position.title}</p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {pdfData ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowPdfViewer(true)}
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              View Resume
-            </Button>
-          ) : candidate.resumeFilename ? (
-            <span className="text-xs text-gray-400 italic" title="PDF file stored but original file not available for viewing">
-              📄 {candidate.resumeFilename}
-            </span>
-          ) : null}
-          {candidate.status === 'pending' && (
-            <Button size="sm" onClick={handleStartInterview}>
-              Start Interview
-            </Button>
-          )}
-          <Button variant="secondary" size="sm" onClick={onEditCandidate}>
-            Edit Candidate
-          </Button>
-        </div>
+      {/* Header - just info, buttons are in top banner */}
+      <div>
+        <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
+        <p className="text-xs text-gray-500">{position.title}</p>
       </div>
 
       {/* Job Description & Resume Summary */}
@@ -291,15 +238,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         candidateId={candidate.id}
         questions={candidate.questions}
       />
-
-      {/* Actions */}
-      {candidate.questions.length > 0 && (
-        <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button onClick={onGenerateSummary}>
-            {candidate.interviewResult ? 'View Summary' : 'Generate Summary'}
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

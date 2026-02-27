@@ -47,6 +47,14 @@ function App() {
   const [selectedPositionId, setSelectedPositionId] = useState<string | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
 
+  // Interview layout state (controlled by App.tsx header buttons)
+  const [interviewShowPdf, setInterviewShowPdf] = useState(true);
+  const [interviewPdfData, setInterviewPdfData] = useState<ArrayBuffer | null>(null);
+
+  const handleInterviewLayoutChange = (layout: { pdfData: ArrayBuffer | null }) => {
+    setInterviewPdfData(layout.pdfData);
+  };
+
   // Load data from storage on mount
   useEffect(() => {
     loadFromStorage();
@@ -141,6 +149,34 @@ function App() {
             <h1 className="text-lg font-semibold text-gray-900">Interview Assistant</h1>
           </div>
           <div className="flex items-center gap-3">
+            {view === 'interview' && selectedCandidate && (
+              <>
+                {interviewPdfData && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setInterviewShowPdf(!interviewShowPdf)}
+                  >
+                    {interviewShowPdf ? 'Hide Resume' : 'View Resume'}
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleEditCandidate(selectedCandidate.id)}
+                >
+                  Edit Candidate
+                </Button>
+                {selectedCandidate.questions.length > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={handleGenerateSummary}
+                  >
+                    {selectedCandidate.interviewResult ? 'View Summary' : 'Generate Summary'}
+                  </Button>
+                )}
+              </>
+            )}
             {view === 'dashboard' && <CalendarSync />}
             <Button
               variant="ghost"
@@ -240,8 +276,8 @@ function App() {
           <InterviewPanel
             position={selectedPosition}
             candidate={selectedCandidate}
-            onGenerateSummary={handleGenerateSummary}
-            onEditCandidate={() => handleEditCandidate(selectedCandidate.id)}
+            showPdfViewer={interviewShowPdf}
+            onLayoutChange={handleInterviewLayoutChange}
           />
         )}
 
