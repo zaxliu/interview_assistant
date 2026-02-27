@@ -98,10 +98,9 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   // Layout with side panel for PDF viewer
   if (showPdfViewer && pdfData) {
     return (
-      <div className="flex justify-center">
-        <div className="flex gap-4 h-[calc(100vh-120px)] w-full max-w-[1700px]">
+      <div className="flex gap-4 h-[calc(100vh-120px)] w-full">
           {/* PDF Viewer - Left side */}
-          <div className="w-[580px] min-w-[450px] shrink-0 border-r bg-white">
+          <div className="flex-1 min-w-[500px] max-w-[700px] shrink-0 border-r bg-white">
             <PDFViewer
               pdfData={pdfData}
               filename={pdfFilename}
@@ -110,7 +109,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
           </div>
 
           {/* Questions - Right side */}
-          <div className="w-[480px] min-w-[400px] shrink-0 overflow-auto">
+          <div className="flex-1 min-w-[400px] max-w-[600px] shrink-0 overflow-auto">
             <div className="space-y-4">
               {/* Header */}
               <div className="flex items-center justify-between">
@@ -186,7 +185,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
             </div>
           </div>
         </div>
-      </div>
     );
   }
 

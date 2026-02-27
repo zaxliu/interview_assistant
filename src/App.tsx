@@ -120,11 +120,15 @@ function App() {
     }
   };
 
+  // Determine if we need wide layout (interview view only)
+  const isWideLayout = view === 'interview';
+  const containerClass = isWideLayout ? 'w-full' : 'max-w-4xl mx-auto';
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className={`${containerClass} px-4 py-3 flex items-center justify-between`}>
           <div className="flex items-center gap-4">
             {view !== 'dashboard' && (
               <Button variant="ghost" size="sm" onClick={handleBack}>
@@ -153,7 +157,7 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 py-4">
+      <main className={`${containerClass} px-4 py-4`}>
         {view === 'settings' && (
           <SettingsPanel onClose={() => setView('dashboard')} />
         )}
