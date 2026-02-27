@@ -9,10 +9,11 @@ interface PositionCardProps {
 }
 
 export const PositionCard: React.FC<PositionCardProps> = ({ position, onClick, onEdit }) => {
-  const candidateCount = position.candidates.length;
-  const completedCount = position.candidates.filter(
-    (c) => c.status === 'completed'
-  ).length;
+  const candidates = position.candidates;
+  const completedCount = candidates.filter((c) => c.status === 'completed').length;
+  const cancelledCount = candidates.filter((c) => c.status === 'cancelled').length;
+  const activeCount = candidates.length - completedCount - cancelledCount;
+  const totalActive = completedCount + activeCount;
 
   return (
     <Card onClick={onClick}>
@@ -34,12 +35,38 @@ export const PositionCard: React.FC<PositionCardProps> = ({ position, onClick, o
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            <div className="text-xs text-gray-500 text-right whitespace-nowrap">
-              <span className="text-gray-700">{candidateCount}</span> candidates
-              {completedCount > 0 && (
-                <span className="text-green-600 ml-1">({completedCount} done)</span>
+            {/* Candidate progress indicator */}
+            <div className="flex items-center gap-2">
+              {/* Progress bar */}
+              {totalActive > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <div className="flex h-2 w-16 rounded overflow-hidden bg-gray-200">
+                    {Array.from({ length: totalActive }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`flex-1 ${i < completedCount ? 'bg-green-500' : 'bg-gray-300'} ${i > 0 ? 'ml-0.5' : ''}`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs text-gray-600">
+                    {completedCount}/{totalActive}
+                  </span>
+                </div>
+              )}
+
+              {/* Cancelled indicator */}
+              {cancelledCount > 0 && (
+                <span className="text-xs text-gray-400 line-through">
+                  {cancelledCount} cancelled
+                </span>
+              )}
+
+              {/* No candidates */}
+              {candidates.length === 0 && (
+                <span className="text-xs text-gray-400">No candidates</span>
               )}
             </div>
+
             <button
               onClick={(e) => {
                 e.stopPropagation();
