@@ -41,7 +41,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
   autoGenerate = false,
 }) => {
   const { isLoading: aiLoading, generateInterviewSummary } = useAI();
-  const { setInterviewResult } = usePositionStore();
+  const { setInterviewResult, completeInterview } = usePositionStore();
 
   const [result, setResult] = useState<InterviewResult>(
     candidate.interviewResult || {
@@ -87,6 +87,14 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     setInterviewResult(position.id, candidate.id, finalResult);
     setSaveStatus('saved');
   }, [buildFinalResult, position.id, candidate.id, setInterviewResult]);
+
+  // Complete interview function
+  const handleComplete = useCallback(() => {
+    setSaveStatus('saving');
+    const finalResult = buildFinalResult();
+    completeInterview(position.id, candidate.id, finalResult);
+    setSaveStatus('saved');
+  }, [buildFinalResult, position.id, candidate.id, completeInterview]);
 
   // Auto-save with debounce on user edits
   useEffect(() => {
@@ -193,6 +201,8 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     { value: '5', label: '5' },
   ];
 
+  const isCompleted = candidate.status === 'completed';
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -201,6 +211,12 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
           <h2 className="text-sm font-medium text-gray-900">
             Interview Result: {candidate.name} - {position.title}
           </h2>
+          {/* Completion status */}
+          {isCompleted && (
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+              Completed
+            </span>
+          )}
           {/* Save status indicator */}
           <span className={`text-xs ${
             saveStatus === 'saved' ? 'text-green-600' :
@@ -222,12 +238,11 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
           >
             Generate from AI
           </Button>
-          <Button
-            onClick={handleSaveDraft}
-            variant={saveStatus === 'unsaved' ? 'primary' : 'secondary'}
-          >
-            Save Draft
-          </Button>
+          {!isCompleted && (
+            <Button onClick={handleComplete}>
+              Complete Interview
+            </Button>
+          )}
         </div>
       </div>
 
@@ -408,12 +423,11 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       {/* Export Buttons */}
       <Card>
         <CardBody className="flex justify-end gap-2">
-          <Button
-            onClick={handleSaveDraft}
-            variant={saveStatus === 'unsaved' ? 'primary' : 'secondary'}
-          >
-            Save Draft
-          </Button>
+          {!isCompleted && (
+            <Button onClick={handleComplete}>
+              Complete Interview
+            </Button>
+          )}
           <ExportButtons
             result={{
               ...result,

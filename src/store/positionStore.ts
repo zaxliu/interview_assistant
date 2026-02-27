@@ -30,6 +30,7 @@ interface PositionState {
 
   // Interview result actions
   setInterviewResult: (positionId: string, candidateId: string, result: InterviewResult) => void;
+  completeInterview: (positionId: string, candidateId: string, result: InterviewResult) => void;
 
   // Persistence
   loadFromStorage: () => void;
@@ -309,6 +310,25 @@ export const usePositionStore = create<PositionState>((set, get) => ({
   },
 
   setInterviewResult: (positionId, candidateId, result) => {
+    set((state) => {
+      const newState = {
+        positions: state.positions.map((p) =>
+          p.id === positionId
+            ? {
+                ...p,
+                candidates: p.candidates.map((c) =>
+                  c.id === candidateId ? { ...c, interviewResult: result } : c
+                ),
+              }
+            : p
+        ),
+      };
+      saveToStorage({ positions: newState.positions, settings: {} });
+      return newState;
+    });
+  },
+
+  completeInterview: (positionId, candidateId, result) => {
     set((state) => {
       const newState = {
         positions: state.positions.map((p) =>
