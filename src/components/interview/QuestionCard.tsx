@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { Question, EvaluationDimensionName } from '@/types';
 import { usePositionStore } from '@/store/positionStore';
 import { Card, CardBody, Textarea, Button } from '@/components/ui';
@@ -27,6 +27,47 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   isActive,
 }) => {
   const { updateQuestion, deleteQuestion } = usePositionStore();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(question.text);
+  const editInputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setEditText(question.text);
+  }, [question.text]);
+
+  useEffect(() => {
+    if (isEditing && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleStartEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditText(question.text);
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (editText.trim() && editText.trim() !== question.text) {
+      updateQuestion(positionId, candidateId, question.id, { text: editText.trim() });
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditText(question.text);
+    setIsEditing(false);
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSaveEdit();
+    } else if (e.key === 'Escape') {
+      handleCancelEdit();
+    }
+  };
 
   const handleNotesChange = (notes: string) => {
     // Auto-mark as "asked" when user adds notes
@@ -96,19 +137,56 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
             </button>
           </div>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-gray-400 hover:text-red-500"
-            onClick={handleDelete}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </Button>
+          <div className="flex items-center gap-1">
+            {/* Edit button */}
+            {!isEditing && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-gray-400 hover:text-blue-500"
+                onClick={handleStartEdit}
+                title="Edit question"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-gray-400 hover:text-red-500"
+              onClick={handleDelete}
+              title="Delete question"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </Button>
+          </div>
         </div>
 
-        <p className="text-sm font-medium text-gray-900 mb-2">{question.text}</p>
+        {/* Question text - editable */}
+        {isEditing ? (
+          <div className="mb-2">
+            <textarea
+              ref={editInputRef}
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onKeyDown={handleEditKeyDown}
+              onBlur={handleSaveEdit}
+              className="w-full text-sm font-medium text-gray-900 border border-blue-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={2}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div className="flex gap-1 mt-1">
+              <Button size="sm" onClick={handleSaveEdit}>Save</Button>
+              <Button size="sm" variant="secondary" onClick={handleCancelEdit}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm font-medium text-gray-900 mb-2">{question.text}</p>
+        )}
 
         {/* Context from resume/JD */}
         {question.context && (
