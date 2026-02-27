@@ -10,7 +10,6 @@ interface SummaryEditorProps {
   position: Position;
   candidate: Candidate;
   autoGenerate?: boolean;
-  onBack: () => void;
 }
 
 const defaultResult: InterviewResult = {
@@ -38,7 +37,6 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
   position,
   candidate,
   autoGenerate = false,
-  onBack,
 }) => {
   const { isLoading: aiLoading, generateInterviewSummary } = useAI();
   const { setInterviewResult } = usePositionStore();
@@ -145,18 +143,10 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={onBack}>
-            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back
-          </Button>
-          <div>
-            <h2 className="text-sm font-medium text-gray-900">
-              Interview Result: {candidate.name} - {position.title}
-            </h2>
-          </div>
+        <div>
+          <h2 className="text-sm font-medium text-gray-900">
+            Interview Result: {candidate.name} - {position.title}
+          </h2>
         </div>
 
         <div className="flex gap-2">
@@ -349,9 +339,6 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       {/* Export Buttons */}
       <Card>
         <CardBody className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onBack}>
-            Back to Interview
-          </Button>
           <Button onClick={handleSaveDraft}>Save Draft</Button>
           <ExportButtons
             result={{

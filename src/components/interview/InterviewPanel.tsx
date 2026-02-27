@@ -13,7 +13,6 @@ interface InterviewPanelProps {
   candidate: Candidate;
   onGenerateSummary: () => void;
   onEditCandidate: () => void;
-  onBack: () => void;
 }
 
 export const InterviewPanel: React.FC<InterviewPanelProps> = ({
@@ -21,7 +20,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   candidate,
   onGenerateSummary,
   onEditCandidate,
-  onBack,
 }) => {
   const { isLoading: aiLoading, generateInterviewQuestions } = useAI();
   const {
@@ -116,17 +114,9 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
             <div className="space-y-4">
               {/* Header */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Button variant="ghost" size="sm" onClick={onBack}>
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                    Back
-                  </Button>
-                  <div>
-                    <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
-                    <p className="text-xs text-gray-500">{position.title}</p>
-                  </div>
+                <div>
+                  <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
+                  <p className="text-xs text-gray-500">{position.title}</p>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -188,9 +178,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               {/* Actions */}
               {candidate.questions.length > 0 && (
                 <div className="flex justify-end gap-2 pt-4 border-t">
-                  <Button variant="secondary" onClick={onBack}>
-                    Back to Candidates
-                  </Button>
                   <Button onClick={onGenerateSummary}>
                     {candidate.interviewResult ? 'View Summary' : 'Generate Summary'}
                   </Button>
@@ -208,17 +195,9 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={onBack}>
-            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back
-          </Button>
-          <div>
-            <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
-            <p className="text-xs text-gray-500">{position.title}</p>
-          </div>
+        <div>
+          <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
+          <p className="text-xs text-gray-500">{position.title}</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -318,9 +297,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       {/* Actions */}
       {candidate.questions.length > 0 && (
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="secondary" onClick={onBack}>
-            Back to Candidates
-          </Button>
           <Button onClick={onGenerateSummary}>
             {candidate.interviewResult ? 'View Summary' : 'Generate Summary'}
           </Button>
