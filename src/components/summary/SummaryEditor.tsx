@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Position, Candidate, InterviewResult, EvaluationDimension } from '@/types';
 import { EvaluationDimensionCard } from './EvaluationDimensionCard';
 import { ExportButtons } from './ExportButtons';
 import { Card, CardHeader, CardBody, Input, Textarea, Select, Button } from '@/components/ui';
 import { useAI } from '@/hooks/useAI';
 import { usePositionStore } from '@/store/positionStore';
+
+const AUTO_SAVE_DELAY = 2000; // 2 seconds debounce
 
 interface SummaryEditorProps {
   position: Position;
@@ -63,6 +65,57 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     candidate.interviewResult?.additional_info?.follow_up_questions || []
   );
 
+  // Auto-save state
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialMountRef = useRef(true);
+
+  // Build the final result object
+  const buildFinalResult = useCallback((): InterviewResult => ({
+    ...result,
+    additional_info: {
+      strengths,
+      concerns,
+      follow_up_questions: followUps,
+    },
+  }), [result, strengths, concerns, followUps]);
+
+  // Save draft function
+  const handleSaveDraft = useCallback(() => {
+    setSaveStatus('saving');
+    const finalResult = buildFinalResult();
+    setInterviewResult(position.id, candidate.id, finalResult);
+    setSaveStatus('saved');
+  }, [buildFinalResult, position.id, candidate.id, setInterviewResult]);
+
+  // Auto-save with debounce on user edits
+  useEffect(() => {
+    // Skip on initial mount
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+
+    // Clear existing timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    // Mark as unsaved
+    setSaveStatus('unsaved');
+
+    // Set new timer
+    autoSaveTimerRef.current = setTimeout(() => {
+      handleSaveDraft();
+    }, AUTO_SAVE_DELAY);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [result, strengths, concerns, followUps]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Auto-generate summary on mount if requested and no existing result
   useEffect(() => {
     if (autoGenerate && !candidate.interviewResult && position.description && candidate.resumeText) {
@@ -89,19 +142,20 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
         setConcerns(generatedResult.additional_info.concerns || []);
         setFollowUps(generatedResult.additional_info.follow_up_questions || []);
       }
-    }
-  };
 
-  const handleSaveDraft = () => {
-    const finalResult: InterviewResult = {
-      ...result,
-      additional_info: {
-        strengths,
-        concerns,
-        follow_up_questions: followUps,
-      },
-    };
-    setInterviewResult(position.id, candidate.id, finalResult);
+      // Auto-save after generation
+      const finalResult: InterviewResult = {
+        ...generatedResult,
+        additional_info: {
+          strengths: generatedResult.additional_info?.strengths || [],
+          concerns: generatedResult.additional_info?.concerns || [],
+          follow_up_questions: generatedResult.additional_info?.follow_up_questions || [],
+        },
+      };
+      setSaveStatus('saving');
+      setInterviewResult(position.id, candidate.id, finalResult);
+      setSaveStatus('saved');
+    }
   };
 
   const updateDimension = (index: number, updates: Partial<EvaluationDimension>) => {
@@ -143,10 +197,20 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-3">
           <h2 className="text-sm font-medium text-gray-900">
             Interview Result: {candidate.name} - {position.title}
           </h2>
+          {/* Save status indicator */}
+          <span className={`text-xs ${
+            saveStatus === 'saved' ? 'text-green-600' :
+            saveStatus === 'saving' ? 'text-yellow-600' :
+            'text-gray-400'
+          }`}>
+            {saveStatus === 'saved' && '✓ Saved'}
+            {saveStatus === 'saving' && '...'}
+            {saveStatus === 'unsaved' && '(unsaved)'}
+          </span>
         </div>
 
         <div className="flex gap-2">
@@ -158,7 +222,12 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
           >
             Generate from AI
           </Button>
-          <Button onClick={handleSaveDraft}>Save Draft</Button>
+          <Button
+            onClick={handleSaveDraft}
+            variant={saveStatus === 'unsaved' ? 'primary' : 'secondary'}
+          >
+            Save Draft
+          </Button>
         </div>
       </div>
 
@@ -339,7 +408,12 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       {/* Export Buttons */}
       <Card>
         <CardBody className="flex justify-end gap-2">
-          <Button onClick={handleSaveDraft}>Save Draft</Button>
+          <Button
+            onClick={handleSaveDraft}
+            variant={saveStatus === 'unsaved' ? 'primary' : 'secondary'}
+          >
+            Save Draft
+          </Button>
           <ExportButtons
             result={{
               ...result,
