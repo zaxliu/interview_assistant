@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  interview-assistant:
+    build:
+      context: .
+      args:
+        VITE_AI_API_KEY: ${VITE_AI_API_KEY}
+        VITE_AI_BASE_URL: ${VITE_AI_BASE_URL}
+        VITE_AI_MODEL: ${VITE_AI_MODEL}
+        VITE_NOTION_API_KEY: ${VITE_NOTION_API_KEY}
+        VITE_NOTION_DATABASE_ID: ${VITE_NOTION_DATABASE_ID}
+        VITE_FEISHU_APP_ID: ${VITE_FEISHU_APP_ID}
+        VITE_FEISHU_APP_SECRET: ${VITE_FEISHU_APP_SECRET}
+        VITE_CORS_PROXY: ${VITE_CORS_PROXY}
+    ports:
+      - "3000:80"  # Maps container port 80 to host port 3000
+    restart: unless-stopped
