@@ -3,3 +3,4 @@ export { Input } from './Input';
 export { Textarea } from './Textarea';
 export { Select } from './Select';
 export { Card, CardHeader, CardBody, CardFooter } from './Card';
+export { Logo } from './Logo';

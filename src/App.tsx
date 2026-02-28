@@ -15,7 +15,7 @@ import { SummaryEditor } from '@/components/summary/SummaryEditor';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { SettingsWarning } from '@/components/settings/SettingsWarning';
 import { UserLoginBanner } from '@/components/auth/UserLoginBanner';
-import { Button } from '@/components/ui';
+import { Button, Logo } from '@/components/ui';
 
 type View =
   | 'dashboard'
@@ -185,7 +185,10 @@ function App() {
                 Back
               </Button>
             )}
-            <h1 className="text-lg font-semibold text-gray-900">Interview Assistant</h1>
+            <div className="flex items-center gap-2">
+              <Logo size={28} />
+              <h1 className="text-lg font-semibold text-gray-900">Interview Assistant</h1>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <UserLoginBanner />
