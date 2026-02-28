@@ -7,7 +7,6 @@ export const SettingsWarning: React.FC = () => {
     aiApiKey,
     feishuAppId,
     feishuAppSecret,
-    feishuCorsProxy,
     feishuUserAccessToken,
   } = useSettingsStore();
 
@@ -21,9 +20,6 @@ export const SettingsWarning: React.FC = () => {
   }
   if (!feishuAppSecret) {
     missingItems.push('Feishu App Secret');
-  }
-  if (!feishuCorsProxy) {
-    missingItems.push('CORS Proxy');
   }
   if (!feishuUserAccessToken) {
     missingItems.push('Login to Feishu');

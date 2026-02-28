@@ -18,7 +18,7 @@ export const usePDFParser = () => {
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState<string>('');
 
-  const { aiApiKey, aiBaseUrl, aiModel } = useSettingsStore();
+  const { aiApiKey, aiModel } = useSettingsStore();
 
   const parseFromFile = useCallback(async (file: File, useAI = false, options?: AIOptions): Promise<string> => {
     setIsLoading(true);
@@ -31,7 +31,7 @@ export const usePDFParser = () => {
         console.log('[usePDFParser] Using AI parsing for file');
         extractedText = await parsePDFFromFileWithAI(
           file,
-          { apiKey: aiApiKey, baseUrl: aiBaseUrl, model: aiModel },
+          { apiKey: aiApiKey, model: aiModel },
           {
             maxPages: options?.maxPages ?? 10,
             scale: options?.scale ?? 3,
@@ -52,7 +52,7 @@ export const usePDFParser = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [aiApiKey, aiBaseUrl, aiModel]);
+  }, [aiApiKey, aiModel]);
 
   const parseFromUrl = useCallback(async (url: string, useAI = false, options?: AIOptions): Promise<string> => {
     setIsLoading(true);
@@ -65,7 +65,7 @@ export const usePDFParser = () => {
         console.log('[usePDFParser] Using AI parsing for URL');
         extractedText = await parsePDFFromUrlWithAI(
           url,
-          { apiKey: aiApiKey, baseUrl: aiBaseUrl, model: aiModel },
+          { apiKey: aiApiKey, model: aiModel },
           {
             maxPages: options?.maxPages ?? 10,
             scale: options?.scale ?? 3,
@@ -86,7 +86,7 @@ export const usePDFParser = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [aiApiKey, aiBaseUrl, aiModel]);
+  }, [aiApiKey, aiModel]);
 
   const clearText = useCallback(() => {
     setText('');

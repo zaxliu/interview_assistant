@@ -117,11 +117,9 @@ export interface EvaluationDimension {
 // Settings
 export interface Settings {
   aiApiKey: string;
-  aiBaseUrl: string;
   aiModel: string;
   feishuAppId: string;
   feishuAppSecret: string;
-  feishuCorsProxy: string;
   feishuUserAccessToken: string;
   feishuRefreshToken: string;
 }

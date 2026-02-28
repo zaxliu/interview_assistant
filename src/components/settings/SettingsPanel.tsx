@@ -10,17 +10,13 @@ interface SettingsPanelProps {
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
   const {
     aiApiKey,
-    aiBaseUrl,
     aiModel,
     feishuAppId,
     feishuAppSecret,
-    feishuCorsProxy,
     setApiKey,
-    setBaseUrl,
     setModel,
     setFeishuAppId,
     setFeishuAppSecret,
-    setFeishuCorsProxy,
   } = useSettingsStore();
 
   const { isAuthenticated, user, logout } = useFeishuOAuth();
@@ -50,13 +46,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             placeholder="Enter your AI API key"
           />
           <Input
-            label="Base URL"
-            type="url"
-            value={aiBaseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://api.openai.com/v1"
-          />
-          <Input
             label="Model"
             type="text"
             value={aiModel}
@@ -64,7 +53,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             placeholder="gpt-4"
           />
           <p className="text-xs text-gray-500">
-            PDF parsing uses image-based extraction (OpenAI-compatible format).
+            AI provider URL is configured server-side via environment variables.
           </p>
         </CardBody>
       </Card>
@@ -89,16 +78,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             onChange={(e) => setFeishuAppSecret(e.target.value)}
             placeholder="Enter your Feishu app secret"
           />
-          <Input
-            label="CORS Proxy (required for browser)"
-            type="url"
-            value={feishuCorsProxy}
-            onChange={(e) => setFeishuCorsProxy(e.target.value)}
-            placeholder="http://localhost:8010"
-          />
           <p className="text-xs text-gray-500">
-            Run: <code className="bg-gray-100 px-1 rounded">npx local-cors-proxy --proxyUrl https://open.feishu.cn --port 8010</code>
-            <br />Then use: <code className="bg-gray-100 px-1 rounded">http://localhost:8010</code>
+            CORS proxy is built-in. No additional configuration needed.
           </p>
 
           {/* OAuth Status and Login */}
@@ -122,9 +103,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                 </Button>
               )}
             </div>
-            {!feishuAppId || !feishuAppSecret || !feishuCorsProxy ? (
+            {!feishuAppId || !feishuAppSecret ? (
               <p className="text-xs text-amber-600 mt-1">
-                Please fill in App ID, App Secret, and CORS Proxy first
+                Please fill in App ID and App Secret first
               </p>
             ) : null}
             <div className="mt-2 p-2 bg-gray-50 rounded text-xs">

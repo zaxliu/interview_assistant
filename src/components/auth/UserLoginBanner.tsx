@@ -4,10 +4,10 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { Button } from '@/components/ui';
 
 export const UserLoginBanner: React.FC = () => {
-  const { feishuAppId, feishuAppSecret, feishuCorsProxy } = useSettingsStore();
+  const { feishuAppId, feishuAppSecret } = useSettingsStore();
   const { isAuthenticated, user, startOAuth, logout } = useFeishuOAuth();
 
-  const canLogin = feishuAppId && feishuAppSecret && feishuCorsProxy;
+  const canLogin = feishuAppId && feishuAppSecret;
 
   if (isAuthenticated && user) {
     // Logged in: show avatar, name, and logout button

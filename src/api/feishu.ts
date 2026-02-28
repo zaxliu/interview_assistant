@@ -1,9 +1,6 @@
 import type { CalendarEvent, InterviewResult, User } from '@/types';
 import { parseEventTitle, isInterviewEvent, extractLinksFromDescription } from '@/utils/titleParser';
 
-// Feishu API base URL
-const FEISHU_API_BASE = 'https://open.feishu.cn/open-apis';
-
 interface FeishuToken {
   accessToken: string;
   expireTime: number;
@@ -16,22 +13,6 @@ interface OAuthTokens {
 }
 
 let cachedToken: FeishuToken | null = null;
-
-/**
- * Build URL with optional CORS proxy
- * local-cors-proxy uses /proxy as default prefix
- * e.g., lcp --proxyUrl https://open.feishu.cn
- * Results in: http://localhost:8010/proxy/open-apis/...
- */
-const buildUrl = (path: string, corsProxy?: string): string => {
-  if (corsProxy) {
-    // Remove trailing slash from proxy and ensure proper URL construction
-    // local-cors-proxy expects: {proxy}/proxy{path}
-    const proxy = corsProxy.replace(/\/$/, '');
-    return `${proxy}/proxy/open-apis${path}`;
-  }
-  return `${FEISHU_API_BASE}${path}`;
-};
 
 /**
  * Generate OAuth authorization URL with calendar scope
@@ -61,13 +42,10 @@ export const exchangeCodeForToken = async (
   code: string,
   appId: string,
   appSecret: string,
-  redirectUri: string,
-  corsProxy?: string
+  redirectUri: string
 ): Promise<OAuthTokens> => {
-  // Use v2 OAuth endpoint
-  const url = corsProxy
-    ? buildUrl('/authen/v2/oauth/token', corsProxy)
-    : `${FEISHU_API_BASE}/authen/v2/oauth/token`;
+  // Use proxy endpoint
+  const url = '/api/feishu/authen/v2/oauth/token';
 
   console.log('Exchanging code for token at:', url);
   console.log('Request params:', { grant_type: 'authorization_code', redirect_uri: redirectUri, client_id: appId });
@@ -121,12 +99,9 @@ export const exchangeCodeForToken = async (
 export const refreshAccessToken = async (
   refreshToken: string,
   appId: string,
-  appSecret: string,
-  corsProxy?: string
+  appSecret: string
 ): Promise<OAuthTokens> => {
-  const url = corsProxy
-    ? buildUrl('/authen/v2/oauth/token', corsProxy)
-    : `${FEISHU_API_BASE}/authen/v2/oauth/token`;
+  const url = '/api/feishu/authen/v2/oauth/token';
 
   const response = await fetch(url, {
     method: 'POST',
@@ -165,12 +140,9 @@ export const refreshAccessToken = async (
  * Get user info from Feishu using user access token
  */
 export const getUserInfo = async (
-  userAccessToken: string,
-  corsProxy?: string
+  userAccessToken: string
 ): Promise<User> => {
-  const url = corsProxy
-    ? buildUrl('/authen/v1/user_info', corsProxy)
-    : `${FEISHU_API_BASE}/authen/v1/user_info`;
+  const url = '/api/feishu/authen/v1/user_info';
 
   const response = await fetch(url, {
     method: 'GET',
@@ -207,7 +179,6 @@ export const getUserInfo = async (
  * Get access token - either use provided user_access_token or get tenant_access_token
  */
 const getAccessToken = async (
-  corsProxy?: string,
   userAccessToken?: string,
   appId?: string,
   appSecret?: string
@@ -228,7 +199,7 @@ const getAccessToken = async (
   }
 
   try {
-    const response = await fetch(buildUrl('/auth/v3/tenant_access_token/internal', corsProxy), {
+    const response = await fetch('/api/feishu/auth/v3/tenant_access_token/internal', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -241,7 +212,7 @@ const getAccessToken = async (
 
     if (!response.ok) {
       if (response.type === 'opaque' || response.status === 0) {
-        throw new Error('CORS error: Feishu API blocked by browser. Please configure a CORS proxy in Settings.');
+        throw new Error('CORS error: Feishu API blocked by browser. Please check proxy configuration.');
       }
       const errorText = await response.text();
       console.error('Token API error response:', errorText);
@@ -262,7 +233,7 @@ const getAccessToken = async (
     return cachedToken.accessToken;
   } catch (error) {
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      throw new Error('Network error: Cannot reach Feishu API. This is likely a CORS issue. Please configure a CORS proxy in Settings (e.g., http://localhost:8010).');
+      throw new Error('Network error: Cannot reach Feishu API. Please check your network connection.');
     }
     throw error;
   }
@@ -274,17 +245,14 @@ const getAccessToken = async (
 export const getCalendarEvents = async (
   startDate: Date,
   endDate: Date,
-  corsProxy?: string,
   userAccessToken?: string,
   appId?: string,
   appSecret?: string
 ): Promise<CalendarEvent[]> => {
-  const accessToken = await getAccessToken(corsProxy, userAccessToken, appId, appSecret);
+  const accessToken = await getAccessToken(userAccessToken, appId, appSecret);
 
   // Get ALL calendars
-  const calendarsUrl = corsProxy
-    ? buildUrl('/calendar/v4/calendars', corsProxy)
-    : `${FEISHU_API_BASE}/calendar/v4/calendars`;
+  const calendarsUrl = '/api/feishu/calendar/v4/calendars';
 
   console.log('Fetching ALL calendars from:', calendarsUrl);
 
@@ -327,9 +295,7 @@ export const getCalendarEvents = async (
     const calendarId = calendar.calendar_id as string;
     const calendarName = calendar.summary as string;
 
-    const url = corsProxy
-      ? buildUrl(`/calendar/v4/calendars/${calendarId}/events?start_time=${startTime}&end_time=${endTime}`, corsProxy)
-      : `${FEISHU_API_BASE}/calendar/v4/calendars/${calendarId}/events?start_time=${startTime}&end_time=${endTime}`;
+    const url = `/api/feishu/calendar/v4/calendars/${calendarId}/events?start_time=${startTime}&end_time=${endTime}`;
 
     console.log(`Fetching events from calendar: ${calendarName}...`);
 
@@ -482,7 +448,6 @@ export const getCalendarEvents = async (
  */
 export const syncInterviewsFromCalendar = async (
   days: number = 30,
-  corsProxy?: string,
   userAccessToken?: string,
   appId?: string,
   appSecret?: string
@@ -494,7 +459,7 @@ export const syncInterviewsFromCalendar = async (
   const endDate = new Date();
   endDate.setDate(endDate.getDate() + days);
 
-  const events = await getCalendarEvents(startDate, endDate, corsProxy, userAccessToken, appId, appSecret);
+  const events = await getCalendarEvents(startDate, endDate, userAccessToken, appId, appSecret);
 
   // Group by position
   const positions = new Map<string, { title: string; team: string }>();
@@ -520,16 +485,15 @@ export const createFeishuDoc = async (
   result: InterviewResult,
   candidateName: string,
   positionTitle: string,
-  corsProxy?: string,
   userAccessToken?: string,
   appId?: string,
   appSecret?: string
 ): Promise<{ success: boolean; message: string; docUrl?: string }> => {
   try {
-    const accessToken = await getAccessToken(corsProxy, userAccessToken, appId, appSecret);
+    const accessToken = await getAccessToken(userAccessToken, appId, appSecret);
 
     // Create document
-    const createResponse = await fetch(buildUrl('/docx/v1/documents', corsProxy), {
+    const createResponse = await fetch('/api/feishu/docx/v1/documents', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -555,7 +519,7 @@ export const createFeishuDoc = async (
     // Add content blocks
     const blocks = formatResultAsBlocks(result);
 
-    await fetch(buildUrl(`/docx/v1/documents/${documentId}/blocks/${documentId}/children/batch_create`, corsProxy), {
+    await fetch(`/api/feishu/docx/v1/documents/${documentId}/blocks/${documentId}/children/batch_create`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,

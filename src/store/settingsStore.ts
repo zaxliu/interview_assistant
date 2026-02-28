@@ -5,11 +5,9 @@ interface SettingsState extends Settings {
   feishuUser: User | null;
   interviewSplitRatio: number;
   setApiKey: (key: string) => void;
-  setBaseUrl: (url: string) => void;
   setModel: (model: string) => void;
   setFeishuAppId: (id: string) => void;
   setFeishuAppSecret: (secret: string) => void;
-  setFeishuCorsProxy: (proxy: string) => void;
   setFeishuUserAccessToken: (token: string) => void;
   setFeishuRefreshToken: (token: string) => void;
   setFeishuUser: (user: User | null) => void;
@@ -22,11 +20,9 @@ const STORAGE_KEY = 'interview-assistant-settings';
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   aiApiKey: import.meta.env.VITE_AI_API_KEY || '',
-  aiBaseUrl: import.meta.env.VITE_AI_BASE_URL || 'https://api.openai.com/v1',
   aiModel: import.meta.env.VITE_AI_MODEL || 'gpt-4',
   feishuAppId: import.meta.env.VITE_FEISHU_APP_ID || '',
   feishuAppSecret: import.meta.env.VITE_FEISHU_APP_SECRET || '',
-  feishuCorsProxy: import.meta.env.VITE_CORS_PROXY || '',
   feishuUserAccessToken: '',
   feishuRefreshToken: '',
   feishuUser: null,
@@ -34,11 +30,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setApiKey: (key) => {
     set({ aiApiKey: key });
-    get().saveToStorage();
-  },
-
-  setBaseUrl: (url) => {
-    set({ aiBaseUrl: url });
     get().saveToStorage();
   },
 
@@ -54,11 +45,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setFeishuAppSecret: (secret) => {
     set({ feishuAppSecret: secret });
-    get().saveToStorage();
-  },
-
-  setFeishuCorsProxy: (proxy) => {
-    set({ feishuCorsProxy: proxy });
     get().saveToStorage();
   },
 
@@ -90,11 +76,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         const settings = parsed as Partial<Settings> & { feishuUser?: User | null };
         set({
           aiApiKey: settings.aiApiKey || import.meta.env.VITE_AI_API_KEY || '',
-          aiBaseUrl: settings.aiBaseUrl || import.meta.env.VITE_AI_BASE_URL || 'https://api.openai.com/v1',
           aiModel: settings.aiModel || import.meta.env.VITE_AI_MODEL || 'gpt-4',
           feishuAppId: settings.feishuAppId || import.meta.env.VITE_FEISHU_APP_ID || '',
           feishuAppSecret: settings.feishuAppSecret || import.meta.env.VITE_FEISHU_APP_SECRET || '',
-          feishuCorsProxy: settings.feishuCorsProxy || import.meta.env.VITE_CORS_PROXY || '',
           feishuUserAccessToken: settings.feishuUserAccessToken || '',
           feishuRefreshToken: settings.feishuRefreshToken || '',
           feishuUser: settings.feishuUser || null,
@@ -111,11 +95,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const state = get();
       const settings: Settings & { feishuUser: User | null; interviewSplitRatio: number } = {
         aiApiKey: state.aiApiKey,
-        aiBaseUrl: state.aiBaseUrl,
         aiModel: state.aiModel,
         feishuAppId: state.feishuAppId,
         feishuAppSecret: state.feishuAppSecret,
-        feishuCorsProxy: state.feishuCorsProxy,
         feishuUserAccessToken: state.feishuUserAccessToken,
         feishuRefreshToken: state.feishuRefreshToken,
         feishuUser: state.feishuUser,

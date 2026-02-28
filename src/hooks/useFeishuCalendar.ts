@@ -11,7 +11,7 @@ export const useFeishuCalendar = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { feishuAppId, feishuAppSecret, feishuCorsProxy, feishuUserAccessToken } = useSettingsStore();
+  const { feishuAppId, feishuAppSecret, feishuUserAccessToken } = useSettingsStore();
 
   const syncCalendar = useCallback(
     async (days: number = 30): Promise<{
@@ -28,10 +28,8 @@ export const useFeishuCalendar = () => {
       setError(null);
 
       try {
-        // Try with CORS proxy first, then without
         const result = await syncInterviewsFromCalendar(
           days,
-          feishuCorsProxy || undefined,
           feishuUserAccessToken || undefined,
           feishuAppId || undefined,
           feishuAppSecret || undefined
@@ -45,7 +43,7 @@ export const useFeishuCalendar = () => {
         setIsLoading(false);
       }
     },
-    [feishuAppId, feishuAppSecret, feishuCorsProxy, feishuUserAccessToken]
+    [feishuAppId, feishuAppSecret, feishuUserAccessToken]
   );
 
   const createDoc = useCallback(
@@ -67,7 +65,6 @@ export const useFeishuCalendar = () => {
           result,
           candidateName,
           positionTitle,
-          feishuCorsProxy || undefined,
           feishuUserAccessToken || undefined,
           feishuAppId || undefined,
           feishuAppSecret || undefined
@@ -86,7 +83,7 @@ export const useFeishuCalendar = () => {
         setIsLoading(false);
       }
     },
-    [feishuAppId, feishuAppSecret, feishuCorsProxy, feishuUserAccessToken]
+    [feishuAppId, feishuAppSecret, feishuUserAccessToken]
   );
 
   const extractLinks = useCallback((description: string | undefined) => {

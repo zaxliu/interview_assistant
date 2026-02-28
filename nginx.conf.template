@@ -1,0 +1,59 @@
+server {
+    listen 80;
+    server_name localhost;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Gzip compression
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+    # Cache static assets
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # AI API proxy - target URL from environment variable
+    location /api/ai/ {
+        rewrite ^/api/ai/(.*)$ /v1/$1 break;
+
+        proxy_pass ${AI_API_BASE_URL};
+        proxy_ssl_server_name on;
+
+        # Pass through auth header from browser
+        proxy_pass_header Authorization;
+
+        # CORS headers
+        add_header 'Access-Control-Allow-Origin' '*' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
+
+        if ($request_method = 'OPTIONS') {
+            return 204;
+        }
+    }
+
+    # Feishu API proxy
+    location /api/feishu/ {
+        rewrite ^/api/feishu/(.*)$ /open-apis/$1 break;
+
+        proxy_pass https://open.feishu.cn;
+        proxy_ssl_server_name on;
+
+        proxy_pass_header Authorization;
+
+        add_header 'Access-Control-Allow-Origin' '*' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
+
+        if ($request_method = 'OPTIONS') {
+            return 204;
+        }
+    }
+
+    # SPA fallback - all routes serve index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

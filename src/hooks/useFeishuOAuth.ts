@@ -14,7 +14,6 @@ export const useFeishuOAuth = () => {
   const {
     feishuAppId,
     feishuAppSecret,
-    feishuCorsProxy,
     feishuUserAccessToken,
     feishuRefreshToken,
     feishuUser,
@@ -41,12 +40,6 @@ export const useFeishuOAuth = () => {
       return;
     }
 
-    if (!feishuCorsProxy) {
-      alert('CORS Proxy is required for OAuth. Please configure it in Settings and try again.');
-      window.history.replaceState({}, '', window.location.pathname);
-      return;
-    }
-
     // Mark as processing and code as used
     isProcessingRef.current = true;
     processedCodes.add(code);
@@ -57,14 +50,14 @@ export const useFeishuOAuth = () => {
     // Exchange code for token
     const redirectUri = window.location.origin + window.location.pathname;
     console.log('Exchanging OAuth code for token...');
-    exchangeCodeForToken(code, feishuAppId, feishuAppSecret, redirectUri, feishuCorsProxy)
+    exchangeCodeForToken(code, feishuAppId, feishuAppSecret, redirectUri)
       .then(async (tokens) => {
         setFeishuUserAccessToken(tokens.accessToken);
         setFeishuRefreshToken(tokens.refreshToken);
 
         // Fetch user info
         try {
-          const user = await getUserInfo(tokens.accessToken, feishuCorsProxy);
+          const user = await getUserInfo(tokens.accessToken);
           setFeishuUser(user);
           console.log('User info fetched:', user);
         } catch (error) {
@@ -83,7 +76,7 @@ export const useFeishuOAuth = () => {
         console.error('OAuth error:', error);
         let message = error.message;
         if (message.includes('Failed to fetch') || message.includes('Network error')) {
-          message = 'Network error: Cannot reach Feishu API. Make sure CORS proxy is running.';
+          message = 'Network error: Cannot reach Feishu API. Please check your network connection.';
         }
         alert(`OAuth failed: ${message}`);
         const newUrl = returnView
@@ -94,7 +87,7 @@ export const useFeishuOAuth = () => {
       .finally(() => {
         isProcessingRef.current = false;
       });
-  }, [feishuAppId, feishuAppSecret, feishuCorsProxy, setFeishuUserAccessToken, setFeishuRefreshToken, setFeishuUser]);
+  }, [feishuAppId, feishuAppSecret, setFeishuUserAccessToken, setFeishuRefreshToken, setFeishuUser]);
 
   // Start OAuth flow
   const startOAuth = useCallback((returnTo?: string) => {
@@ -125,8 +118,7 @@ export const useFeishuOAuth = () => {
       const tokens = await refreshAccessToken(
         feishuRefreshToken,
         feishuAppId,
-        feishuAppSecret,
-        feishuCorsProxy
+        feishuAppSecret
       );
       setFeishuUserAccessToken(tokens.accessToken);
       setFeishuRefreshToken(tokens.refreshToken);
@@ -143,7 +135,6 @@ export const useFeishuOAuth = () => {
     feishuRefreshToken,
     feishuAppId,
     feishuAppSecret,
-    feishuCorsProxy,
     setFeishuUserAccessToken,
     setFeishuRefreshToken,
     setFeishuUser,

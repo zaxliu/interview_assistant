@@ -14,7 +14,6 @@ console.log('[PDF Config] Font URL:', STANDARD_FONT_DATA_URL);
 
 interface AIParseConfig {
   apiKey: string;
-  baseUrl: string;
   model: string;
 }
 
@@ -232,7 +231,8 @@ export const parsePDFWithAI = async (
     ];
 
     try {
-      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      // Use proxy endpoint instead of configurable base URL
+      const response = await fetch('/api/ai/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

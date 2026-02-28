@@ -7,7 +7,7 @@ export const useAI = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { aiApiKey, aiBaseUrl, aiModel } = useSettingsStore();
+  const { aiApiKey, aiModel } = useSettingsStore();
 
   const generateInterviewQuestions = useCallback(
     async (jobDescription: string, resumeText: string, criteria: string[]): Promise<Question[]> => {
@@ -21,7 +21,7 @@ export const useAI = () => {
 
       try {
         const questions = await generateQuestions(
-          { apiKey: aiApiKey, baseUrl: aiBaseUrl, model: aiModel },
+          { apiKey: aiApiKey, model: aiModel },
           jobDescription,
           resumeText,
           criteria
@@ -34,7 +34,7 @@ export const useAI = () => {
         setIsLoading(false);
       }
     },
-    [aiApiKey, aiBaseUrl, aiModel]
+    [aiApiKey, aiModel]
   );
 
   const generateInterviewSummary = useCallback(
@@ -57,7 +57,7 @@ export const useAI = () => {
 
       try {
         const result = await generateSummary(
-          { apiKey: aiApiKey, baseUrl: aiBaseUrl, model: aiModel },
+          { apiKey: aiApiKey, model: aiModel },
           questions,
           jobDescription,
           resumeText,
@@ -74,7 +74,7 @@ export const useAI = () => {
         setIsLoading(false);
       }
     },
-    [aiApiKey, aiBaseUrl, aiModel]
+    [aiApiKey, aiModel]
   );
 
   return {
