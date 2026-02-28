@@ -5,6 +5,7 @@ import { ExportButtons } from './ExportButtons';
 import { Card, CardHeader, CardBody, Input, Textarea, Select, Button } from '@/components/ui';
 import { useAI } from '@/hooks/useAI';
 import { usePositionStore } from '@/store/positionStore';
+import { useSettingsStore } from '@/store/settingsStore';
 
 const AUTO_SAVE_DELAY = 2000; // 2 seconds debounce
 
@@ -42,6 +43,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
 }) => {
   const { isLoading: aiLoading, generateInterviewSummary } = useAI();
   const { setInterviewResult, completeInterview } = usePositionStore();
+  const { feishuUser } = useSettingsStore();
 
   const [result, setResult] = useState<InterviewResult>(
     candidate.interviewResult || {
@@ -64,6 +66,16 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
   const [followUps, setFollowUps] = useState<string[]>(
     candidate.interviewResult?.additional_info?.follow_up_questions || []
   );
+
+  // Auto-fill interviewer name if logged in and field is empty
+  useEffect(() => {
+    if (feishuUser?.name && !result.interview_info.interviewer) {
+      setResult(prev => ({
+        ...prev,
+        interview_info: { ...prev.interview_info, interviewer: feishuUser.name },
+      }));
+    }
+  }, [feishuUser?.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
