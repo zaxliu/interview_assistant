@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Position, Candidate } from '@/types';
 import { QuestionList } from './QuestionList';
 import { AddQuestionForm } from './AddQuestionForm';
@@ -6,6 +6,7 @@ import { PDFViewer } from '@/components/ui/PDFViewer';
 import { Card, CardHeader, CardBody, Button, Textarea } from '@/components/ui';
 import { useAI } from '@/hooks/useAI';
 import { usePositionStore } from '@/store/positionStore';
+import { useSettingsStore } from '@/store/settingsStore';
 import { getPDF } from '@/utils/pdfStorage';
 
 interface InterviewPanelProps {
@@ -32,6 +33,11 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
   const [pdfFilename, setPdfFilename] = useState<string>('');
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Get split ratio from settings store
+  const { interviewSplitRatio, setInterviewSplitRatio } = useSettingsStore();
 
   // Report PDF data to parent when loaded
   useEffect(() => {
@@ -57,6 +63,35 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     };
     loadPdf();
   }, [candidate.id, candidate.name, candidate.resumeFilename]);
+
+  // Drag handlers for resizable divider
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const container = containerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const newRatio = (e.clientX - rect.left) / rect.width;
+      // Clamp between 20% and 80%
+      const clampedRatio = Math.min(0.8, Math.max(0.2, newRatio));
+      setInterviewSplitRatio(clampedRatio);
+    };
+
+    const handleMouseUp = () => setIsDragging(false);
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, setInterviewSplitRatio]);
 
   const handleGenerateQuestions = async () => {
     if (!position.description || !candidate.resumeText) {
@@ -98,9 +133,12 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   // Layout with side panel for PDF viewer
   if (showPdfViewerProp && pdfData) {
     return (
-      <div className="flex gap-4 h-[calc(100vh-120px)] w-full">
-          {/* PDF Viewer - Left side */}
-          <div className="flex-1 min-w-[500px] max-w-[700px] shrink-0 border-r bg-white">
+      <div ref={containerRef} className="flex h-[calc(100vh-120px)] w-full">
+          {/* PDF Viewer - Left side with dynamic width */}
+          <div
+            style={{ width: `${interviewSplitRatio * 100}%` }}
+            className="min-w-[300px] bg-white"
+          >
             <PDFViewer
               pdfData={pdfData}
               filename={pdfFilename}
@@ -108,9 +146,20 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
             />
           </div>
 
-          {/* Questions - Right side */}
-          <div className="flex-1 min-w-[400px] max-w-[600px] shrink-0 overflow-auto">
-            <div className="space-y-4">
+          {/* Draggable Divider */}
+          <div
+            className={`w-1 flex-shrink-0 cursor-col-resize transition-colors ${
+              isDragging ? 'bg-blue-500' : 'bg-gray-200 hover:bg-blue-400'
+            }`}
+            onMouseDown={handleMouseDown}
+          />
+
+          {/* Questions - Right side with remaining width */}
+          <div
+            style={{ width: `${(1 - interviewSplitRatio) * 100}%` }}
+            className="min-w-[300px] overflow-auto"
+          >
+            <div className="space-y-4 p-4">
               {/* Header */}
               <div>
                 <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>

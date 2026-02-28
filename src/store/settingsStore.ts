@@ -3,6 +3,7 @@ import type { Settings, User } from '@/types';
 
 interface SettingsState extends Settings {
   feishuUser: User | null;
+  interviewSplitRatio: number;
   setApiKey: (key: string) => void;
   setBaseUrl: (url: string) => void;
   setModel: (model: string) => void;
@@ -12,6 +13,7 @@ interface SettingsState extends Settings {
   setFeishuUserAccessToken: (token: string) => void;
   setFeishuRefreshToken: (token: string) => void;
   setFeishuUser: (user: User | null) => void;
+  setInterviewSplitRatio: (ratio: number) => void;
   loadFromStorage: () => void;
   saveToStorage: () => void;
 }
@@ -28,6 +30,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   feishuUserAccessToken: '',
   feishuRefreshToken: '',
   feishuUser: null,
+  interviewSplitRatio: 0.5,
 
   setApiKey: (key) => {
     set({ aiApiKey: key });
@@ -74,6 +77,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     get().saveToStorage();
   },
 
+  setInterviewSplitRatio: (ratio) => {
+    set({ interviewSplitRatio: ratio });
+    get().saveToStorage();
+  },
+
   loadFromStorage: () => {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
@@ -90,6 +98,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           feishuUserAccessToken: settings.feishuUserAccessToken || '',
           feishuRefreshToken: settings.feishuRefreshToken || '',
           feishuUser: settings.feishuUser || null,
+          interviewSplitRatio: (settings as { interviewSplitRatio?: number }).interviewSplitRatio ?? 0.5,
         });
       }
     } catch (error) {
@@ -100,7 +109,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   saveToStorage: () => {
     try {
       const state = get();
-      const settings: Settings & { feishuUser: User | null } = {
+      const settings: Settings & { feishuUser: User | null; interviewSplitRatio: number } = {
         aiApiKey: state.aiApiKey,
         aiBaseUrl: state.aiBaseUrl,
         aiModel: state.aiModel,
@@ -110,6 +119,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         feishuUserAccessToken: state.feishuUserAccessToken,
         feishuRefreshToken: state.feishuRefreshToken,
         feishuUser: state.feishuUser,
+        interviewSplitRatio: state.interviewSplitRatio,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     } catch (error) {
