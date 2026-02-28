@@ -33,6 +33,7 @@ export const CandidateCard: React.FC<CandidateCardProps> = ({
     if (!time) return null;
     const date = new Date(time);
     return date.toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',

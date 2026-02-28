@@ -9,6 +9,16 @@ import { useSettingsStore } from '@/store/settingsStore';
 
 const AUTO_SAVE_DELAY = 2000; // 2 seconds debounce
 
+// Convert date to local datetime string for input (YYYY-MM-DD HH:mm)
+const toLocalDateTimeString = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+};
+
 interface SummaryEditorProps {
   position: Position;
   candidate: Candidate;
@@ -19,7 +29,7 @@ const defaultResult: InterviewResult = {
   interview_info: {
     interviewer: '',
     overall_result: '待定',
-    interview_time: new Date().toISOString().slice(0, 16).replace('T', ' '),
+    interview_time: toLocalDateTimeString(new Date()),
   },
   evaluation_dimensions: [
     { dimension: '专业能力', score: 3, assessment_points: '' },
@@ -51,7 +61,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       interview_info: {
         ...defaultResult.interview_info,
         interview_time: candidate.interviewTime
-          ? new Date(candidate.interviewTime).toISOString().slice(0, 16).replace('T', ' ')
+          ? toLocalDateTimeString(new Date(candidate.interviewTime))
           : defaultResult.interview_info.interview_time,
       },
     }

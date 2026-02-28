@@ -50,6 +50,7 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
       hour: '2-digit',
       minute: '2-digit',
     });
@@ -58,6 +59,7 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
       month: 'short',
       day: 'numeric',
     });
