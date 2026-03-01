@@ -40,6 +40,8 @@ interview_assitant/
 
 ## Setup & Installation
 
+### Local Development
+
 ```bash
 npm install
 cp .env.example .env
@@ -47,11 +49,24 @@ cp .env.example .env
 npm run dev
 ```
 
-**Required Environment Variables**:
-- `VITE_AI_API_KEY`: OpenAI-compatible API key
-- `VITE_AI_BASE_URL`: API endpoint (optional, defaults to OpenAI)
-- `VITE_AI_MODEL`: Model name (e.g., gpt-4)
-- `VITE_FEISHU_APP_ID`, `VITE_FEISHU_APP_SECRET`: For calendar sync
+### Docker Deployment
+
+```bash
+cp .env.example .env
+# Configure environment variables
+docker-compose up --build
+```
+
+**Environment Variables**:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_AI_API_KEY` | AI provider API key | Required |
+| `VITE_AI_MODEL` | Model name | `gpt-4` |
+| `VITE_AI_BASE_URL` | AI provider URL (local dev) | `https://api.openai.com` |
+| `AI_API_BASE_URL` | AI provider URL (Docker) | `https://api.openai.com` |
+| `VITE_FEISHU_APP_ID` | Feishu app ID | Optional |
+| `VITE_FEISHU_APP_SECRET` | Feishu app secret | Optional |
 
 ## Common Commands
 
@@ -61,6 +76,17 @@ npm run dev
 | `npm run build` | Type-check and build for production |
 | `npm run preview` | Preview production build locally |
 | `npm run lint` | Run ESLint on TypeScript files |
+| `docker-compose up --build` | Build and run Docker container |
+
+## Deployment
+
+The app is designed for VPS deployment via Docker:
+
+1. Copy `.env.example` to `.env` and configure
+2. Run `docker-compose up -d`
+3. App available on port 3000
+
+See `Dockerfile` and `docker-compose.yml` for configuration details.
 
 ## Architecture
 
@@ -86,6 +112,18 @@ Four dimensions used throughout:
 - Resumes stored in IndexedDB via `src/utils/pdfStorage.ts`
 - Rendered with pdfjs-dist in `src/components/ui/PDFViewer.tsx`
 - CMap support for CJK fonts
+
+### API Proxy (Built-in CORS)
+The app uses built-in CORS proxies - no external proxy needed:
+
+| Environment | AI API | Feishu API |
+|-------------|--------|------------|
+| Local (`npm run dev`) | Vite proxy → `VITE_AI_BASE_URL` | Vite proxy → Feishu |
+| Docker | nginx proxy → `AI_API_BASE_URL` | nginx proxy → Feishu |
+
+- **Proxy endpoints**: `/api/ai/*` and `/api/feishu/*`
+- **API keys**: Stored in browser localStorage, sent via Authorization header
+- **Server never stores keys**: Keys are pass-through only
 
 ## Tech Stack
 
