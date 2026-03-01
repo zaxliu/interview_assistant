@@ -8,9 +8,12 @@ A web-based interview assistant that helps interviewers prepare for interviews, 
 - **Question Generation**: AI-powered question generation based on job description and resume
 - **Note Taking**: Record interview notes inline with questions
 - **Structured Summary**: Editable interview result with evaluation dimensions, scores, and comprehensive assessment
-- **Multiple Export Options**: Export to Notion database or Feishu Doc
+- **Multiple Export Options**: Export to Feishu Doc
+- **Built-in CORS Proxy**: No external proxy needed for API calls
 
 ## Quick Start
+
+### Local Development
 
 1. Install dependencies:
    ```bash
@@ -31,20 +34,42 @@ A web-based interview assistant that helps interviewers prepare for interviews, 
 
 5. Open http://localhost:3000
 
+### Docker Deployment
+
+1. Copy and configure environment variables:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys
+   ```
+
+2. Build and run:
+   ```bash
+   docker-compose up --build
+   ```
+
+3. Open http://localhost:3000
+
 ## Configuration
 
 ### AI Configuration
-- `VITE_AI_API_KEY`: Your AI provider API key
-- `VITE_AI_BASE_URL`: API endpoint (default: OpenAI)
-- `VITE_AI_MODEL`: Model to use (e.g., gpt-4)
 
-### Notion Configuration
-- `VITE_NOTION_API_KEY`: Notion integration secret
-- `VITE_NOTION_DATABASE_ID`: Database ID for storing interview results
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_AI_API_KEY` | Your AI provider API key | Required |
+| `VITE_AI_MODEL` | Model to use | `gpt-4` |
+| `VITE_AI_BASE_URL` | AI provider URL (local dev) | `https://api.openai.com` |
+| `AI_API_BASE_URL` | AI provider URL (Docker) | `https://api.openai.com` |
+
+**Note**: The AI provider URL is configured server-side via environment variables, not in browser settings. API keys are stored in browser localStorage and sent with each request.
 
 ### Feishu Configuration
-- `VITE_FEISHU_APP_ID`: Feishu app ID
-- `VITE_FEISHU_APP_SECRET`: Feishu app secret
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_FEISHU_APP_ID` | Feishu app ID |
+| `VITE_FEISHU_APP_SECRET` | Feishu app secret |
+
+**Note**: CORS proxy is built-in. No need to run `local-cors-proxy` anymore.
 
 ## Usage
 
@@ -62,7 +87,7 @@ A web-based interview assistant that helps interviewers prepare for interviews, 
 
 7. **Generate Summary**: After the interview, generate a structured summary
 
-8. **Export**: Export to Notion or Feishu Doc
+8. **Export**: Export to Feishu Doc
 
 ## Data Storage
 
@@ -79,9 +104,23 @@ npm run build
 
 # Preview production build
 npm run preview
+
+# Run linter
+npm run lint
 ```
 
-## Tech Stack
+## Architecture
+
+### API Proxy
+
+The app uses built-in CORS proxies for both local development and Docker deployment:
+
+| Environment | AI API | Feishu API |
+|-------------|--------|------------|
+| Local (`npm run dev`) | Vite proxy → `VITE_AI_BASE_URL` | Vite proxy → Feishu |
+| Docker | nginx proxy → `AI_API_BASE_URL` | nginx proxy → Feishu |
+
+### Tech Stack
 
 - React 18 + TypeScript
 - Vite
@@ -89,5 +128,4 @@ npm run preview
 - Zustand (state management)
 - pdfjs-dist (PDF parsing)
 - Vercel AI SDK
-- Notion SDK
 - Feishu Open Platform API
