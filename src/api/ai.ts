@@ -7,6 +7,48 @@ interface AIServiceConfig {
 }
 
 /**
+ * Test AI API key by making a simple request
+ */
+export const testAIApiKey = async (
+  apiKey: string,
+  model: string
+): Promise<{ success: boolean; message: string }> => {
+  try {
+    const response = await fetch('/api/ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          { role: 'user', content: 'Say "OK" if you can read this.' },
+        ],
+        max_tokens: 5,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || response.statusText;
+      return { success: false, message: `API error: ${errorMessage}` };
+    }
+
+    const data = await response.json();
+    if (data.choices?.[0]?.message?.content) {
+      return { success: true, message: `Connected successfully (${model})` };
+    }
+    return { success: false, message: 'Unexpected response from API' };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Connection failed',
+    };
+  }
+};
+
+/**
  * Generate interview questions based on job description and resume
  */
 export const generateQuestions = async (

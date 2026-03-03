@@ -699,4 +699,50 @@ const formatResultAsBlocks = (result: InterviewResult): object[] => {
   return blocks;
 };
 
+/**
+ * Test Feishu API credentials by getting tenant access token
+ */
+export const testFeishuCredentials = async (
+  appId: string,
+  appSecret: string
+): Promise<{ success: boolean; message: string }> => {
+  if (!appId || !appSecret) {
+    return { success: false, message: 'App ID and App Secret are required' };
+  }
+
+  try {
+    const response = await fetch('/api/feishu/auth/v3/tenant_access_token/internal', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        app_id: appId,
+        app_secret: appSecret,
+      }),
+    });
+
+    if (!response.ok) {
+      return { success: false, message: `HTTP error: ${response.status}` };
+    }
+
+    const data = await response.json();
+
+    if (data.code !== 0) {
+      return { success: false, message: data.msg || `Error code: ${data.code}` };
+    }
+
+    if (data.tenant_access_token) {
+      return { success: true, message: 'Feishu credentials verified' };
+    }
+
+    return { success: false, message: 'No access token received' };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Connection failed',
+    };
+  }
+};
+
 export { extractLinksFromDescription };

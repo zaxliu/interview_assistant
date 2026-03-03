@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useFeishuOAuth } from '@/hooks/useFeishuOAuth';
 import { Input, Card, CardHeader, CardBody, Button } from '@/components/ui';
+import { testAIApiKey } from '@/api/ai';
+import { testFeishuCredentials } from '@/api/feishu';
 
 interface SettingsPanelProps {
   onClose?: () => void;
@@ -20,6 +22,29 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
   } = useSettingsStore();
 
   const { isAuthenticated, user, logout } = useFeishuOAuth();
+
+  const [aiTestStatus, setAiTestStatus] = useState<{ loading: boolean; success?: boolean; message?: string }>({ loading: false });
+  const [feishuTestStatus, setFeishuTestStatus] = useState<{ loading: boolean; success?: boolean; message?: string }>({ loading: false });
+
+  const handleTestAI = async () => {
+    if (!aiApiKey) {
+      setAiTestStatus({ loading: false, success: false, message: 'Please enter an API key' });
+      return;
+    }
+    setAiTestStatus({ loading: true });
+    const result = await testAIApiKey(aiApiKey, aiModel || 'gpt-4');
+    setAiTestStatus({ loading: false, ...result });
+  };
+
+  const handleTestFeishu = async () => {
+    if (!feishuAppId || !feishuAppSecret) {
+      setFeishuTestStatus({ loading: false, success: false, message: 'Please enter App ID and Secret' });
+      return;
+    }
+    setFeishuTestStatus({ loading: true });
+    const result = await testFeishuCredentials(feishuAppId, feishuAppSecret);
+    setFeishuTestStatus({ loading: false, ...result });
+  };
 
   return (
     <div className="space-y-4">
@@ -52,6 +77,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             onChange={(e) => setModel(e.target.value)}
             placeholder="gpt-4"
           />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleTestAI}
+              disabled={aiTestStatus.loading}
+            >
+              {aiTestStatus.loading ? 'Testing...' : 'Test Connection'}
+            </Button>
+            {aiTestStatus.message && (
+              <span className={`text-xs ${aiTestStatus.success ? 'text-green-600' : 'text-red-600'}`}>
+                {aiTestStatus.message}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-gray-500">
             AI provider URL is configured server-side via environment variables.
           </p>
@@ -78,6 +118,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             onChange={(e) => setFeishuAppSecret(e.target.value)}
             placeholder="Enter your Feishu app secret"
           />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleTestFeishu}
+              disabled={feishuTestStatus.loading}
+            >
+              {feishuTestStatus.loading ? 'Testing...' : 'Test Credentials'}
+            </Button>
+            {feishuTestStatus.message && (
+              <span className={`text-xs ${feishuTestStatus.success ? 'text-green-600' : 'text-red-600'}`}>
+                {feishuTestStatus.message}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-gray-500">
             CORS proxy is built-in. No additional configuration needed.
           </p>
