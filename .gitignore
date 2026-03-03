@@ -38,3 +38,6 @@ dist-ssr
 
 # IDE workspace files
 *.code-workspace
+
+# Claude session reports (private)
+CLAUDE_SESSIONS_REPORT.md
