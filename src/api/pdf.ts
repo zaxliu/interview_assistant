@@ -179,9 +179,10 @@ export const parsePDFWithAI = async (
     maxPages?: number;
     scale?: number;
     extractStructured?: boolean;
+    onProgress?: (current: number, total: number) => void;
   }
 ): Promise<string> => {
-  const { maxPages = 10, scale = 3, extractStructured = true } = options || {};
+  const { maxPages = 10, scale = 2, extractStructured = true, onProgress } = options || {};
 
   const pdf = await pdfjsLib.getDocument({
     data: arrayBuffer,
@@ -193,6 +194,9 @@ export const parsePDFWithAI = async (
 
   console.log(`[AI PDF Parse] Processing ${pagesToProcess} of ${pdf.numPages} pages with scale ${scale}`);
 
+  // Report initial progress
+  onProgress?.(0, pagesToProcess);
+
   // Process each page individually for better results
   const pageTexts: string[] = [];
 
@@ -203,17 +207,18 @@ export const parsePDFWithAI = async (
 
     // Process each page separately to avoid token limits
     const pagePrompt = extractStructured
-      ? `请仔细阅读这张简历/文档图片，提取所有文字内容。
+      ? `请仔细阅读这张简历/文档图片，完整提取所有文字内容。
 
-要求：
-1. 完整提取所有文字，不要遗漏任何内容
+重要要求：
+1. 必须完整提取所有文字，绝对不要遗漏或截断任何内容
 2. 保持原文的结构和格式（标题、段落、列表等）
 3. 保留所有数字、日期、专有名词
 4. 如果有表格，用清晰的格式呈现
 5. 不要总结、不要改写、不要添加任何评论
+6. 即使内容很长，也要完整输出
 
-直接输出提取的文字内容：`
-      : `Extract all text content from this document image. Output the exact text without any summary or modification.`;
+直接输出提取的全部文字内容：`
+      : `Extract ALL text content from this document image. You MUST output the complete text without any truncation, summarization, or modification. Even if the content is long, output everything.`;
 
     const messages = [
       {
@@ -241,22 +246,45 @@ export const parsePDFWithAI = async (
         body: JSON.stringify({
           model: config.model,
           messages,
-          max_tokens: 4096,
+          max_tokens: 8192,
         }),
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        console.error(`[AI PDF Parse] Page ${i} failed:`, error);
+        const errorText = await response.text();
+        let errorMsg = `HTTP ${response.status}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMsg = errorJson.error?.message || errorMsg;
+        } catch {
+          if (response.status === 413) {
+            errorMsg = 'Request too large - try using a smaller PDF or disable AI parsing';
+          }
+        }
+        console.error(`[AI PDF Parse] Page ${i} failed: ${errorMsg}`);
+        pageTexts.push(`--- 第 ${i} 页 ---\n[解析失败: ${errorMsg}]`);
         continue;
       }
 
       const data = await response.json();
       const pageText = data.choices[0]?.message?.content || '';
-      pageTexts.push(`--- 第 ${i} 页 ---\n${pageText}`);
-      console.log(`[AI PDF Parse] Page ${i} extracted: ${pageText.length} chars`);
+      const finishReason = data.choices[0]?.finish_reason;
+
+      // Check if content was truncated
+      if (finishReason === 'length') {
+        console.warn(`[AI PDF Parse] Page ${i} was truncated due to token limit. Consider splitting the PDF or using a model with larger context.`);
+        pageTexts.push(`--- 第 ${i} 页 (内容被截断，请检查原文) ---\n${pageText}`);
+      } else {
+        pageTexts.push(`--- 第 ${i} 页 ---\n${pageText}`);
+      }
+      console.log(`[AI PDF Parse] Page ${i} extracted: ${pageText.length} chars, finish_reason: ${finishReason}`);
+
+      // Report progress after each page
+      onProgress?.(i, pagesToProcess);
     } catch (error) {
       console.error(`[AI PDF Parse] Page ${i} error:`, error);
+      // Still report progress even on error
+      onProgress?.(i, pagesToProcess);
     }
 
     // Small delay between pages to avoid rate limits
@@ -281,6 +309,7 @@ export const parsePDFFromFileWithAI = async (
     maxPages?: number;
     scale?: number;
     extractStructured?: boolean;
+    onProgress?: (current: number, total: number) => void;
   }
 ): Promise<string> => {
   console.log(`[AI PDF Parse] Using image-based extraction for model: ${config.model}`);
@@ -298,6 +327,7 @@ export const parsePDFFromUrlWithAI = async (
     maxPages?: number;
     scale?: number;
     extractStructured?: boolean;
+    onProgress?: (current: number, total: number) => void;
   }
 ): Promise<string> => {
   const response = await fetch(url);

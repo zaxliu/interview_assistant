@@ -21,6 +21,14 @@ export default defineConfig(({ mode }) => {
           target: aiBaseUrl,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/ai/, '/v1'),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq, req) => {
+              // Log large requests for debugging
+              if (req.headers['content-length'] && parseInt(req.headers['content-length']) > 1000000) {
+                console.log(`[Proxy] Large request: ${Math.round(parseInt(req.headers['content-length']) / 1024)}KB`);
+              }
+            });
+          },
         },
         '/api/feishu': {
           target: 'https://open.feishu.cn',

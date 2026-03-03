@@ -23,6 +23,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const {
     isLoading: pdfLoading,
     error: pdfError,
+    progress: parseProgress,
     parseFromFile,
     parseFromUrl,
     canUseAI,
@@ -193,29 +194,46 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
               >
                 {pdfLoading ? 'Parsing...' : 'Upload PDF'}
               </Button>
-              {resumeFilename && (
+              {resumeFilename && !pdfLoading && (
                 <span className="text-sm text-green-600 flex items-center">
                   ✓ {resumeFilename}
                 </span>
               )}
-              {/* Debug button - only show when PDF is loaded */}
-              {pendingPdfFile && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={async () => {
-                    try {
-                      await debugDownloadPDFPageAsImage(pendingPdfFile, 0, 3);
-                    } catch (err) {
-                      console.error('Debug download failed:', err);
-                    }
-                  }}
-                  className="text-xs text-gray-500"
-                >
-                  🐛 Download Page 1 as Image
-                </Button>
-              )}
             </div>
+
+            {/* Progress bar for AI parsing */}
+            {pdfLoading && parseProgress && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>AI parsing in progress...</span>
+                  <span>{parseProgress.current} / {parseProgress.total} pages</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${(parseProgress.current / parseProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Debug button - only show when PDF is loaded and not parsing */}
+            {!pdfLoading && pendingPdfFile && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await debugDownloadPDFPageAsImage(pendingPdfFile, 0, 3);
+                  } catch (err) {
+                    console.error('Debug download failed:', err);
+                  }
+                }}
+                className="text-xs text-gray-500"
+              >
+                🐛 Download Page 1 as Image
+              </Button>
+            )}
 
             {/* URL input */}
             <div className="flex gap-2">

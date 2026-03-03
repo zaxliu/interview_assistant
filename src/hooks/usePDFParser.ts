@@ -13,16 +13,23 @@ interface AIOptions {
   extractStructured?: boolean;
 }
 
+export interface ParseProgress {
+  current: number;
+  total: number;
+}
+
 export const usePDFParser = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState<string>('');
+  const [progress, setProgress] = useState<ParseProgress | null>(null);
 
   const { aiApiKey, aiModel } = useSettingsStore();
 
   const parseFromFile = useCallback(async (file: File, useAI = false, options?: AIOptions): Promise<string> => {
     setIsLoading(true);
     setError(null);
+    setProgress(null);
 
     try {
       let extractedText: string;
@@ -34,8 +41,9 @@ export const usePDFParser = () => {
           { apiKey: aiApiKey, model: aiModel },
           {
             maxPages: options?.maxPages ?? 10,
-            scale: options?.scale ?? 3,
-            extractStructured: options?.extractStructured ?? true
+            scale: options?.scale ?? 2,
+            extractStructured: options?.extractStructured ?? true,
+            onProgress: (current, total) => setProgress({ current, total }),
           }
         );
       } else {
@@ -51,12 +59,14 @@ export const usePDFParser = () => {
       return '';
     } finally {
       setIsLoading(false);
+      setProgress(null);
     }
   }, [aiApiKey, aiModel]);
 
   const parseFromUrl = useCallback(async (url: string, useAI = false, options?: AIOptions): Promise<string> => {
     setIsLoading(true);
     setError(null);
+    setProgress(null);
 
     try {
       let extractedText: string;
@@ -68,8 +78,9 @@ export const usePDFParser = () => {
           { apiKey: aiApiKey, model: aiModel },
           {
             maxPages: options?.maxPages ?? 10,
-            scale: options?.scale ?? 3,
-            extractStructured: options?.extractStructured ?? true
+            scale: options?.scale ?? 2,
+            extractStructured: options?.extractStructured ?? true,
+            onProgress: (current, total) => setProgress({ current, total }),
           }
         );
       } else {
@@ -85,6 +96,7 @@ export const usePDFParser = () => {
       return '';
     } finally {
       setIsLoading(false);
+      setProgress(null);
     }
   }, [aiApiKey, aiModel]);
 
@@ -97,6 +109,7 @@ export const usePDFParser = () => {
     isLoading,
     error,
     text,
+    progress,
     parseFromFile,
     parseFromUrl,
     clearText,
