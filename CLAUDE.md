@@ -63,8 +63,7 @@ docker-compose up --build
 |----------|-------------|---------|
 | `VITE_AI_API_KEY` | AI provider API key | Required |
 | `VITE_AI_MODEL` | Model name | `gpt-4` |
-| `VITE_AI_BASE_URL` | AI provider URL (local dev) | `https://api.openai.com` |
-| `AI_API_BASE_URL` | AI provider URL (Docker) | `https://api.openai.com` |
+| `VITE_AI_BASE_URL` | AI provider URL | `https://api.openai.com` |
 | `VITE_FEISHU_APP_ID` | Feishu app ID | Optional |
 | `VITE_FEISHU_APP_SECRET` | Feishu app secret | Optional |
 
@@ -119,7 +118,7 @@ The app uses built-in CORS proxies - no external proxy needed:
 | Environment | AI API | Feishu API |
 |-------------|--------|------------|
 | Local (`npm run dev`) | Vite proxy → `VITE_AI_BASE_URL` | Vite proxy → Feishu |
-| Docker | nginx proxy → `AI_API_BASE_URL` | nginx proxy → Feishu |
+| Docker | nginx proxy → `VITE_AI_BASE_URL` | nginx proxy → Feishu |
 
 - **Proxy endpoints**: `/api/ai/*` and `/api/feishu/*`
 - **API keys**: Stored in browser localStorage, sent via Authorization header

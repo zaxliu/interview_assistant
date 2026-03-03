@@ -57,8 +57,7 @@ A web-based interview assistant that helps interviewers prepare for interviews, 
 |----------|-------------|---------|
 | `VITE_AI_API_KEY` | Your AI provider API key | Required |
 | `VITE_AI_MODEL` | Model to use | `gpt-4` |
-| `VITE_AI_BASE_URL` | AI provider URL (local dev) | `https://api.openai.com` |
-| `AI_API_BASE_URL` | AI provider URL (Docker) | `https://api.openai.com` |
+| `VITE_AI_BASE_URL` | AI provider URL | `https://api.openai.com` |
 
 **Note**: The AI provider URL is configured server-side via environment variables, not in browser settings. API keys are stored in browser localStorage and sent with each request.
 
@@ -118,7 +117,7 @@ The app uses built-in CORS proxies for both local development and Docker deploym
 | Environment | AI API | Feishu API |
 |-------------|--------|------------|
 | Local (`npm run dev`) | Vite proxy → `VITE_AI_BASE_URL` | Vite proxy → Feishu |
-| Docker | nginx proxy → `AI_API_BASE_URL` | nginx proxy → Feishu |
+| Docker | nginx proxy → `VITE_AI_BASE_URL` | nginx proxy → Feishu |
 
 ### Tech Stack
 

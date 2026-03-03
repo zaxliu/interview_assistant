@@ -4,6 +4,9 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # Increase max body size for AI API requests with base64 images
+    client_max_body_size 50m;
+
     # Gzip compression
     gzip on;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
@@ -18,7 +21,7 @@ server {
     location /api/ai/ {
         rewrite ^/api/ai/(.*)$ /v1/$1 break;
 
-        proxy_pass ${AI_API_BASE_URL};
+        proxy_pass ${VITE_AI_BASE_URL};
         proxy_ssl_server_name on;
 
         # Pass through auth header from browser

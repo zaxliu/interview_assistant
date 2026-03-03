@@ -9,7 +9,7 @@ services:
         VITE_FEISHU_APP_ID: ${VITE_FEISHU_APP_ID}
         VITE_FEISHU_APP_SECRET: ${VITE_FEISHU_APP_SECRET}
     environment:
-      - AI_API_BASE_URL=${AI_API_BASE_URL:-https://api.openai.com}
+      - VITE_AI_BASE_URL=${VITE_AI_BASE_URL:-https://api.openai.com}
     ports:
       - "3000:80"
     restart: unless-stopped
