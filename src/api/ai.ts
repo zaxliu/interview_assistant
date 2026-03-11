@@ -82,7 +82,7 @@ ${jobDescription}
 ## 候选人简历
 ${resumeText}
 
-## 补充考核要点
+## 增量职位要求
 ${criteriaSection}
 
 ## 评估维度与考核要点
