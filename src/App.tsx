@@ -171,7 +171,10 @@ const AppShell = () => {
     const currentUserId = feishuUser?.id ?? null;
 
     if (currentUserId) {
-      migrateLegacyData(currentUserId);
+      const migrated = migrateLegacyData(currentUserId);
+      if (migrated) {
+        loadSettings();
+      }
       loadForUser(currentUserId);
       return;
     }

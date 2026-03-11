@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Settings, User } from '@/types';
+import { loadSettingsFromStorage, saveSettingsToStorage } from '@/utils/storage';
 
 interface SettingsState extends Settings {
   feishuUser: User | null;
@@ -15,8 +16,6 @@ interface SettingsState extends Settings {
   loadFromStorage: () => void;
   saveToStorage: () => void;
 }
-
-const STORAGE_KEY = 'interview-assistant-settings';
 
 const getDefaultSettings = () => ({
   aiApiKey: import.meta.env.VITE_AI_API_KEY || '',
@@ -41,7 +40,7 @@ const persistSettings = (state: SettingsState) => {
     interviewSplitRatio: state.interviewSplitRatio,
   };
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  saveSettingsToStorage(settings);
 };
 
 const updateAndPersist = (
@@ -69,26 +68,26 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadFromStorage: () => {
     try {
-      const data = localStorage.getItem(STORAGE_KEY);
+      const data = loadSettingsFromStorage<
+        Partial<Settings> & {
+          feishuUser?: User | null;
+          interviewSplitRatio?: number;
+        }
+      >();
       if (!data) {
         return;
       }
-
-      const parsed = JSON.parse(data) as Partial<Settings> & {
-        feishuUser?: User | null;
-        interviewSplitRatio?: number;
-      };
       const defaults = getDefaultSettings();
 
       set({
-        aiApiKey: parsed.aiApiKey || defaults.aiApiKey,
-        aiModel: parsed.aiModel || defaults.aiModel,
-        feishuAppId: parsed.feishuAppId || defaults.feishuAppId,
-        feishuAppSecret: parsed.feishuAppSecret || defaults.feishuAppSecret,
-        feishuUserAccessToken: parsed.feishuUserAccessToken || '',
-        feishuRefreshToken: parsed.feishuRefreshToken || '',
-        feishuUser: parsed.feishuUser || null,
-        interviewSplitRatio: parsed.interviewSplitRatio ?? defaults.interviewSplitRatio,
+        aiApiKey: data.aiApiKey || defaults.aiApiKey,
+        aiModel: data.aiModel || defaults.aiModel,
+        feishuAppId: data.feishuAppId || defaults.feishuAppId,
+        feishuAppSecret: data.feishuAppSecret || defaults.feishuAppSecret,
+        feishuUserAccessToken: data.feishuUserAccessToken || '',
+        feishuRefreshToken: data.feishuRefreshToken || '',
+        feishuUser: data.feishuUser || null,
+        interviewSplitRatio: data.interviewSplitRatio ?? defaults.interviewSplitRatio,
       });
     } catch (error) {
       console.error('Failed to load settings from storage:', error);

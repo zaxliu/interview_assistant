@@ -1,5 +1,23 @@
 import type { Position, Candidate } from '@/types';
-import { getLegacyStorage, saveToStorage, isLegacyMigrated, markLegacyMigrated } from './storage';
+import {
+  getLegacyStorage,
+  loadFromStorage,
+  loadSettingsFromStorage,
+  saveSettingsToStorage,
+  saveToStorage,
+  markLegacyMigrated,
+} from './storage';
+
+type LegacySettings = {
+  aiApiKey?: string;
+  aiModel?: string;
+  feishuAppId?: string;
+  feishuAppSecret?: string;
+  feishuUserAccessToken?: string;
+  feishuRefreshToken?: string;
+  feishuUser?: unknown;
+  interviewSplitRatio?: number;
+};
 
 /**
  * Migrate legacy (global) data to user-specific storage.
@@ -9,47 +27,52 @@ import { getLegacyStorage, saveToStorage, isLegacyMigrated, markLegacyMigrated }
  * @returns true if migration was performed, false if already migrated or no data to migrate
  */
 export const migrateLegacyData = (userId: string): boolean => {
-  // Check if already migrated
-  if (isLegacyMigrated()) {
-    console.log('Legacy data already migrated, skipping');
-    return false;
-  }
-
-  // Get legacy data
   const legacyData = getLegacyStorage();
-  if (!legacyData?.positions || !Array.isArray(legacyData.positions)) {
-    console.log('No legacy data to migrate');
-    markLegacyMigrated();
-    return false;
-  }
+  const existingUserData = loadFromStorage(userId);
+  const existingSettings = loadSettingsFromStorage<LegacySettings>();
+  const hasUserPositions =
+    Array.isArray(existingUserData?.positions) && existingUserData.positions.length > 0;
+  const legacyPositions = Array.isArray(legacyData?.positions) ? (legacyData.positions as Position[]) : [];
+  const hasLegacyPositions = legacyPositions.length > 0;
 
-  const positions = legacyData.positions as Position[];
+  let migrated = false;
 
-  // Check if there's any data to migrate
-  if (positions.length === 0) {
-    console.log('No positions to migrate');
-    markLegacyMigrated();
-    return false;
-  }
-
-  console.log(`Migrating ${positions.length} positions to user ${userId}`);
-
-  // Add userId to all positions and their candidates
-  const migratedPositions = positions.map((position) => ({
-    ...position,
-    userId,
-    candidates: position.candidates.map((candidate: Candidate) => ({
-      ...candidate,
+  if (!hasUserPositions && hasLegacyPositions) {
+    const migratedPositions = legacyPositions.map((position) => ({
+      ...position,
       userId,
-    })),
-  }));
+      candidates: Array.isArray(position.candidates)
+        ? position.candidates.map((candidate: Candidate) => ({
+            ...candidate,
+            userId,
+          }))
+        : [],
+    }));
 
-  // Save to user-specific storage
-  saveToStorage({ positions: migratedPositions, settings: {} }, userId);
+    saveToStorage(
+      {
+        positions: migratedPositions,
+        settings: existingUserData?.settings ?? legacyData?.settings ?? {},
+      },
+      userId
+    );
+    migrated = true;
+  }
 
-  // Mark as migrated
-  markLegacyMigrated();
+  const legacySettings =
+    legacyData?.settings && typeof legacyData.settings === 'object'
+      ? (legacyData.settings as LegacySettings)
+      : null;
+  const hasLegacySettings = Boolean(legacySettings && Object.keys(legacySettings).length > 0);
 
-  console.log('Migration completed successfully');
-  return true;
+  if (!existingSettings && hasLegacySettings && legacySettings) {
+    saveSettingsToStorage(legacySettings);
+    migrated = true;
+  }
+
+  if (hasLegacyPositions || hasLegacySettings) {
+    markLegacyMigrated();
+  }
+
+  return migrated;
 };

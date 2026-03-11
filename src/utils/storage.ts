@@ -1,4 +1,5 @@
-const STORAGE_KEY = 'interview-assistant-data';
+export const STORAGE_KEY = 'interview-assistant-data';
+export const SETTINGS_STORAGE_KEY = 'interview-assistant-settings';
 const LEGACY_MIGRATED_KEY = 'interview-assistant-migrated';
 
 export interface StorageData {
@@ -44,6 +45,30 @@ export const loadFromStorage = (userId?: string): StorageData | null => {
     return data ? JSON.parse(data) : null;
   } catch (error) {
     console.error('Failed to load from localStorage:', error);
+    return null;
+  }
+};
+
+/**
+ * Save settings to dedicated storage
+ */
+export const saveSettingsToStorage = (settings: unknown): void => {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch (error) {
+    console.error('Failed to save settings to localStorage:', error);
+  }
+};
+
+/**
+ * Load settings from dedicated storage
+ */
+export const loadSettingsFromStorage = <T = unknown>(): T | null => {
+  try {
+    const data = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    return data ? (JSON.parse(data) as T) : null;
+  } catch (error) {
+    console.error('Failed to load settings from localStorage:', error);
     return null;
   }
 };
