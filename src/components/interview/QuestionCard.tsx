@@ -50,7 +50,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
       setEditText(question.text);
       setIsEditing(true);
     }
-  }, [autoEdit]);
+  }, [autoEdit, isEditing, question.text]);
 
   const handleStartEdit = (e: React.MouseEvent) => {
     e.stopPropagation();

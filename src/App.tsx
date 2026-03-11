@@ -1,338 +1,222 @@
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
+import {
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
+import { useInterviewUIStore } from '@/store/interviewUIStore';
 import { useTokenValidation } from '@/hooks/useTokenValidation';
 import { useFeishuOAuth } from '@/hooks/useFeishuOAuth';
 import { migrateLegacyData } from '@/utils/migration';
-import { CalendarSync } from '@/components/calendar/CalendarSync';
-import { UpcomingInterviews } from '@/components/calendar/UpcomingInterviews';
-import { PositionList } from '@/components/positions/PositionList';
-import { PositionForm } from '@/components/positions/PositionForm';
-import { CandidateList } from '@/components/candidates/CandidateList';
-import { CandidateForm } from '@/components/candidates/CandidateForm';
-import { InterviewPanel } from '@/components/interview/InterviewPanel';
-import { SummaryEditor } from '@/components/summary/SummaryEditor';
-import { SettingsPanel } from '@/components/settings/SettingsPanel';
-import { SettingsWarning } from '@/components/settings/SettingsWarning';
 import { UserLoginBanner } from '@/components/auth/UserLoginBanner';
+import { CalendarSync } from '@/components/calendar/CalendarSync';
 import { Button, Logo } from '@/components/ui';
 
-type View =
-  | 'dashboard'
-  | 'position-form'
-  | 'position-detail'
-  | 'candidate-form'
-  | 'interview'
-  | 'summary'
-  | 'settings';
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+const PositionFormPage = lazy(() => import('@/pages/PositionFormPage'));
+const PositionDetailPage = lazy(() => import('@/pages/PositionDetailPage'));
+const CandidateFormPage = lazy(() => import('@/pages/CandidateFormPage'));
+const InterviewPage = lazy(() => import('@/pages/InterviewPage'));
+const SummaryPage = lazy(() => import('@/pages/SummaryPage'));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 
-// Helper to get initial view from URL hash or OAuth state
-const getInitialView = (): View => {
-  // Check hash first
-  const hash = window.location.hash.slice(1); // Remove #
-  if (hash === 'settings') return 'settings';
-
-  // Check OAuth state param (format: feishu_oauth:settings)
-  const urlParams = new URLSearchParams(window.location.search);
-  const state = urlParams.get('state');
-  if (state?.startsWith('feishu_oauth:')) {
-    const returnView = state.split(':')[1];
-    if (returnView === 'settings') return 'settings';
+const getBackTarget = (pathname: string, positionId?: string, candidateId?: string): string | null => {
+  if (pathname === '/') return null;
+  if (pathname === '/settings') return '/';
+  if (pathname === '/positions/new') return '/';
+  if (pathname.endsWith('/summary') && positionId && candidateId) {
+    return `/positions/${positionId}/candidates/${candidateId}/interview`;
   }
-
-  return 'dashboard';
+  if (
+    pathname.endsWith('/interview') ||
+    pathname.endsWith('/edit') ||
+    pathname.endsWith('/candidates/new')
+  ) {
+    return positionId ? `/positions/${positionId}` : '/';
+  }
+  if (pathname.includes('/positions/')) return '/';
+  return '/';
 };
 
-function App() {
-  const { loadForUser, clearCurrentUser, getPosition } = usePositionStore();
-  const { loadFromStorage: loadSettings, feishuUser } = useSettingsStore();
-  const { isAuthenticated } = useFeishuOAuth();
+const LoadingScreen = () => (
+  <div className="bg-white border border-gray-200 rounded-lg p-8 text-center text-sm text-gray-500">
+    Loading...
+  </div>
+);
 
-  // Token validation for Feishu login
-  useTokenValidation();
+const NotFoundPage = () => (
+  <div className="bg-white border border-gray-200 rounded-lg p-8 text-center space-y-3">
+    <h2 className="text-lg font-semibold text-gray-900">Page Not Found</h2>
+    <p className="text-sm text-gray-500">The requested page does not exist.</p>
+  </div>
+);
 
-  // Track previous user to detect login/logout changes
-  const prevUserIdRef = useRef<string | null>(null);
+const AppHeader = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const getPosition = usePositionStore((state) => state.getPosition);
+  const isAuthenticated = useFeishuOAuth().isAuthenticated;
+  const hasPdf = useInterviewUIStore((state) => state.hasPdf);
 
-  // Handle user login/logout and data loading
-  useEffect(() => {
-    const currentLoggedInUserId = feishuUser?.id || null;
-    const prevUserId = prevUserIdRef.current;
+  const selectedPosition = params.positionId ? getPosition(params.positionId) : null;
+  const selectedCandidate = selectedPosition?.candidates.find(
+    (candidate) => candidate.id === params.candidateId
+  );
 
-    // Only act if user changed
-    if (currentLoggedInUserId !== prevUserId) {
-      prevUserIdRef.current = currentLoggedInUserId;
+  const isInterviewRoute = location.pathname.endsWith('/interview');
+  const isWideLayout = isInterviewRoute;
+  const containerClass = isWideLayout ? 'w-full' : 'max-w-4xl mx-auto';
+  const backTarget = getBackTarget(location.pathname, params.positionId, params.candidateId);
+  const showPdf = searchParams.get('resume') !== 'hidden';
 
-      if (currentLoggedInUserId) {
-        // User logged in
-        console.log('User logged in:', currentLoggedInUserId);
-
-        // Try to migrate legacy data on first login
-        const migrated = migrateLegacyData(currentLoggedInUserId);
-        if (migrated) {
-          console.log('Legacy data migrated for user:', currentLoggedInUserId);
-        }
-
-        // Load user's data
-        loadForUser(currentLoggedInUserId);
-      } else {
-        // User logged out
-        console.log('User logged out, clearing data');
-        clearCurrentUser();
-      }
+  const toggleResume = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (showPdf) {
+      nextParams.set('resume', 'hidden');
+    } else {
+      nextParams.delete('resume');
     }
-  }, [feishuUser, loadForUser, clearCurrentUser]);
-
-  const [view, setView] = useState<View>(getInitialView);
-  const [selectedPositionId, setSelectedPositionId] = useState<string | null>(null);
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
-
-  // Interview layout state (controlled by App.tsx header buttons)
-  const [interviewShowPdf, setInterviewShowPdf] = useState(true);
-  const [interviewPdfData, setInterviewPdfData] = useState<ArrayBuffer | null>(null);
-
-  const handleInterviewLayoutChange = (layout: { pdfData: ArrayBuffer | null }) => {
-    setInterviewPdfData(layout.pdfData);
+    setSearchParams(nextParams, { replace: true });
   };
 
-  // Load settings on mount
+  return (
+    <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+      <div className={`${containerClass} px-4 py-3 flex items-center justify-between gap-4`}>
+        <div className="flex items-center gap-4">
+          {backTarget && (
+            <Button variant="ghost" size="sm" onClick={() => navigate(backTarget)}>
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back
+            </Button>
+          )}
+          <div className="flex items-center gap-2">
+            <Logo size={28} />
+            <h1 className="text-lg font-semibold text-gray-900">Interview Assistant</h1>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <UserLoginBanner />
+          {isInterviewRoute && selectedCandidate && (
+            <>
+              {hasPdf && (
+                <Button variant="secondary" size="sm" onClick={toggleResume}>
+                  {showPdf ? 'Hide Resume' : 'View Resume'}
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  navigate(
+                    `/positions/${selectedPosition?.id}/candidates/${selectedCandidate.id}/edit`
+                  )
+                }
+              >
+                Edit Candidate
+              </Button>
+              {selectedCandidate.questions.length > 0 && (
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    navigate(
+                      `/positions/${selectedPosition?.id}/candidates/${selectedCandidate.id}/summary`
+                    )
+                  }
+                >
+                  {selectedCandidate.interviewResult ? 'View Summary' : 'Generate Summary'}
+                </Button>
+              )}
+            </>
+          )}
+          {location.pathname === '/' && isAuthenticated && <CalendarSync />}
+          <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </Button>
+        </div>
+      </div>
+    </header>
+  );
+};
+
+const AppShell = () => {
+  const location = useLocation();
+  const loadForUser = usePositionStore((state) => state.loadForUser);
+  const clearCurrentUser = usePositionStore((state) => state.clearCurrentUser);
+  const loadSettings = useSettingsStore((state) => state.loadFromStorage);
+  const feishuUser = useSettingsStore((state) => state.feishuUser);
+  const resetInterviewUI = useInterviewUIStore((state) => state.reset);
+
+  useTokenValidation();
+
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
-  const selectedPosition = selectedPositionId ? getPosition(selectedPositionId) : null;
-  const selectedCandidate = selectedPosition?.candidates.find(
-    (c) => c.id === selectedCandidateId
-  );
+  useEffect(() => {
+    const currentUserId = feishuUser?.id ?? null;
 
-  const handleSelectPosition = (positionId: string) => {
-    setSelectedPositionId(positionId);
-    setView('position-detail');
-  };
-
-  const handleAddPosition = () => {
-    setSelectedPositionId(null);
-    setView('position-form');
-  };
-
-  const handleEditPosition = (positionId: string) => {
-    setSelectedPositionId(positionId);
-    setView('position-form');
-  };
-
-  const handlePositionSaved = (positionId: string) => {
-    setSelectedPositionId(positionId);
-    setView('position-detail');
-  };
-
-  const handleSelectCandidate = (candidateId: string) => {
-    setSelectedCandidateId(candidateId);
-    setView('interview');
-  };
-
-  const handleAddCandidate = () => {
-    setSelectedCandidateId(null);
-    setView('candidate-form');
-  };
-
-  const handleEditCandidate = (candidateId: string) => {
-    setSelectedCandidateId(candidateId);
-    setView('candidate-form');
-  };
-
-  const handleCandidateSaved = (candidateId: string) => {
-    setSelectedCandidateId(candidateId);
-    setView('interview');
-  };
-
-  const handleStartInterview = (positionId: string, candidateId: string) => {
-    setSelectedPositionId(positionId);
-    setSelectedCandidateId(candidateId);
-    setView('interview');
-  };
-
-  const handleGenerateSummary = () => {
-    setView('summary');
-  };
-
-  const handleBack = () => {
-    if (view === 'summary') {
-      setView('interview');
-    } else if (view === 'interview' || view === 'candidate-form') {
-      setView('position-detail');
-    } else if (view === 'position-detail' || view === 'position-form') {
-      setView('dashboard');
-    } else {
-      setView('dashboard');
+    if (currentUserId) {
+      migrateLegacyData(currentUserId);
+      loadForUser(currentUserId);
+      return;
     }
-  };
 
-  // Determine if we need wide layout (interview view only)
-  const isWideLayout = view === 'interview';
+    clearCurrentUser();
+  }, [clearCurrentUser, feishuUser?.id, loadForUser]);
+
+  useEffect(() => {
+    if (!location.pathname.endsWith('/interview')) {
+      resetInterviewUI();
+    }
+  }, [location.pathname, resetInterviewUI]);
+
+  const isWideLayout = location.pathname.endsWith('/interview');
   const containerClass = isWideLayout ? 'w-full' : 'max-w-4xl mx-auto';
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className={`${containerClass} px-4 py-3 flex items-center justify-between`}>
-          <div className="flex items-center gap-4">
-            {view !== 'dashboard' && (
-              <Button variant="ghost" size="sm" onClick={handleBack}>
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Back
-              </Button>
-            )}
-            <div className="flex items-center gap-2">
-              <Logo size={28} />
-              <h1 className="text-lg font-semibold text-gray-900">Interview Assistant</h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <UserLoginBanner />
-            {view === 'interview' && selectedCandidate && (
-              <>
-                {interviewPdfData && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setInterviewShowPdf(!interviewShowPdf)}
-                  >
-                    {interviewShowPdf ? 'Hide Resume' : 'View Resume'}
-                  </Button>
-                )}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleEditCandidate(selectedCandidate.id)}
-                >
-                  Edit Candidate
-                </Button>
-                {selectedCandidate.questions.length > 0 && (
-                  <Button
-                    size="sm"
-                    onClick={handleGenerateSummary}
-                  >
-                    {selectedCandidate.interviewResult ? 'View Summary' : 'Generate Summary'}
-                  </Button>
-                )}
-              </>
-            )}
-            {view === 'dashboard' && isAuthenticated && <CalendarSync />}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setView('settings')}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
+      <AppHeader />
       <main className={`${containerClass} px-4 py-4`}>
-        {view === 'settings' && (
-          <SettingsPanel onClose={() => setView('dashboard')} />
-        )}
-
-        {view === 'dashboard' && (
-          <div className="space-y-6">
-            <SettingsWarning />
-            <UpcomingInterviews onStartInterview={handleStartInterview} />
-            <PositionList
-              onSelectPosition={handleSelectPosition}
-              onEditPosition={handleEditPosition}
-              onAddPosition={handleAddPosition}
-            />
-          </div>
-        )}
-
-        {view === 'position-form' && (
-          <PositionForm
-            position={selectedPositionId ? getPosition(selectedPositionId) : undefined}
-            onSave={handlePositionSaved}
-            onCancel={handleBack}
-          />
-        )}
-
-        {view === 'position-detail' && selectedPosition && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">{selectedPosition.title}</h2>
-                {selectedPosition.team && (
-                  <p className="text-sm text-gray-500">{selectedPosition.team}</p>
-                )}
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => handleEditPosition(selectedPosition.id)}
-              >
-                Edit Position
-              </Button>
-            </div>
-
-            {selectedPosition.description && (
-              <div className="bg-white p-3 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-medium text-gray-700 mb-1">Job Description</h3>
-                <p className="text-sm text-gray-600 whitespace-pre-wrap">{selectedPosition.description}</p>
-              </div>
-            )}
-
-            {selectedPosition.criteria.length > 0 && (
-              <div className="bg-white p-3 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-medium text-gray-700 mb-1">Evaluation Criteria</h3>
-                <ul className="text-sm text-gray-600 list-disc list-inside">
-                  {selectedPosition.criteria.map((c, i) => (
-                    <li key={i}>{c}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <CandidateList
-              position={selectedPosition}
-              onSelectCandidate={handleSelectCandidate}
-              onEditCandidate={handleEditCandidate}
-              onAddCandidate={handleAddCandidate}
-            />
-          </div>
-        )}
-
-        {view === 'candidate-form' && selectedPosition && (
-          <CandidateForm
-            positionId={selectedPosition.id}
-            candidate={selectedCandidate}
-            onSave={handleCandidateSaved}
-            onCancel={handleBack}
-          />
-        )}
-
-        {view === 'interview' && selectedPosition && selectedCandidate && (
-          <InterviewPanel
-            position={selectedPosition}
-            candidate={selectedCandidate}
-            showPdfViewer={interviewShowPdf}
-            onLayoutChange={handleInterviewLayoutChange}
-          />
-        )}
-
-        {view === 'summary' && selectedPosition && selectedCandidate && (
-          <SummaryEditor
-            position={selectedPosition}
-            candidate={selectedCandidate}
-            autoGenerate={true}
-          />
-        )}
+        <Suspense fallback={<LoadingScreen />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
+  );
+};
+
+function App() {
+  return (
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route index element={<DashboardPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        <Route path="positions/new" element={<PositionFormPage />} />
+        <Route path="positions/:positionId" element={<PositionDetailPage />} />
+        <Route path="positions/:positionId/edit" element={<PositionFormPage />} />
+        <Route path="positions/:positionId/candidates/new" element={<CandidateFormPage />} />
+        <Route path="positions/:positionId/candidates/:candidateId/edit" element={<CandidateFormPage />} />
+        <Route path="positions/:positionId/candidates/:candidateId/interview" element={<InterviewPage />} />
+        <Route path="positions/:positionId/candidates/:candidateId/summary" element={<SummaryPage />} />
+        <Route path="404" element={<NotFoundPage />} />
+        <Route path="*" element={<Navigate to="/404" replace />} />
+      </Route>
+    </Routes>
   );
 }
 

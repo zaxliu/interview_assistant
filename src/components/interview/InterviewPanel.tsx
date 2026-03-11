@@ -7,20 +7,19 @@ import { Card, CardHeader, CardBody, Button, Textarea } from '@/components/ui';
 import { useAI } from '@/hooks/useAI';
 import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
+import { useInterviewUIStore } from '@/store/interviewUIStore';
 import { getPDF } from '@/utils/pdfStorage';
 
 interface InterviewPanelProps {
   position: Position;
   candidate: Candidate;
-  showPdfViewer?: boolean;  // Controlled by parent
-  onLayoutChange?: (layout: { pdfData: ArrayBuffer | null }) => void;
+  showPdfViewer?: boolean;
 }
 
 export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   position,
   candidate,
   showPdfViewer: showPdfViewerProp = true,
-  onLayoutChange,
 }) => {
   const { isLoading: aiLoading, generateInterviewQuestions } = useAI();
   const {
@@ -38,31 +37,27 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
 
   // Get split ratio from settings store
   const { interviewSplitRatio, setInterviewSplitRatio } = useSettingsStore();
-
-  // Report PDF data to parent when loaded
-  useEffect(() => {
-    onLayoutChange?.({ pdfData });
-  }, [pdfData, onLayoutChange]);
+  const setHasPdf = useInterviewUIStore((state) => state.setHasPdf);
 
   // Load PDF from IndexedDB on mount
   useEffect(() => {
     const loadPdf = async () => {
       try {
-        console.log('[InterviewPanel] Loading PDF for candidate:', candidate.id, 'name:', candidate.name);
-        console.log('[InterviewPanel] Candidate resumeFilename:', candidate.resumeFilename);
         const pdf = await getPDF(candidate.id);
-        console.log('[InterviewPanel] PDF loaded:', pdf ? `found, size: ${pdf.data.byteLength}` : 'not found');
         if (pdf) {
           setPdfData(pdf.data);
           setPdfFilename(pdf.filename);
-          console.log('[InterviewPanel] PDF state updated');
+          setHasPdf(true);
+          return;
         }
+        setHasPdf(false);
       } catch (error) {
-        console.error('[InterviewPanel] Failed to load PDF:', error);
+        console.error('Failed to load PDF:', error);
+        setHasPdf(false);
       }
     };
     loadPdf();
-  }, [candidate.id, candidate.name, candidate.resumeFilename]);
+  }, [candidate.id, setHasPdf]);
 
   // Drag handlers for resizable divider
   const handleMouseDown = (e: React.MouseEvent) => {

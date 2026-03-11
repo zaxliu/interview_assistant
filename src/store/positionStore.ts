@@ -5,46 +5,58 @@ import { saveToStorage, loadFromStorage } from '@/utils/storage';
 interface PositionState {
   positions: Position[];
   currentUserId: string | null;
-
-  // User context actions
   setCurrentUserId: (userId: string | null) => void;
   loadForUser: (userId: string) => void;
   clearCurrentUser: () => void;
-
-  // Position actions
   addPosition: (position: Omit<Position, 'id' | 'createdAt' | 'candidates' | 'userId'>) => Position;
   updatePosition: (id: string, updates: Partial<Position>) => void;
   deletePosition: (id: string) => void;
   getPosition: (id: string) => Position | undefined;
-
-  // Candidate actions
   addCandidate: (positionId: string, candidate: Omit<Candidate, 'id' | 'questions' | 'userId'>) => Candidate;
   updateCandidate: (positionId: string, candidateId: string, updates: Partial<Candidate>) => void;
   deleteCandidate: (positionId: string, candidateId: string) => void;
   getCandidate: (positionId: string, candidateId: string) => Candidate | undefined;
-
-  // Question actions
   addQuestion: (positionId: string, candidateId: string, question: Omit<Question, 'id'>) => void;
   insertQuestion: (positionId: string, candidateId: string, index: number, question: Omit<Question, 'id'>) => string;
   updateQuestion: (positionId: string, candidateId: string, questionId: string, updates: Partial<Question>) => void;
   deleteQuestion: (positionId: string, candidateId: string, questionId: string) => void;
   setQuestions: (positionId: string, candidateId: string, questions: Question[]) => void;
-
-  // Coding Challenge actions
   addCodingChallenge: (positionId: string, candidateId: string) => void;
   updateCodingChallenge: (positionId: string, candidateId: string, challengeId: string, updates: Partial<CodingChallenge>) => void;
   deleteCodingChallenge: (positionId: string, candidateId: string, challengeId: string) => void;
-
-  // Interview result actions
   setInterviewResult: (positionId: string, candidateId: string, result: InterviewResult) => void;
   completeInterview: (positionId: string, candidateId: string, result: InterviewResult) => void;
-
-  // Persistence
   loadFromStorage: () => void;
   saveToStorage: () => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
+
+const persistPositions = (positions: Position[], currentUserId: string | null) => {
+  saveToStorage({ positions, settings: {} }, currentUserId || undefined);
+};
+
+const updatePositions = (
+  positions: Position[],
+  updater: (positions: Position[]) => Position[]
+): Position[] => updater(positions);
+
+const updateCandidateCollection = (
+  positions: Position[],
+  positionId: string,
+  candidateId: string,
+  updater: (candidate: Candidate) => Candidate
+): Position[] =>
+  positions.map((position) =>
+    position.id === positionId
+      ? {
+          ...position,
+          candidates: position.candidates.map((candidate) =>
+            candidate.id === candidateId ? updater(candidate) : candidate
+          ),
+        }
+      : position
+  );
 
 export const usePositionStore = create<PositionState>((set, get) => ({
   positions: [],
@@ -56,11 +68,10 @@ export const usePositionStore = create<PositionState>((set, get) => ({
 
   loadForUser: (userId) => {
     const data = loadFromStorage(userId);
-    if (data?.positions) {
-      set({ positions: data.positions as Position[], currentUserId: userId });
-    } else {
-      set({ positions: [], currentUserId: userId });
-    }
+    set({
+      positions: Array.isArray(data?.positions) ? (data?.positions as Position[]) : [],
+      currentUserId: userId,
+    });
   },
 
   clearCurrentUser: () => {
@@ -68,7 +79,7 @@ export const usePositionStore = create<PositionState>((set, get) => ({
   },
 
   addPosition: (positionData) => {
-    const { currentUserId } = get();
+    const currentUserId = get().currentUserId;
     const position: Position = {
       ...positionData,
       id: generateId(),
@@ -76,357 +87,232 @@ export const usePositionStore = create<PositionState>((set, get) => ({
       candidates: [],
       userId: currentUserId || undefined,
     };
+
     set((state) => {
-      const newState = { positions: [...state.positions, position] };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = [...state.positions, position];
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
+
     return position;
   },
 
   updatePosition: (id, updates) => {
-    const { currentUserId } = get();
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === id ? { ...p, ...updates } : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = updatePositions(state.positions, (current) =>
+        current.map((position) => (position.id === id ? { ...position, ...updates } : position))
+      );
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   deletePosition: (id) => {
-    const { currentUserId } = get();
     set((state) => {
-      const newState = {
-        positions: state.positions.filter((p) => p.id !== id),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = state.positions.filter((position) => position.id !== id);
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
-  getPosition: (id) => {
-    return get().positions.find((p) => p.id === id);
-  },
+  getPosition: (id) => get().positions.find((position) => position.id === id),
 
   addCandidate: (positionId, candidateData) => {
-    const { currentUserId } = get();
+    const currentUserId = get().currentUserId;
     const candidate: Candidate = {
       ...candidateData,
       id: generateId(),
       questions: [],
       userId: currentUserId || undefined,
     };
+
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? { ...p, candidates: [...p.candidates, candidate] }
-            : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = state.positions.map((position) =>
+        position.id === positionId
+          ? { ...position, candidates: [...position.candidates, candidate] }
+          : position
+      );
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
+
     return candidate;
   },
 
   updateCandidate: (positionId, candidateId, updates) => {
-    const { currentUserId } = get();
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? {
-                ...p,
-                candidates: p.candidates.map((c) =>
-                  c.id === candidateId ? { ...c, ...updates } : c
-                ),
-              }
-            : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = updateCandidateCollection(state.positions, positionId, candidateId, (candidate) => ({
+        ...candidate,
+        ...updates,
+      }));
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   deleteCandidate: (positionId, candidateId) => {
-    const { currentUserId } = get();
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? { ...p, candidates: p.candidates.filter((c) => c.id !== candidateId) }
-            : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = state.positions.map((position) =>
+        position.id === positionId
+          ? {
+              ...position,
+              candidates: position.candidates.filter((candidate) => candidate.id !== candidateId),
+            }
+          : position
+      );
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   getCandidate: (positionId, candidateId) => {
     const position = get().getPosition(positionId);
-    return position?.candidates.find((c) => c.id === candidateId);
+    return position?.candidates.find((candidate) => candidate.id === candidateId);
   },
 
   addQuestion: (positionId, candidateId, questionData) => {
-    const { currentUserId } = get();
     const question: Question = {
       ...questionData,
       id: generateId(),
       status: questionData.status || 'not_reached',
     };
+
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? {
-                ...p,
-                candidates: p.candidates.map((c) =>
-                  c.id === candidateId
-                    ? { ...c, questions: [...c.questions, question] }
-                    : c
-                ),
-              }
-            : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = updateCandidateCollection(state.positions, positionId, candidateId, (candidate) => ({
+        ...candidate,
+        questions: [...candidate.questions, question],
+      }));
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   insertQuestion: (positionId, candidateId, index, questionData) => {
-    const { currentUserId } = get();
     const question: Question = {
       ...questionData,
       id: generateId(),
       status: questionData.status || 'not_reached',
     };
+
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? {
-                ...p,
-                candidates: p.candidates.map((c) => {
-                  if (c.id !== candidateId) return c;
-                  const newQuestions = [...c.questions];
-                  newQuestions.splice(index, 0, question);
-                  return { ...c, questions: newQuestions };
-                }),
-              }
-            : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = updateCandidateCollection(state.positions, positionId, candidateId, (candidate) => {
+        const questions = [...candidate.questions];
+        questions.splice(index, 0, question);
+        return { ...candidate, questions };
+      });
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
+
     return question.id;
   },
 
   updateQuestion: (positionId, candidateId, questionId, updates) => {
-    const { currentUserId } = get();
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? {
-                ...p,
-                candidates: p.candidates.map((c) =>
-                  c.id === candidateId
-                    ? {
-                        ...c,
-                        questions: c.questions.map((q) =>
-                          q.id === questionId ? { ...q, ...updates } : q
-                        ),
-                      }
-                    : c
-                ),
-              }
-            : p
+      const positions = updateCandidateCollection(state.positions, positionId, candidateId, (candidate) => ({
+        ...candidate,
+        questions: candidate.questions.map((question) =>
+          question.id === questionId ? { ...question, ...updates } : question
         ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      }));
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   deleteQuestion: (positionId, candidateId, questionId) => {
-    const { currentUserId } = get();
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? {
-                ...p,
-                candidates: p.candidates.map((c) =>
-                  c.id === candidateId
-                    ? {
-                        ...c,
-                        questions: c.questions.filter((q) => q.id !== questionId),
-                      }
-                    : c
-                ),
-              }
-            : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = updateCandidateCollection(state.positions, positionId, candidateId, (candidate) => ({
+        ...candidate,
+        questions: candidate.questions.filter((question) => question.id !== questionId),
+      }));
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   setQuestions: (positionId, candidateId, questions) => {
-    const { currentUserId } = get();
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? {
-                ...p,
-                candidates: p.candidates.map((c) =>
-                  c.id === candidateId ? { ...c, questions } : c
-                ),
-              }
-            : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = updateCandidateCollection(state.positions, positionId, candidateId, (candidate) => ({
+        ...candidate,
+        questions,
+      }));
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   addCodingChallenge: (positionId, candidateId) => {
-    const { currentUserId } = get();
     const challenge: CodingChallenge = {
       id: generateId(),
       problem: '',
       result: 'not_completed',
     };
+
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? {
-                ...p,
-                candidates: p.candidates.map((c) =>
-                  c.id === candidateId
-                    ? { ...c, codingChallenges: [...(c.codingChallenges || []), challenge] }
-                    : c
-                ),
-              }
-            : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = updateCandidateCollection(state.positions, positionId, candidateId, (candidate) => ({
+        ...candidate,
+        codingChallenges: [...(candidate.codingChallenges || []), challenge],
+      }));
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   updateCodingChallenge: (positionId, candidateId, challengeId, updates) => {
-    const { currentUserId } = get();
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? {
-                ...p,
-                candidates: p.candidates.map((c) =>
-                  c.id === candidateId
-                    ? {
-                        ...c,
-                        codingChallenges: c.codingChallenges?.map((ch) =>
-                          ch.id === challengeId ? { ...ch, ...updates } : ch
-                        ),
-                      }
-                    : c
-                ),
-              }
-            : p
+      const positions = updateCandidateCollection(state.positions, positionId, candidateId, (candidate) => ({
+        ...candidate,
+        codingChallenges: candidate.codingChallenges?.map((challenge) =>
+          challenge.id === challengeId ? { ...challenge, ...updates } : challenge
         ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      }));
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   deleteCodingChallenge: (positionId, candidateId, challengeId) => {
-    const { currentUserId } = get();
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? {
-                ...p,
-                candidates: p.candidates.map((c) =>
-                  c.id === candidateId
-                    ? { ...c, codingChallenges: c.codingChallenges?.filter((ch) => ch.id !== challengeId) }
-                    : c
-                ),
-              }
-            : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = updateCandidateCollection(state.positions, positionId, candidateId, (candidate) => ({
+        ...candidate,
+        codingChallenges: candidate.codingChallenges?.filter((challenge) => challenge.id !== challengeId),
+      }));
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   setInterviewResult: (positionId, candidateId, result) => {
-    const { currentUserId } = get();
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? {
-                ...p,
-                candidates: p.candidates.map((c) =>
-                  c.id === candidateId ? { ...c, interviewResult: result } : c
-                ),
-              }
-            : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = updateCandidateCollection(state.positions, positionId, candidateId, (candidate) => ({
+        ...candidate,
+        interviewResult: result,
+      }));
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   completeInterview: (positionId, candidateId, result) => {
-    const { currentUserId } = get();
     set((state) => {
-      const newState = {
-        positions: state.positions.map((p) =>
-          p.id === positionId
-            ? {
-                ...p,
-                candidates: p.candidates.map((c) =>
-                  c.id === candidateId ? { ...c, interviewResult: result, status: 'completed' as const } : c
-                ),
-              }
-            : p
-        ),
-      };
-      saveToStorage({ positions: newState.positions, settings: {} }, currentUserId || undefined);
-      return newState;
+      const positions = updateCandidateCollection(state.positions, positionId, candidateId, (candidate) => ({
+        ...candidate,
+        interviewResult: result,
+        status: 'completed',
+      }));
+      persistPositions(positions, state.currentUserId);
+      return { positions };
     });
   },
 
   loadFromStorage: () => {
     const data = loadFromStorage();
-    if (data?.positions) {
-      set({ positions: data.positions as Position[] });
-    }
+    set({ positions: Array.isArray(data?.positions) ? (data?.positions as Position[]) : [] });
   },
 
   saveToStorage: () => {
-    const { currentUserId } = get();
-    saveToStorage({ positions: get().positions, settings: {} }, currentUserId || undefined);
+    const { positions, currentUserId } = get();
+    persistPositions(positions, currentUserId);
   },
 }));

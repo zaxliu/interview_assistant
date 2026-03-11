@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useFeishuOAuth } from './useFeishuOAuth';
 
 const VALIDATION_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -12,7 +12,7 @@ export const useTokenValidation = () => {
   const intervalRef = useRef<number | null>(null);
 
   // Validate token by attempting a refresh
-  const validateToken = async () => {
+  const validateToken = useCallback(async () => {
     if (!isAuthenticated) return;
 
     try {
@@ -23,7 +23,7 @@ export const useTokenValidation = () => {
     } catch (error) {
       console.error('Token validation error:', error);
     }
-  };
+  }, [isAuthenticated, refreshTokenIfNeeded]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -54,7 +54,7 @@ export const useTokenValidation = () => {
       }
       window.removeEventListener('focus', handleFocus);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, validateToken]);
 
   return { validateToken };
 };

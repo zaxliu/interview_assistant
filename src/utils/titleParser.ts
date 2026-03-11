@@ -67,7 +67,7 @@ export const extractLinksFromDescription = (description: string | undefined): {
     return { resumeLinks: [], jdLinks: [], otherLinks: [] };
   }
 
-  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g;
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g;
   const matches = description.match(urlRegex) || [];
 
   const resumeLinks: string[] = [];

@@ -55,8 +55,12 @@ export const generateQuestions = async (
   config: AIServiceConfig,
   jobDescription: string,
   resumeText: string,
-  _criteria: string[]
+  criteria: string[]
 ): Promise<Question[]> => {
+  const criteriaSection = criteria.length > 0
+    ? criteria.map((criterion) => `- ${criterion}`).join('\n')
+    : '- 未提供额外考核要点';
+
   const prompt = `你是一位经验丰富的面试官。请根据以下信息生成面试问题。
 
 ## 职位描述
@@ -64,6 +68,9 @@ ${jobDescription}
 
 ## 候选人简历
 ${resumeText}
+
+## 补充考核要点
+${criteriaSection}
 
 ## 评估维度与考核要点
 
