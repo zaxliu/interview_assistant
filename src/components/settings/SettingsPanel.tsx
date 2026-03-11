@@ -13,10 +13,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
   const {
     aiApiKey,
     aiModel,
+    automationServiceUrl,
     feishuAppId,
     feishuAppSecret,
     setApiKey,
     setModel,
+    setAutomationServiceUrl,
     setFeishuAppId,
     setFeishuAppSecret,
   } = useSettingsStore();
@@ -95,6 +97,27 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
           <p className="text-xs text-gray-500">
             AI provider URL is configured server-side via environment variables.
           </p>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <h3 className="text-sm font-medium text-gray-700">Local Automation</h3>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <Input
+            label="Automation Service URL"
+            type="text"
+            value={automationServiceUrl || ''}
+            onChange={(e) => setAutomationServiceUrl(e.target.value)}
+            placeholder="http://127.0.0.1:3456"
+          />
+          <p className="text-xs text-gray-500">
+            Start the local Playwright bridge once, then use the upload button on candidate/interview pages.
+          </p>
+          <code className="block text-xs text-blue-600 bg-gray-50 rounded px-2 py-2 break-all">
+            npm run upload:resume-server -- --user-data-dir "$HOME/Library/Application Support/Google/Chrome" --profile-dir Default
+          </code>
         </CardBody>
       </Card>
 

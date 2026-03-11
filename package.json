@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run --coverage",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "upload:resume": "node scripts/upload-resume.mjs",
+    "upload:resume-server": "node scripts/upload-resume-server.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.0.0",
@@ -36,6 +38,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^17.4.0",
     "jsdom": "^28.1.0",
+    "playwright": "^1.58.2",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.2.2",

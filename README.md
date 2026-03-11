@@ -108,6 +108,33 @@ npm run preview
 npm run lint
 ```
 
+## Playwright Resume Upload
+
+If the candidate page already has a stored PDF plus a calendar candidate link, you can automate the external upload flow with Playwright:
+
+```bash
+npm run upload:resume -- \
+  --candidate "Alice" \
+  --position "AI Agent应用工程师" \
+  --user-data-dir "$HOME/Library/Application Support/Google/Chrome" \
+  --profile-dir Default
+```
+
+Notes:
+- Use the same Chrome profile that already contains both Interview Assistant local data and the target platform login state.
+- Re-sync calendar first if the candidate/interview link was added after the candidate was originally imported.
+- The script uploads the PDF automatically, then leaves the page open in case the target site still needs a final manual confirmation click.
+
+For one-click uploads directly from the web UI, start the local bridge service once:
+
+```bash
+npm run upload:resume-server -- \
+  --user-data-dir "$HOME/Library/Application Support/Google/Chrome" \
+  --profile-dir Default
+```
+
+Then set `Automation Service URL` in Settings to the matching address, such as `http://127.0.0.1:3456`.
+
 ## Architecture
 
 ### API Proxy

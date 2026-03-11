@@ -135,6 +135,7 @@ export interface Settings {
   feishuAppSecret: string;
   feishuUserAccessToken: string;
   feishuRefreshToken: string;
+  automationServiceUrl?: string;
 }
 
 // AI Request/Response types

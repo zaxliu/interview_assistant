@@ -8,8 +8,9 @@ export default function PositionDetailPage() {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const navigate = useNavigate();
   const { positionId } = useParams();
-  const getPosition = usePositionStore((state) => state.getPosition);
-  const position = positionId ? getPosition(positionId) : undefined;
+  const position = usePositionStore((state) =>
+    positionId ? state.positions.find((item) => item.id === positionId) : undefined
+  );
   const shouldClampDescription = (position?.description?.length || 0) > 280;
 
   if (!positionId || !position) {

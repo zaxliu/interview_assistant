@@ -11,6 +11,7 @@ import { useInterviewUIStore } from '@/store/interviewUIStore';
 import { getPDF } from '@/utils/pdfStorage';
 import { getPreferredResumeText } from '@/utils/resume';
 import { ResumeHighlightsPanel } from '@/components/candidates/ResumeHighlightsPanel';
+import { PlatformUploadButton } from '@/components/candidates/PlatformUploadButton';
 
 interface InterviewPanelProps {
   position: Position;
@@ -35,7 +36,9 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const [pdfFilename, setPdfFilename] = useState<string>('');
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [quickNotesDraft, setQuickNotesDraft] = useState(candidate.quickNotes || '');
   const containerRef = useRef<HTMLDivElement>(null);
+  const quickNotesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get split ratio from settings store
   const { interviewSplitRatio, setInterviewSplitRatio } = useSettingsStore();
@@ -60,6 +63,30 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     };
     loadPdf();
   }, [candidate.id, setHasPdf]);
+
+  useEffect(() => {
+    setQuickNotesDraft(candidate.quickNotes || '');
+  }, [candidate.id, candidate.quickNotes]);
+
+  useEffect(() => {
+    if (quickNotesTimerRef.current) {
+      clearTimeout(quickNotesTimerRef.current);
+    }
+
+    if (quickNotesDraft === (candidate.quickNotes || '')) {
+      return;
+    }
+
+    quickNotesTimerRef.current = setTimeout(() => {
+      updateCandidate(position.id, candidate.id, { quickNotes: quickNotesDraft });
+    }, 250);
+
+    return () => {
+      if (quickNotesTimerRef.current) {
+        clearTimeout(quickNotesTimerRef.current);
+      }
+    };
+  }, [candidate.id, candidate.quickNotes, position.id, quickNotesDraft, updateCandidate]);
 
   // Drag handlers for resizable divider
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -109,7 +136,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   };
 
   const handleQuickNotesChange = (quickNotes: string) => {
-    updateCandidate(position.id, candidate.id, { quickNotes });
+    setQuickNotesDraft(quickNotes);
   };
 
   const handlePdfTextSelect = (text: string) => {
@@ -181,7 +208,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
                 <CardBody>
                   <Textarea
                     placeholder="Jot down quick observations..."
-                    value={candidate.quickNotes || ''}
+                    value={quickNotesDraft}
                     onChange={(e) => handleQuickNotesChange(e.target.value)}
                     autoResize
                     className="text-sm"
@@ -198,7 +225,10 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               {hasCalendarLinks && (
                 <Card>
                   <CardHeader>
-                    <h3 className="text-sm font-medium text-gray-700">Calendar Links</h3>
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-medium text-gray-700">Calendar Links</h3>
+                      <PlatformUploadButton candidate={candidate} positionTitle={position.title} />
+                    </div>
                   </CardHeader>
                   <CardBody className="space-y-2">
                     {candidate.interviewLink && (
@@ -310,7 +340,10 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       {hasCalendarLinks && (
         <Card>
           <CardHeader>
-            <h3 className="text-sm font-medium text-gray-700">Calendar Links</h3>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-medium text-gray-700">Calendar Links</h3>
+              <PlatformUploadButton candidate={candidate} positionTitle={position.title} />
+            </div>
           </CardHeader>
           <CardBody className="space-y-2">
             {candidate.interviewLink && (
@@ -352,7 +385,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         <CardBody>
           <Textarea
             placeholder="Jot down quick observations, impressions, or reminders during the interview..."
-            value={candidate.quickNotes || ''}
+            value={quickNotesDraft}
             onChange={(e) => handleQuickNotesChange(e.target.value)}
             autoResize
             className="text-sm"

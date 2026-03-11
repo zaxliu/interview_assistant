@@ -106,6 +106,7 @@ describe('CandidateForm', () => {
     );
 
     expect(screen.getByText('Calendar Links')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upload Resume to Platform' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'https://vc.feishu.cn/j/681359281' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc' })).toBeInTheDocument();
   });

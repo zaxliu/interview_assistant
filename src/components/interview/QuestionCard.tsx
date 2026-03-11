@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { Question, EvaluationDimensionName } from '@/types';
 import { usePositionStore } from '@/store/positionStore';
 import { Card, CardBody, Textarea, Button } from '@/components/ui';
@@ -31,11 +31,17 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   const { updateQuestion, deleteQuestion } = usePositionStore();
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(question.text);
+  const [notesDraft, setNotesDraft] = useState(question.notes || '');
   const editInputRef = useRef<HTMLTextAreaElement>(null);
+  const notesSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setEditText(question.text);
   }, [question.text]);
+
+  useEffect(() => {
+    setNotesDraft(question.notes || '');
+  }, [question.id, question.notes]);
 
   useEffect(() => {
     if (isEditing && editInputRef.current) {
@@ -79,13 +85,35 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
     }
   };
 
-  const handleNotesChange = (notes: string) => {
-    // Auto-mark as "asked" when user adds notes
-    const updates: Partial<Question> = { notes };
-    if (notes.trim() && question.status !== 'asked' && question.status !== 'skipped') {
-      updates.status = 'asked';
+  const persistNotes = useCallback((notes: string) => {
+    updateQuestion(positionId, candidateId, question.id, { notes });
+  }, [candidateId, positionId, question.id, updateQuestion]);
+
+  useEffect(() => {
+    if (notesSaveTimerRef.current) {
+      clearTimeout(notesSaveTimerRef.current);
     }
-    updateQuestion(positionId, candidateId, question.id, updates);
+
+    if (notesDraft === (question.notes || '')) {
+      return;
+    }
+
+    notesSaveTimerRef.current = setTimeout(() => {
+      persistNotes(notesDraft);
+    }, 250);
+
+    return () => {
+      if (notesSaveTimerRef.current) {
+        clearTimeout(notesSaveTimerRef.current);
+      }
+    };
+  }, [notesDraft, persistNotes, question.notes]);
+
+  const handleNotesChange = (notes: string) => {
+    if (notes.trim() && question.status === 'not_reached') {
+      updateQuestion(positionId, candidateId, question.id, { status: 'asked' });
+    }
+    setNotesDraft(notes);
   };
 
   const handleStatusToggle = (e: React.MouseEvent) => {
@@ -139,6 +167,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
             {/* Status badge - clickable to toggle */}
             <button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={handleStatusToggle}
               className={`text-xs px-1.5 py-0.5 rounded transition-colors ${currentStatus.bg}`}
               title={`${currentStatus.label} - click to change`}
@@ -178,7 +207,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
         {/* Question text - editable */}
         {isEditing ? (
-          <div className="mb-2">
+          <div className="mb-2" onClick={(e) => e.stopPropagation()}>
             <textarea
               ref={editInputRef}
               value={editText}
@@ -190,8 +219,27 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               onClick={(e) => e.stopPropagation()}
             />
             <div className="flex gap-1 mt-1">
-              <Button size="sm" onClick={handleSaveEdit}>Save</Button>
-              <Button size="sm" variant="secondary" onClick={handleCancelEdit}>Cancel</Button>
+              <Button
+                size="sm"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSaveEdit();
+                }}
+              >
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCancelEdit();
+                }}
+              >
+                Cancel
+              </Button>
             </div>
           </div>
         ) : (
@@ -221,11 +269,18 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
         <Textarea
           placeholder={question.status === 'skipped' ? 'Skipped' : 'Take notes here during the interview...'}
-          value={question.notes || ''}
+          value={notesDraft}
           onChange={(e) => handleNotesChange(e.target.value)}
           autoResize
           className="text-sm"
           disabled={question.status === 'skipped'}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onBlur={() => {
+            if (notesDraft !== (question.notes || '')) {
+              persistNotes(notesDraft);
+            }
+          }}
         />
       </CardBody>
     </Card>

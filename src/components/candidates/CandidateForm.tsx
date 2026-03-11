@@ -7,6 +7,7 @@ import { storePDF } from '@/utils/pdfStorage';
 import { debugDownloadPDFPageAsImage } from '@/api/pdf';
 import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea } from '@/components/ui';
 import { ResumeHighlightsPanel } from './ResumeHighlightsPanel';
+import { PlatformUploadButton } from './PlatformUploadButton';
 import { emptyResumeHighlights, getPreferredResumeText, getRawResumeText } from '@/utils/resume';
 
 interface CandidateFormProps {
@@ -22,7 +23,8 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   onSave,
   onCancel,
 }) => {
-  const { addCandidate, updateCandidate } = usePositionStore();
+  const { addCandidate, updateCandidate, getPosition } = usePositionStore();
+  const position = getPosition(positionId);
   const {
     isLoading: pdfLoading,
     error: pdfError,
@@ -160,7 +162,10 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
 
         {(candidate?.interviewLink || candidate?.candidateLink) && (
           <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3 space-y-2">
-            <p className="text-sm font-medium text-gray-700">Calendar Links</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium text-gray-700">Calendar Links</p>
+              <PlatformUploadButton candidate={candidate} positionTitle={position?.title || ''} />
+            </div>
             {candidate?.interviewLink && (
               <div className="text-sm">
                 <span className="text-gray-500">Video interview:</span>{' '}
