@@ -31,7 +31,23 @@ describe('titleParser', () => {
     ).toEqual({
       resumeLinks: ['https://example.com/resume.pdf'],
       jdLinks: ['https://example.com/job-desc'],
+      interviewLink: undefined,
+      candidateLink: undefined,
       otherLinks: ['https://example.com/meeting'],
+    });
+  });
+
+  it('extracts interview and candidate links from compact event descriptions', () => {
+    expect(
+      extractLinksFromDescription(
+        '应聘职位:【平台】AI Agent应用工程师面试方式:视频面试视频面试链接/会议号:https://vc.feishu.cn/j/681359281候选人链接:https://www.wintalent.cn/wt/Horizon/kurl?k=JBV7Rra6N7N3qaRz'
+      )
+    ).toEqual({
+      resumeLinks: [],
+      jdLinks: [],
+      interviewLink: 'https://vc.feishu.cn/j/681359281',
+      candidateLink: 'https://www.wintalent.cn/wt/Horizon/kurl?k=JBV7Rra6N7N3qaRz',
+      otherLinks: [],
     });
   });
 });

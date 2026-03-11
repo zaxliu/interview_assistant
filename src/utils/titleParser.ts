@@ -61,6 +61,8 @@ export const isInterviewEvent = (title: string): boolean => {
 export const extractLinksFromDescription = (description: string | undefined): {
   resumeLinks: string[];
   jdLinks: string[];
+  interviewLink?: string;
+  candidateLink?: string;
   otherLinks: string[];
 } => {
   if (!description) {
@@ -68,7 +70,31 @@ export const extractLinksFromDescription = (description: string | undefined): {
   }
 
   const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g;
-  const matches = description.match(urlRegex) || [];
+  const extractLabeledUrl = (labels: string[]): string | undefined => {
+    for (const label of labels) {
+      const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(
+        `${escapedLabel}[：:]\\s*(https?:\\/\\/.*?)(?=(?:候选人链接|视频面试链接\\/会议号|视频面试链接|面试链接|会议号|简历链接|JD链接|JD:|$))`
+      );
+      const match = description.match(pattern);
+      if (match?.[1]) {
+        return match[1];
+      }
+    }
+    return undefined;
+  };
+
+  const interviewLink = extractLabeledUrl(['视频面试链接/会议号', '视频面试链接', '面试链接', '会议号']);
+  const candidateLink = extractLabeledUrl(['候选人链接']);
+  const matches = (description.match(urlRegex) || []).filter((url) => {
+    if (interviewLink && url.includes(interviewLink)) {
+      return false;
+    }
+    if (candidateLink && url.includes(candidateLink)) {
+      return false;
+    }
+    return true;
+  });
 
   const resumeLinks: string[] = [];
   const jdLinks: string[] = [];
@@ -76,7 +102,12 @@ export const extractLinksFromDescription = (description: string | undefined): {
 
   matches.forEach((url) => {
     const lowerUrl = url.toLowerCase();
-    if (lowerUrl.includes('resume') || lowerUrl.includes('简历') || lowerUrl.includes('.pdf')) {
+
+    const matchIndex = description.indexOf(url);
+    const contextStart = Math.max(0, matchIndex - 24);
+    const context = description.slice(contextStart, matchIndex).toLowerCase();
+
+    if (lowerUrl.includes('resume') || context.includes('简历') || lowerUrl.includes('.pdf')) {
       resumeLinks.push(url);
     } else if (lowerUrl.includes('jd') || lowerUrl.includes('job') || lowerUrl.includes('职位')) {
       jdLinks.push(url);
@@ -85,5 +116,5 @@ export const extractLinksFromDescription = (description: string | undefined): {
     }
   });
 
-  return { resumeLinks, jdLinks, otherLinks };
+  return { resumeLinks, jdLinks, interviewLink, candidateLink, otherLinks };
 };

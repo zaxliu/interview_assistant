@@ -54,6 +54,8 @@ export interface Candidate {
   resumeHighlights?: ResumeHighlights;
   resumeFilename?: string;
   resumeUrl?: string;
+  interviewLink?: string;
+  candidateLink?: string;
   status: 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   calendarEventId?: string;
   interviewTime?: string;

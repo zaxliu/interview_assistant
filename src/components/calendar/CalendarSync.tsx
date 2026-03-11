@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useFeishuCalendar } from '@/hooks/useFeishuCalendar';
 import { usePositionStore } from '@/store/positionStore';
 import { Button } from '@/components/ui';
+import { extractLinksFromDescription } from '@/api/feishu';
 
 interface CalendarSyncProps {
   onSyncComplete?: () => void;
@@ -47,6 +48,10 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
           if (event.parsedTitle) {
             const eventKey = `${event.parsedTitle.team}-${event.parsedTitle.position}`;
             if (eventKey === key) {
+              const extractedLinks = extractLinksFromDescription(event.description);
+              const interviewLink = event.meetLink || extractedLinks.interviewLink;
+              const candidateLink = extractedLinks.candidateLink;
+
               // Check if candidate already exists
               const pos = usePositionStore.getState().getPosition(positionId);
               const existingCandidate = pos?.candidates.find(
@@ -60,12 +65,16 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
                   status: 'scheduled',
                   calendarEventId: event.eventId,
                   interviewTime: event.startTime,
+                  interviewLink,
+                  candidateLink,
                 });
               } else {
                 // Update existing candidate's interview time (in case format changed)
                 // Also restore status from cancelled if event is back
                 updateCandidate(positionId, existingCandidate.id, {
                   interviewTime: event.startTime,
+                  interviewLink: interviewLink || existingCandidate.interviewLink,
+                  candidateLink: candidateLink || existingCandidate.candidateLink,
                   ...(existingCandidate.status === 'cancelled' ? { status: 'scheduled' } : {}),
                 });
               }

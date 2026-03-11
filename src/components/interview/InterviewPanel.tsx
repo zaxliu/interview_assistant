@@ -128,6 +128,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
 
   const preferredResumeText = getPreferredResumeText(candidate);
   const canGenerateQuestions = position.description && preferredResumeText;
+  const hasCalendarLinks = Boolean(candidate.interviewLink || candidate.candidateLink);
   const missingRequirements = [
     !position.description ? 'position description' : null,
     !preferredResumeText ? 'candidate resume' : null,
@@ -193,6 +194,42 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
                 title="Resume Highlights"
                 emptyText="No extracted highlights yet."
               />
+
+              {hasCalendarLinks && (
+                <Card>
+                  <CardHeader>
+                    <h3 className="text-sm font-medium text-gray-700">Calendar Links</h3>
+                  </CardHeader>
+                  <CardBody className="space-y-2">
+                    {candidate.interviewLink && (
+                      <div className="text-sm">
+                        <span className="text-gray-500">Video interview:</span>{' '}
+                        <a
+                          href={candidate.interviewLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 hover:text-blue-800 break-all"
+                        >
+                          {candidate.interviewLink}
+                        </a>
+                      </div>
+                    )}
+                    {candidate.candidateLink && (
+                      <div className="text-sm">
+                        <span className="text-gray-500">Candidate profile:</span>{' '}
+                        <a
+                          href={candidate.candidateLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 hover:text-blue-800 break-all"
+                        >
+                          {candidate.candidateLink}
+                        </a>
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              )}
 
               {/* Question Generation */}
               <div className="space-y-2">
@@ -269,6 +306,42 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         title="Resume Highlights"
         emptyText="No extracted highlights yet."
       />
+
+      {hasCalendarLinks && (
+        <Card>
+          <CardHeader>
+            <h3 className="text-sm font-medium text-gray-700">Calendar Links</h3>
+          </CardHeader>
+          <CardBody className="space-y-2">
+            {candidate.interviewLink && (
+              <div className="text-sm">
+                <span className="text-gray-500">Video interview:</span>{' '}
+                <a
+                  href={candidate.interviewLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 hover:text-blue-800 break-all"
+                >
+                  {candidate.interviewLink}
+                </a>
+              </div>
+            )}
+            {candidate.candidateLink && (
+              <div className="text-sm">
+                <span className="text-gray-500">Candidate profile:</span>{' '}
+                <a
+                  href={candidate.candidateLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 hover:text-blue-800 break-all"
+                >
+                  {candidate.candidateLink}
+                </a>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       {/* Quick Notes */}
       <Card>

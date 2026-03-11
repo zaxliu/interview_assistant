@@ -87,4 +87,26 @@ describe('CandidateForm', () => {
       expect(processResume).toHaveBeenCalledWith('Parsed resume');
     });
   });
+
+  it('shows calendar links when they exist on the candidate', () => {
+    render(
+      <CandidateForm
+        positionId="position-1"
+        candidate={{
+          id: 'candidate-1',
+          name: 'Alice',
+          status: 'scheduled',
+          questions: [],
+          interviewLink: 'https://vc.feishu.cn/j/681359281',
+          candidateLink: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc',
+        }}
+        onSave={() => undefined}
+        onCancel={() => undefined}
+      />
+    );
+
+    expect(screen.getByText('Calendar Links')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'https://vc.feishu.cn/j/681359281' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc' })).toBeInTheDocument();
+  });
 });

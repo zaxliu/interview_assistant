@@ -158,6 +158,38 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
           onChange={(e) => setInterviewTime(e.target.value)}
         />
 
+        {(candidate?.interviewLink || candidate?.candidateLink) && (
+          <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3 space-y-2">
+            <p className="text-sm font-medium text-gray-700">Calendar Links</p>
+            {candidate?.interviewLink && (
+              <div className="text-sm">
+                <span className="text-gray-500">Video interview:</span>{' '}
+                <a
+                  href={candidate.interviewLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 hover:text-blue-800 break-all"
+                >
+                  {candidate.interviewLink}
+                </a>
+              </div>
+            )}
+            {candidate?.candidateLink && (
+              <div className="text-sm">
+                <span className="text-gray-500">Candidate profile:</span>{' '}
+                <a
+                  href={candidate.candidateLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 hover:text-blue-800 break-all"
+                >
+                  {candidate.candidateLink}
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Resume
