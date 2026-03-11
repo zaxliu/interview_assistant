@@ -36,11 +36,22 @@ export interface Position {
   userId?: string; // Owner of this position
 }
 
+export interface ResumeHighlights {
+  summary: string;
+  strengths: string[];
+  risks: string[];
+  experience: string[];
+  keywords: string[];
+}
+
 // Candidate
 export interface Candidate {
   id: string;
   name: string;
   resumeText?: string;
+  resumeRawText?: string;
+  resumeMarkdown?: string;
+  resumeHighlights?: ResumeHighlights;
   resumeFilename?: string;
   resumeUrl?: string;
   status: 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';

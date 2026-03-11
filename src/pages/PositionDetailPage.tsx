@@ -1,13 +1,16 @@
+import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { CandidateList } from '@/components/candidates/CandidateList';
 import { Button } from '@/components/ui';
 import { usePositionStore } from '@/store/positionStore';
 
 export default function PositionDetailPage() {
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const navigate = useNavigate();
   const { positionId } = useParams();
   const getPosition = usePositionStore((state) => state.getPosition);
   const position = positionId ? getPosition(positionId) : undefined;
+  const shouldClampDescription = (position?.description?.length || 0) > 280;
 
   if (!positionId || !position) {
     return <Navigate to="/404" replace />;
@@ -27,14 +30,31 @@ export default function PositionDetailPage() {
 
       {position.description && (
         <div className="bg-white p-3 rounded-lg border border-gray-200">
-          <h3 className="text-sm font-medium text-gray-700 mb-1">Job Description</h3>
-          <p className="text-sm text-gray-600 whitespace-pre-wrap">{position.description}</p>
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <h3 className="text-sm font-medium text-gray-700">Job Description</h3>
+            {shouldClampDescription && (
+              <button
+                type="button"
+                onClick={() => setIsDescriptionExpanded((value) => !value)}
+                className="text-xs text-blue-600 hover:text-blue-800 shrink-0"
+              >
+                {isDescriptionExpanded ? 'Show less' : 'Show more'}
+              </button>
+            )}
+          </div>
+          <p
+            className={`text-sm text-gray-600 whitespace-pre-wrap ${
+              shouldClampDescription && !isDescriptionExpanded ? 'line-clamp-4' : ''
+            }`}
+          >
+            {position.description}
+          </p>
         </div>
       )}
 
       {position.criteria.length > 0 && (
         <div className="bg-white p-3 rounded-lg border border-gray-200">
-          <h3 className="text-sm font-medium text-gray-700 mb-1">Evaluation Criteria</h3>
+          <h3 className="text-sm font-medium text-gray-700 mb-1">增量职位要求</h3>
           <ul className="text-sm text-gray-600 list-disc list-inside">
             {position.criteria.map((criterion) => (
               <li key={criterion}>{criterion}</li>

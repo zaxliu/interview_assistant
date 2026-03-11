@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateQuestions } from './ai';
+import { generateQuestions, processResumeText } from './ai';
 
 describe('ai api parsing', () => {
   beforeEach(() => {
@@ -54,5 +54,35 @@ describe('ai api parsing', () => {
     await expect(
       generateQuestions({ apiKey: 'key', model: 'model' }, 'JD', 'Resume', [])
     ).resolves.toEqual([]);
+  });
+
+  it('processes resume text into markdown and highlights', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '```json\n{"markdown":"# Alice\\n\\n## Experience\\n- Built APIs","highlights":{"summary":"Backend engineer","strengths":["API design"],"risks":["Domain depth"],"experience":["Built APIs at X"],"keywords":["Go","Redis"]}}\n```',
+              },
+            },
+          ],
+        }),
+      })
+    );
+
+    await expect(processResumeText({ apiKey: 'key', model: 'model' }, 'raw text')).resolves.toEqual({
+      markdown: '# Alice\n\n## Experience\n- Built APIs',
+      highlights: {
+        summary: 'Backend engineer',
+        strengths: ['API design'],
+        risks: ['Domain depth'],
+        experience: ['Built APIs at X'],
+        keywords: ['Go', 'Redis'],
+      },
+    });
   });
 });

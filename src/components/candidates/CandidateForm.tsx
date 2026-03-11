@@ -2,9 +2,12 @@ import React, { useState, useRef } from 'react';
 import type { Candidate } from '@/types';
 import { usePositionStore } from '@/store/positionStore';
 import { usePDFParser } from '@/hooks/usePDFParser';
+import { useResumeProcessor } from '@/hooks/useResumeProcessor';
 import { storePDF } from '@/utils/pdfStorage';
 import { debugDownloadPDFPageAsImage } from '@/api/pdf';
 import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea } from '@/components/ui';
+import { ResumeHighlightsPanel } from './ResumeHighlightsPanel';
+import { emptyResumeHighlights, getPreferredResumeText, getRawResumeText } from '@/utils/resume';
 
 interface CandidateFormProps {
   positionId: string;
@@ -28,12 +31,21 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     parseFromUrl,
     canUseAI,
   } = usePDFParser();
+  const {
+    isProcessing: resumeProcessing,
+    error: resumeProcessingError,
+    processResume,
+  } = useResumeProcessor();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initialResumeText = candidate ? getPreferredResumeText(candidate) : '';
+  const initialResumeRawText = candidate ? getRawResumeText(candidate) : '';
 
   const [name, setName] = useState(candidate?.name || '');
   const [resumeUrl, setResumeUrl] = useState(candidate?.resumeUrl || '');
-  const [resumeText, setResumeText] = useState(candidate?.resumeText || '');
+  const [resumeText, setResumeText] = useState(initialResumeText);
+  const [resumeRawText, setResumeRawText] = useState(initialResumeRawText);
+  const [resumeHighlights, setResumeHighlights] = useState(candidate?.resumeHighlights || emptyResumeHighlights());
   const [resumeFilename, setResumeFilename] = useState(candidate?.resumeFilename || '');
   const [interviewTime, setInterviewTime] = useState(() => {
     if (!candidate?.interviewTime) return '';
@@ -43,6 +55,14 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   });
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
   const [useAIParsing, setUseAIParsing] = useState(true);
+  const isResumeBusy = pdfLoading || resumeProcessing;
+
+  const applyProcessedResume = async (rawText: string) => {
+    setResumeRawText(rawText);
+    const processed = await processResume(rawText);
+    setResumeText(processed.markdown);
+    setResumeHighlights(processed.highlights);
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -58,7 +78,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
       // Use AI parsing if enabled and available, otherwise standard
       const text = await parseFromFile(file, useAIParsing && canUseAI, { maxPages: 5 });
       if (text) {
-        setResumeText(text);
+        await applyProcessedResume(text);
       }
     }
   };
@@ -68,16 +88,23 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
       // Use AI parsing if enabled and available, otherwise standard
       const text = await parseFromUrl(resumeUrl, useAIParsing && canUseAI, { maxPages: 5 });
       if (text) {
-        setResumeText(text);
+        await applyProcessedResume(text);
       }
     }
+  };
+
+  const handleReprocessResume = async () => {
+    await applyProcessedResume(resumeRawText || resumeText);
   };
 
   const handleSubmit = async () => {
     const candidateData = {
       name,
       resumeUrl,
-      resumeText,
+      resumeText: resumeText || resumeRawText,
+      resumeRawText: resumeRawText || resumeText,
+      resumeMarkdown: resumeText || resumeRawText,
+      resumeHighlights,
       resumeFilename,
       status: candidate?.status || 'pending',
       interviewTime: interviewTime || undefined,
@@ -148,9 +175,9 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
           </div>
 
           {/* Error display */}
-          {pdfError && (
+          {(pdfError || resumeProcessingError) && (
             <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-              {pdfError}
+              {pdfError || resumeProcessingError}
             </div>
           )}
 
@@ -190,11 +217,11 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                 variant="secondary"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
-                isLoading={pdfLoading}
+                isLoading={isResumeBusy}
               >
-                {pdfLoading ? 'Parsing...' : 'Upload PDF'}
+                {isResumeBusy ? 'Parsing...' : 'Upload PDF'}
               </Button>
-              {resumeFilename && !pdfLoading && (
+              {resumeFilename && !isResumeBusy && (
                 <span className="text-sm text-green-600 flex items-center">
                   ✓ {resumeFilename}
                 </span>
@@ -214,6 +241,12 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                     style={{ width: `${(parseProgress.current / parseProgress.total) * 100}%` }}
                   />
                 </div>
+              </div>
+            )}
+
+            {resumeProcessing && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                Formatting extracted resume and generating highlights...
               </div>
             )}
 
@@ -247,8 +280,8 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                 variant="secondary"
                 size="sm"
                 onClick={handleUrlParse}
-                disabled={!resumeUrl || pdfLoading}
-                isLoading={pdfLoading}
+                disabled={!resumeUrl || isResumeBusy}
+                isLoading={isResumeBusy}
               >
                 Parse
               </Button>
@@ -257,7 +290,9 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
             {/* Resume text preview */}
             <div className="mt-2">
               <p className="text-xs text-gray-500 mb-1">
-                {resumeText ? 'Extracted text (editable):' : 'Resume text (upload PDF or paste manually):'}
+                {resumeText
+                  ? 'Normalized resume (Markdown, editable):'
+                  : 'Resume text (upload PDF or paste manually):'}
               </p>
               <Textarea
                 value={resumeText}
@@ -265,8 +300,43 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                 rows={8}
                 className="text-xs"
                 placeholder="Resume content will appear here after PDF upload, or paste manually..."
+                autoResize
               />
             </div>
+
+            <div className="flex justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleReprocessResume}
+                disabled={isResumeBusy || !(resumeRawText || resumeText)}
+                isLoading={resumeProcessing}
+              >
+                Refresh Highlights
+              </Button>
+            </div>
+
+            <ResumeHighlightsPanel
+              highlights={resumeHighlights}
+              title="Resume Highlights"
+              emptyText="Upload or paste a resume to generate highlights."
+            />
+
+            {(resumeRawText || resumeText) && (
+              <details className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                <summary className="cursor-pointer text-xs font-medium text-gray-600">
+                  Raw extracted text
+                </summary>
+                <Textarea
+                  value={resumeRawText}
+                  onChange={(e) => setResumeRawText(e.target.value)}
+                  rows={6}
+                  className="text-xs mt-2"
+                  autoResize
+                  placeholder="Raw OCR text will appear here..."
+                />
+              </details>
+            )}
           </div>
         </div>
       </CardBody>
@@ -274,7 +344,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
         <Button variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button onClick={handleSubmit} disabled={!name.trim()}>
+        <Button onClick={handleSubmit} disabled={!name.trim() || isResumeBusy}>
           {candidate ? 'Save Changes' : 'Add Candidate'}
         </Button>
       </CardFooter>

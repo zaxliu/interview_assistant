@@ -9,6 +9,8 @@ import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useInterviewUIStore } from '@/store/interviewUIStore';
 import { getPDF } from '@/utils/pdfStorage';
+import { getPreferredResumeText } from '@/utils/resume';
+import { ResumeHighlightsPanel } from '@/components/candidates/ResumeHighlightsPanel';
 
 interface InterviewPanelProps {
   position: Position;
@@ -89,14 +91,15 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   }, [isDragging, setInterviewSplitRatio]);
 
   const handleGenerateQuestions = async () => {
-    if (!position.description || !candidate.resumeText) {
+    const resumeContent = getPreferredResumeText(candidate);
+    if (!position.description || !resumeContent) {
       alert('Please add job description and candidate resume first');
       return;
     }
 
     const questions = await generateInterviewQuestions(
       position.description,
-      candidate.resumeText,
+      resumeContent,
       position.criteria
     );
 
@@ -123,7 +126,15 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     }
   };
 
-  const canGenerateQuestions = position.description && candidate.resumeText;
+  const preferredResumeText = getPreferredResumeText(candidate);
+  const canGenerateQuestions = position.description && preferredResumeText;
+  const missingRequirements = [
+    !position.description ? 'position description' : null,
+    !preferredResumeText ? 'candidate resume' : null,
+  ].filter(Boolean) as string[];
+  const generateQuestionsHint = missingRequirements.length
+    ? `Add ${missingRequirements.join(' and ')} to enable AI question generation.`
+    : null;
 
   // Layout with side panel for PDF viewer
   if (showPdfViewerProp && pdfData) {
@@ -177,21 +188,32 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
                 </CardBody>
               </Card>
 
+              <ResumeHighlightsPanel
+                highlights={candidate.resumeHighlights}
+                title="Resume Highlights"
+                emptyText="No extracted highlights yet."
+              />
+
               {/* Question Generation */}
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={handleGenerateQuestions}
-                  isLoading={aiLoading}
-                  disabled={!canGenerateQuestions || aiLoading}
-                  title={!canGenerateQuestions ? 'Add job description and resume first' : ''}
-                >
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Generate Questions
-                </Button>
-                <AddQuestionForm positionId={position.id} candidateId={candidate.id} />
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={handleGenerateQuestions}
+                    isLoading={aiLoading}
+                    disabled={!canGenerateQuestions || aiLoading}
+                    title={generateQuestionsHint || ''}
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Generate Questions
+                  </Button>
+                  <AddQuestionForm positionId={position.id} candidateId={candidate.id} />
+                </div>
+                {generateQuestionsHint && (
+                  <p className="text-xs text-amber-700">{generateQuestionsHint}</p>
+                )}
               </div>
 
               {/* Questions List */}
@@ -233,14 +255,20 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
           </div>
           <div>
             <p className="text-xs font-medium text-gray-600 mb-1">Resume Summary</p>
-            {candidate.resumeText ? (
-              <p className="text-xs text-gray-700 line-clamp-3">{candidate.resumeText}</p>
+            {preferredResumeText ? (
+              <p className="text-xs text-gray-700 line-clamp-3">{preferredResumeText}</p>
             ) : (
               <p className="text-xs text-gray-400 italic">No resume uploaded</p>
             )}
           </div>
         </CardBody>
       </Card>
+
+      <ResumeHighlightsPanel
+        highlights={candidate.resumeHighlights}
+        title="Resume Highlights"
+        emptyText="No extracted highlights yet."
+      />
 
       {/* Quick Notes */}
       <Card>
@@ -260,20 +288,25 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       </Card>
 
       {/* Question Generation */}
-      <div className="flex gap-2">
-        <Button
-          variant="secondary"
-          onClick={handleGenerateQuestions}
-          isLoading={aiLoading}
-          disabled={!canGenerateQuestions || aiLoading}
-          title={!canGenerateQuestions ? 'Add job description and resume first' : ''}
-        >
-          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          Generate Questions from AI
-        </Button>
-        <AddQuestionForm positionId={position.id} candidateId={candidate.id} />
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleGenerateQuestions}
+            isLoading={aiLoading}
+            disabled={!canGenerateQuestions || aiLoading}
+            title={generateQuestionsHint || ''}
+          >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Generate Questions from AI
+          </Button>
+          <AddQuestionForm positionId={position.id} candidateId={candidate.id} />
+        </div>
+        {generateQuestionsHint && (
+          <p className="text-sm text-amber-700">{generateQuestionsHint}</p>
+        )}
       </div>
 
       {/* Questions List */}

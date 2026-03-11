@@ -74,13 +74,15 @@ export const PositionForm: React.FC<PositionFormProps> = ({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Describe the role and responsibilities..."
+          autoResize
           rows={4}
         />
         <Textarea
-          label="Evaluation Criteria (one per line)"
+          label="增量职位要求（每行一条）"
           value={criteriaText}
           onChange={(e) => setCriteriaText(e.target.value)}
-          placeholder="Technical skills&#10;Problem solving&#10;Communication"
+          placeholder="某个特定领域经验&#10;对业务场景的理解&#10;额外加分项"
+          autoResize
           rows={3}
         />
       </CardBody>

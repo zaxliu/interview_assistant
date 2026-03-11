@@ -1,9 +1,22 @@
-import type { Question, InterviewResult, CodingChallenge, QuestionSource, EvaluationDimensionName } from '@/types';
+import type {
+  Question,
+  InterviewResult,
+  CodingChallenge,
+  QuestionSource,
+  EvaluationDimensionName,
+  ResumeHighlights,
+} from '@/types';
+import { emptyResumeHighlights, normalizeMarkdownText, sanitizeResumeHighlights } from '@/utils/resume';
 
 interface AIServiceConfig {
   apiKey: string;
   model: string;
   // baseUrl removed - now uses server proxy
+}
+
+interface ResumeProcessingResult {
+  markdown: string;
+  highlights: ResumeHighlights;
 }
 
 /**
@@ -171,6 +184,88 @@ ${criteriaSection}
   } catch (e) {
     console.error('Failed to parse AI response:', content, e);
     return [];
+  }
+};
+
+export const processResumeText = async (
+  config: AIServiceConfig,
+  rawText: string
+): Promise<ResumeProcessingResult> => {
+  const prompt = `你是一位专业招聘助手。请基于下面的简历原始提取文本，完成两件事：
+
+1. 输出规范化后的 Markdown 简历
+2. 提取结构化简历要点
+
+约束：
+- 只能基于原文整理，不允许补充、猜测或改写事实
+- 允许做格式整理：去除多余空行、重复标号、页眉页脚噪音、错误断行
+- Markdown 要保留清晰层级，适合后续面试问题生成
+- highlights 中没有依据的信息必须留空，不要臆造
+
+返回 JSON，格式如下：
+\`\`\`json
+{
+  "markdown": "规范化后的 Markdown",
+  "highlights": {
+    "summary": "1-2 句候选人概览",
+    "strengths": ["候选人优势"],
+    "risks": ["潜在风险或待验证点"],
+    "experience": ["关键经历/项目/职责"],
+    "keywords": ["关键技术/领域关键词"]
+  }
+}
+\`\`\`
+
+只返回 JSON，不要附加解释。
+
+原始简历文本：
+${rawText}`;
+
+  const response = await fetch('/api/ai/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        {
+          role: 'system',
+          content:
+            '你擅长把 OCR 提取的简历文本整理成高质量 Markdown，并提取面试前可快速阅读的简历要点。务必返回有效 JSON。',
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.2,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI API error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '{}';
+
+  try {
+    let jsonContent = content;
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1];
+    }
+
+    const parsed = JSON.parse(jsonContent) as Partial<ResumeProcessingResult>;
+    return {
+      markdown: normalizeMarkdownText(parsed.markdown || rawText),
+      highlights: sanitizeResumeHighlights(parsed.highlights) || emptyResumeHighlights(),
+    };
+  } catch (error) {
+    console.error('Failed to parse resume processing response:', content, error);
+    return {
+      markdown: normalizeMarkdownText(rawText),
+      highlights: emptyResumeHighlights(),
+    };
   }
 };
 

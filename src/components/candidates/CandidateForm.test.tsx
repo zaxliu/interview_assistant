@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CandidateForm } from './CandidateForm';
 import { usePositionStore } from '@/store/positionStore';
 
 const parseFromFile = vi.fn();
 const parseFromUrl = vi.fn();
+const processResume = vi.fn();
 
 vi.mock('@/hooks/usePDFParser', () => ({
   usePDFParser: () => ({
@@ -14,6 +15,14 @@ vi.mock('@/hooks/usePDFParser', () => ({
     parseFromFile,
     parseFromUrl,
     canUseAI: true,
+  }),
+}));
+
+vi.mock('@/hooks/useResumeProcessor', () => ({
+  useResumeProcessor: () => ({
+    isProcessing: false,
+    error: null,
+    processResume,
   }),
 }));
 
@@ -28,6 +37,16 @@ vi.mock('@/api/pdf', () => ({
 describe('CandidateForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    processResume.mockResolvedValue({
+      markdown: 'Normalized resume',
+      highlights: {
+        summary: '',
+        strengths: [],
+        risks: [],
+        experience: [],
+        keywords: [],
+      },
+    });
     usePositionStore.setState({ positions: [], currentUserId: 'user-1' });
   });
 
@@ -59,10 +78,13 @@ describe('CandidateForm', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Parse' }));
 
-    expect(parseFromUrl).toHaveBeenCalledWith(
-      'https://example.com/resume.pdf',
-      true,
-      { maxPages: 5 }
-    );
+    await waitFor(() => {
+      expect(parseFromUrl).toHaveBeenCalledWith(
+        'https://example.com/resume.pdf',
+        true,
+        { maxPages: 5 }
+      );
+      expect(processResume).toHaveBeenCalledWith('Parsed resume');
+    });
   });
 });
