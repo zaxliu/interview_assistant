@@ -249,6 +249,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
   ];
 
   const isCompleted = candidate.status === 'completed';
+  const hasPageLink = Boolean(candidate.candidateLink);
 
   return (
     <div className="space-y-4">
@@ -292,6 +293,24 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
           )}
         </div>
       </div>
+
+      {hasPageLink && (
+        <Card>
+          <CardHeader>
+            <h3 className="text-sm font-medium text-gray-700">Candidate Page</h3>
+          </CardHeader>
+          <CardBody>
+            <a
+              href={candidate.candidateLink}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm text-blue-600 hover:text-blue-800 break-all"
+            >
+              {candidate.candidateLink}
+            </a>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Interview Info */}
       <Card>

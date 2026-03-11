@@ -50,4 +50,18 @@ describe('titleParser', () => {
       otherLinks: [],
     });
   });
+
+  it('falls back to Feishu meeting and candidate page urls without labels', () => {
+    expect(
+      extractLinksFromDescription(
+        '资料: https://vc.feishu.cn/j/681359281 页面: https://www.wintalent.cn/wt/Horizon/kurl?k=JBV7Rra6N7N3qaRz'
+      )
+    ).toEqual({
+      resumeLinks: [],
+      jdLinks: [],
+      interviewLink: 'https://vc.feishu.cn/j/681359281',
+      candidateLink: 'https://www.wintalent.cn/wt/Horizon/kurl?k=JBV7Rra6N7N3qaRz',
+      otherLinks: [],
+    });
+  });
 });

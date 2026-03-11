@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Position, Candidate } from '@/types';
 import { QuestionList } from './QuestionList';
 import { AddQuestionForm } from './AddQuestionForm';
@@ -11,7 +12,6 @@ import { useInterviewUIStore } from '@/store/interviewUIStore';
 import { getPDF } from '@/utils/pdfStorage';
 import { getPreferredResumeText } from '@/utils/resume';
 import { ResumeHighlightsPanel } from '@/components/candidates/ResumeHighlightsPanel';
-import { PlatformUploadButton } from '@/components/candidates/PlatformUploadButton';
 
 interface InterviewPanelProps {
   position: Position;
@@ -24,6 +24,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   candidate,
   showPdfViewer: showPdfViewerProp = true,
 }) => {
+  const navigate = useNavigate();
   const { isLoading: aiLoading, generateInterviewQuestions } = useAI();
   const {
     setQuestions,
@@ -36,6 +37,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const [pdfFilename, setPdfFilename] = useState<string>('');
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isSnapshotOpen, setIsSnapshotOpen] = useState(false);
   const [quickNotesDraft, setQuickNotesDraft] = useState(candidate.quickNotes || '');
   const containerRef = useRef<HTMLDivElement>(null);
   const quickNotesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,6 +69,10 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   useEffect(() => {
     setQuickNotesDraft(candidate.quickNotes || '');
   }, [candidate.id, candidate.quickNotes]);
+
+  useEffect(() => {
+    setIsSnapshotOpen(false);
+  }, [candidate.id]);
 
   useEffect(() => {
     if (quickNotesTimerRef.current) {
@@ -154,8 +160,9 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   };
 
   const preferredResumeText = getPreferredResumeText(candidate);
+  const isMissingResume = !preferredResumeText;
   const canGenerateQuestions = position.description && preferredResumeText;
-  const hasCalendarLinks = Boolean(candidate.interviewLink || candidate.candidateLink);
+  const hasInterviewLink = Boolean(candidate.interviewLink);
   const missingRequirements = [
     !position.description ? 'position description' : null,
     !preferredResumeText ? 'candidate resume' : null,
@@ -171,13 +178,66 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
           {/* PDF Viewer - Left side with dynamic width */}
           <div
             style={{ width: `${interviewSplitRatio * 100}%` }}
-            className="min-w-[300px] bg-white"
+            className="relative min-w-[300px] bg-white"
           >
+            <div className="border-b bg-gray-50 px-3 py-2">
+              <div className="flex items-stretch gap-2">
+                {hasInterviewLink && (
+                  <div className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-3 py-2 shadow-sm">
+                    <p className="text-xs font-medium text-gray-700">Meeting</p>
+                    {candidate.interviewLink && (
+                      <a
+                        href={candidate.interviewLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 block break-all text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        {candidate.interviewLink}
+                      </a>
+                    )}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsSnapshotOpen((open) => !open)}
+                  className="flex flex-1 items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-sm text-gray-700 shadow-sm hover:bg-gray-50"
+                >
+                  <div>
+                    <p className="font-medium">Candidate Snapshot</p>
+                    <p className="text-xs text-gray-500">
+                      {isSnapshotOpen ? 'Collapse highlights and summary' : 'Expand highlights and summary'}
+                    </p>
+                  </div>
+                  <span className={`text-xs text-gray-400 transition-transform ${isSnapshotOpen ? 'rotate-180' : ''}`}>▾</span>
+                </button>
+              </div>
+            </div>
+
             <PDFViewer
               pdfData={pdfData}
               filename={pdfFilename}
               onPageSelect={handlePdfTextSelect}
             />
+            <div className="pointer-events-none absolute left-3 top-[60px] z-10 max-w-[min(360px,calc(100%-24px))]">
+              <div
+                className={`pointer-events-auto transition-all duration-200 ${
+                  isSnapshotOpen
+                    ? 'translate-x-0 opacity-100'
+                    : '-translate-x-3 opacity-0'
+                }`}
+              >
+                {isSnapshotOpen && (
+                  <div className="w-[320px] max-w-full rounded-xl border border-gray-200 bg-white/95 p-1 shadow-lg backdrop-blur">
+                    <ResumeHighlightsPanel
+                      highlights={candidate.resumeHighlights}
+                      title="Candidate Snapshot"
+                      emptyText="No extracted highlights yet."
+                      compact
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Draggable Divider */}
@@ -195,9 +255,20 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
           >
             <div className="space-y-4 p-4">
               {/* Header */}
-              <div>
-                <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
-                <p className="text-xs text-gray-500">{position.title}</p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
+                  <p className="text-xs text-gray-500">{position.title}</p>
+                </div>
+                {isMissingResume && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate(`/positions/${position.id}/candidates/${candidate.id}/edit`)}
+                  >
+                    Edit Candidate
+                  </Button>
+                )}
               </div>
 
               {/* Quick Notes */}
@@ -215,51 +286,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
                   />
                 </CardBody>
               </Card>
-
-              <ResumeHighlightsPanel
-                highlights={candidate.resumeHighlights}
-                title="Resume Highlights"
-                emptyText="No extracted highlights yet."
-              />
-
-              {hasCalendarLinks && (
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-medium text-gray-700">Calendar Links</h3>
-                      <PlatformUploadButton candidate={candidate} positionTitle={position.title} />
-                    </div>
-                  </CardHeader>
-                  <CardBody className="space-y-2">
-                    {candidate.interviewLink && (
-                      <div className="text-sm">
-                        <span className="text-gray-500">Video interview:</span>{' '}
-                        <a
-                          href={candidate.interviewLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-600 hover:text-blue-800 break-all"
-                        >
-                          {candidate.interviewLink}
-                        </a>
-                      </div>
-                    )}
-                    {candidate.candidateLink && (
-                      <div className="text-sm">
-                        <span className="text-gray-500">Candidate profile:</span>{' '}
-                        <a
-                          href={candidate.candidateLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-600 hover:text-blue-800 break-all"
-                        >
-                          {candidate.candidateLink}
-                        </a>
-                      </div>
-                    )}
-                  </CardBody>
-                </Card>
-              )}
 
               {/* Question Generation */}
               <div className="space-y-2">
@@ -301,9 +327,20 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   return (
     <div className="space-y-4">
       {/* Header - just info, buttons are in top banner */}
-      <div>
-        <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
-        <p className="text-xs text-gray-500">{position.title}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
+          <p className="text-xs text-gray-500">{position.title}</p>
+        </div>
+        {isMissingResume && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate(`/positions/${position.id}/candidates/${candidate.id}/edit`)}
+          >
+            Edit Candidate
+          </Button>
+        )}
       </div>
 
       {/* Job Description & Resume Summary */}
@@ -333,48 +370,12 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
 
       <ResumeHighlightsPanel
         highlights={candidate.resumeHighlights}
-        title="Resume Highlights"
+        title="Candidate Snapshot"
         emptyText="No extracted highlights yet."
+        collapsible
+        defaultExpanded={false}
+        compact
       />
-
-      {hasCalendarLinks && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-medium text-gray-700">Calendar Links</h3>
-              <PlatformUploadButton candidate={candidate} positionTitle={position.title} />
-            </div>
-          </CardHeader>
-          <CardBody className="space-y-2">
-            {candidate.interviewLink && (
-              <div className="text-sm">
-                <span className="text-gray-500">Video interview:</span>{' '}
-                <a
-                  href={candidate.interviewLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-blue-600 hover:text-blue-800 break-all"
-                >
-                  {candidate.interviewLink}
-                </a>
-              </div>
-            )}
-            {candidate.candidateLink && (
-              <div className="text-sm">
-                <span className="text-gray-500">Candidate profile:</span>{' '}
-                <a
-                  href={candidate.candidateLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-blue-600 hover:text-blue-800 break-all"
-                >
-                  {candidate.candidateLink}
-                </a>
-              </div>
-            )}
-          </CardBody>
-        </Card>
-      )}
 
       {/* Quick Notes */}
       <Card>

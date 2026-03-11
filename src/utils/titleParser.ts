@@ -70,6 +70,22 @@ export const extractLinksFromDescription = (description: string | undefined): {
   }
 
   const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g;
+  const allUrls = description.match(urlRegex) || [];
+
+  const isFeishuMeetingUrl = (url: string): boolean => {
+    try {
+      const { hostname, pathname } = new URL(url);
+      return (
+        hostname === 'vc.feishu.cn' ||
+        hostname === 'meet.feishu.cn' ||
+        pathname.includes('/vc/') ||
+        pathname.includes('/j/')
+      );
+    } catch {
+      return false;
+    }
+  };
+
   const extractLabeledUrl = (labels: string[]): string | undefined => {
     for (const label of labels) {
       const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -84,9 +100,16 @@ export const extractLinksFromDescription = (description: string | undefined): {
     return undefined;
   };
 
-  const interviewLink = extractLabeledUrl(['视频面试链接/会议号', '视频面试链接', '面试链接', '会议号']);
-  const candidateLink = extractLabeledUrl(['候选人链接']);
-  const matches = (description.match(urlRegex) || []).filter((url) => {
+  const interviewLink =
+    extractLabeledUrl(['视频面试链接/会议号', '视频面试链接', '面试链接', '会议号']) ||
+    allUrls.find((url) => isFeishuMeetingUrl(url));
+  const candidateLink =
+    extractLabeledUrl(['候选人链接']) ||
+    allUrls.find((url) => {
+      const lowerUrl = url.toLowerCase();
+      return lowerUrl.includes('wintalent.cn') || lowerUrl.includes('candidate');
+    });
+  const matches = allUrls.filter((url) => {
     if (interviewLink && url.includes(interviewLink)) {
       return false;
     }
