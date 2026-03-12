@@ -170,6 +170,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                 {window.location.origin}{window.location.pathname}
               </code>
             </div>
+            <div className="mt-2 p-2 bg-amber-50 rounded text-xs text-amber-800">
+              <p className="font-medium mb-1">若登录页提示 “This account doesn't have permission to authorize login”：</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>在飞书开放平台确认应用已发布到当前租户，且“可用范围”包含该用户所在部门或成员。</li>
+                <li>若是测试版应用，请将该账号加入测试人员名单。</li>
+                <li>若刚调整权限范围或可见范围，请发布新版本后重试登录。</li>
+              </ol>
+            </div>
           </div>
         </CardBody>
       </Card>

@@ -77,6 +77,19 @@ Notes:
 
 **Note**: CORS proxy is built-in. No need to run `local-cors-proxy` anymore.
 
+### Feishu OAuth Troubleshooting
+
+If a user sees this error on Feishu login page:
+
+`This account doesn't have permission to authorize login`
+
+Check the following in Feishu Open Platform:
+
+1. The app is published to your current tenant.
+2. App availability scope includes that user's department/member.
+3. If using test mode, the user is added to the tester list.
+4. After changing scope or permissions, publish a new app version and retry login.
+
 ## Usage
 
 1. **Configure Settings**: Click the gear icon to set up API keys and your interviewer name
