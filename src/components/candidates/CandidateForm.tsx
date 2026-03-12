@@ -5,9 +5,9 @@ import { usePDFParser } from '@/hooks/usePDFParser';
 import { useResumeProcessor } from '@/hooks/useResumeProcessor';
 import { storePDF } from '@/utils/pdfStorage';
 import { debugDownloadPDFPageAsImage } from '@/api/pdf';
+import { downloadWintalentResumePDF } from '@/api/wintalent';
 import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea } from '@/components/ui';
 import { ResumeHighlightsPanel } from './ResumeHighlightsPanel';
-import { PlatformUploadButton } from './PlatformUploadButton';
 import { emptyResumeHighlights, getPreferredResumeText, getRawResumeText } from '@/utils/resume';
 
 interface CandidateFormProps {
@@ -23,8 +23,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   onSave,
   onCancel,
 }) => {
-  const { addCandidate, updateCandidate, getPosition } = usePositionStore();
-  const position = getPosition(positionId);
+  const { addCandidate, updateCandidate } = usePositionStore();
   const {
     isLoading: pdfLoading,
     error: pdfError,
@@ -45,6 +44,9 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
 
   const [name, setName] = useState(candidate?.name || '');
   const [resumeUrl, setResumeUrl] = useState(candidate?.resumeUrl || '');
+  const [wintalentLink, setWintalentLink] = useState(
+    candidate?.candidateLink?.includes('wintalent.cn') ? candidate.candidateLink : ''
+  );
   const [resumeText, setResumeText] = useState(initialResumeText);
   const [resumeRawText, setResumeRawText] = useState(initialResumeRawText);
   const [resumeHighlights, setResumeHighlights] = useState(candidate?.resumeHighlights || emptyResumeHighlights());
@@ -57,7 +59,9 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   });
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
   const [useAIParsing, setUseAIParsing] = useState(true);
-  const isResumeBusy = pdfLoading || resumeProcessing;
+  const [wintalentLoading, setWintalentLoading] = useState(false);
+  const [wintalentError, setWintalentError] = useState<string | null>(null);
+  const isResumeBusy = pdfLoading || resumeProcessing || wintalentLoading;
 
   const applyProcessedResume = async (rawText: string) => {
     setResumeRawText(rawText);
@@ -92,6 +96,35 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
       if (text) {
         await applyProcessedResume(text);
       }
+    }
+  };
+
+  const handleWintalentImport = async () => {
+    const link = wintalentLink.trim();
+    if (!link) return;
+
+    setWintalentError(null);
+    setWintalentLoading(true);
+
+    try {
+      const { blob, filename } = await downloadWintalentResumePDF(link);
+      const pdfFile = new File([blob], filename, {
+        type: blob.type || 'application/pdf',
+      });
+
+      setResumeFilename(pdfFile.name);
+      setPendingPdfFile(pdfFile);
+      setResumeUrl(link);
+
+      const text = await parseFromFile(pdfFile, useAIParsing && canUseAI, { maxPages: 5 });
+      if (text) {
+        await applyProcessedResume(text);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to import resume from Wintalent';
+      setWintalentError(message);
+    } finally {
+      setWintalentLoading(false);
     }
   };
 
@@ -162,10 +195,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
 
         {(candidate?.interviewLink || candidate?.candidateLink) && (
           <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3 space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-gray-700">Calendar Links</p>
-              <PlatformUploadButton candidate={candidate} positionTitle={position?.title || ''} />
-            </div>
+            <p className="text-sm font-medium text-gray-700">Calendar Links</p>
             {candidate?.interviewLink && (
               <div className="text-sm">
                 <span className="text-gray-500">Video interview:</span>{' '}
@@ -202,7 +232,9 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
 
           {/* Instructions */}
           <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-800">
-            <p className="font-medium mb-2">How to get resume from Wintalent:</p>
+            <p className="font-medium mb-2">Wintalent import options:</p>
+            <p className="mb-2">Recommended: paste interview link below and click <strong>Import</strong>.</p>
+            <p className="font-medium mb-1">Manual fallback:</p>
             <ol className="list-decimal list-inside space-y-1">
               <li>Click the "候选人链接" in the calendar event</li>
               <li>On Wintalent page, click "预览" next to the file</li>
@@ -212,9 +244,9 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
           </div>
 
           {/* Error display */}
-          {(pdfError || resumeProcessingError) && (
+          {(pdfError || resumeProcessingError || wintalentError) && (
             <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-              {pdfError || resumeProcessingError}
+              {wintalentError || pdfError || resumeProcessingError}
             </div>
           )}
 
@@ -241,6 +273,25 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
           )}
 
           <div className="space-y-2">
+            {/* Wintalent link import */}
+            <div className="flex gap-2">
+              <Input
+                type="url"
+                value={wintalentLink}
+                onChange={(e) => setWintalentLink(e.target.value)}
+                placeholder="Paste Wintalent interview link for one-click import"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleWintalentImport}
+                disabled={!wintalentLink.trim() || isResumeBusy}
+                isLoading={wintalentLoading}
+              >
+                Import
+              </Button>
+            </div>
+
             {/* File upload */}
             <div className="flex gap-2 items-center">
               <input

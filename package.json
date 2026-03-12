@@ -10,8 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "upload:resume": "node scripts/upload-resume.mjs",
-    "upload:resume-server": "node scripts/upload-resume-server.mjs"
+    "proxy:wintalent": "node scripts/wintalent-proxy.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.0.0",

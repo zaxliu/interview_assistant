@@ -6,6 +6,9 @@ import { usePositionStore } from '@/store/positionStore';
 const parseFromFile = vi.fn();
 const parseFromUrl = vi.fn();
 const processResume = vi.fn();
+const { downloadWintalentResumePDF } = vi.hoisted(() => ({
+  downloadWintalentResumePDF: vi.fn(),
+}));
 
 vi.mock('@/hooks/usePDFParser', () => ({
   usePDFParser: () => ({
@@ -32,6 +35,10 @@ vi.mock('@/utils/pdfStorage', () => ({
 
 vi.mock('@/api/pdf', () => ({
   debugDownloadPDFPageAsImage: vi.fn(),
+}));
+
+vi.mock('@/api/wintalent', () => ({
+  downloadWintalentResumePDF,
 }));
 
 describe('CandidateForm', () => {
@@ -106,8 +113,33 @@ describe('CandidateForm', () => {
     );
 
     expect(screen.getByText('Calendar Links')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Upload Resume to Platform' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'https://vc.feishu.cn/j/681359281' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc' })).toBeInTheDocument();
+  });
+
+  it('imports Wintalent resume and parses as PDF file', async () => {
+    downloadWintalentResumePDF.mockResolvedValue({
+      blob: new Blob(['%PDF-1.7 fake'], { type: 'application/pdf' }),
+      filename: 'candidate.pdf',
+      resolvedPdfUrl: 'https://www.wintalent.cn/interviewer/interviewPlatform/getResumeOriginalInfo?...',
+      resumeId: '3293935',
+    });
+    parseFromFile.mockResolvedValue('Imported resume text');
+
+    render(<CandidateForm positionId="position-1" onSave={() => undefined} onCancel={() => undefined} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Paste Wintalent interview link for one-click import'), {
+      target: { value: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+    await waitFor(() => {
+      expect(downloadWintalentResumePDF).toHaveBeenCalledWith(
+        'https://www.wintalent.cn/wt/Horizon/kurl?k=abc'
+      );
+      expect(parseFromFile).toHaveBeenCalledTimes(1);
+      expect(processResume).toHaveBeenCalledWith('Imported resume text');
+      expect(screen.getByText(/candidate\.pdf/)).toBeInTheDocument();
+    });
   });
 });

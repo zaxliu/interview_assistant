@@ -1,6 +1,19 @@
 version: '3.8'
 services:
+  wintalent-proxy:
+    image: node:18-alpine
+    working_dir: /app
+    command: ["node", "scripts/wintalent-proxy.mjs"]
+    environment:
+      - WINTALENT_PROXY_HOST=0.0.0.0
+      - WINTALENT_PROXY_PORT=8787
+    volumes:
+      - .:/app:ro
+    restart: unless-stopped
+
   interview-assistant:
+    depends_on:
+      - wintalent-proxy
     build:
       context: .
       args:
@@ -10,6 +23,7 @@ services:
         VITE_FEISHU_APP_SECRET: ${VITE_FEISHU_APP_SECRET}
     environment:
       - VITE_AI_BASE_URL=${VITE_AI_BASE_URL:-https://api.openai.com}
+      - VITE_WINTALENT_PROXY_URL=${DOCKER_WINTALENT_PROXY_URL:-http://wintalent-proxy:8787}
       - HTTP_PROXY=${DOCKER_HTTP_PROXY:-http://host.docker.internal:7890}
       - HTTPS_PROXY=${DOCKER_HTTPS_PROXY:-http://host.docker.internal:7890}
       - ALL_PROXY=${DOCKER_ALL_PROXY:-http://host.docker.internal:7890}

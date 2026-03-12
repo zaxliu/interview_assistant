@@ -49,6 +49,12 @@ A web-based interview assistant that helps interviewers prepare for interviews, 
 
 3. Open http://localhost:3000
 
+Notes:
+
+- Docker compose now starts a built-in `wintalent-proxy` sidecar automatically.
+- If you need custom proxy target, set `DOCKER_WINTALENT_PROXY_URL` in `.env`.
+- If you previously set `VITE_WINTALENT_PROXY_URL=http://127.0.0.1:8787` in `.env`, it can cause `502 Bad Gateway` in Docker (because `127.0.0.1` points to the nginx container itself, not your host).
+
 ## Configuration
 
 ### AI Configuration
@@ -58,6 +64,7 @@ A web-based interview assistant that helps interviewers prepare for interviews, 
 | `VITE_AI_API_KEY` | Your AI provider API key | Required |
 | `VITE_AI_MODEL` | Model to use | `gpt-4` |
 | `VITE_AI_BASE_URL` | AI provider base URL, including OpenAI-compatible prefix such as `/v1` | `https://api.openai.com/v1` |
+| `VITE_WINTALENT_PROXY_URL` | Wintalent backend proxy base URL | `http://127.0.0.1:8787` |
 
 **Note**: The AI provider URL is configured server-side via environment variables, not in browser settings. It should point to the OpenAI-compatible API root, for example `https://api.openai.com/v1` or `https://api.openai-proxy.org/v1`. API keys are stored in browser localStorage and sent with each request.
 
@@ -78,7 +85,7 @@ A web-based interview assistant that helps interviewers prepare for interviews, 
 
 3. **Create Position**: Add a job position with description and evaluation criteria
 
-4. **Add Candidate**: Add candidate with resume (PDF upload or URL)
+4. **Add Candidate**: Add candidate with resume (PDF upload, URL, or Wintalent one-click import)
 
 5. **Generate Questions**: Use AI to generate interview questions based on JD and resume
 
@@ -98,6 +105,9 @@ All data is stored in the browser's localStorage. No backend required.
 # Development server
 npm run dev
 
+# Optional: start Wintalent resume proxy (for interview link -> PDF)
+npm run proxy:wintalent
+
 # Build for production
 npm run build
 
@@ -108,32 +118,19 @@ npm run preview
 npm run lint
 ```
 
-## Playwright Resume Upload
+### Optional: Wintalent Proxy (Interview Link -> PDF)
 
-If the candidate page already has a stored PDF plus a calendar candidate link, you can automate the external upload flow with Playwright:
-
-```bash
-npm run upload:resume -- \
-  --candidate "Alice" \
-  --position "AI Agent应用工程师" \
-  --user-data-dir "$HOME/Library/Application Support/Google/Chrome" \
-  --profile-dir Default
-```
-
-Notes:
-- Use the same Chrome profile that already contains both Interview Assistant local data and the target platform login state.
-- Re-sync calendar first if the candidate/interview link was added after the candidate was originally imported.
-- The script uploads the PDF automatically, then leaves the page open in case the target site still needs a final manual confirmation click.
-
-For one-click uploads directly from the web UI, start the local bridge service once:
+If you need to parse resumes directly from Wintalent interview links, run:
 
 ```bash
-npm run upload:resume-server -- \
-  --user-data-dir "$HOME/Library/Application Support/Google/Chrome" \
-  --profile-dir Default
+npm run proxy:wintalent
 ```
 
-Then set `Automation Service URL` in Settings to the matching address, such as `http://127.0.0.1:3456`.
+Default address:
+
+- `http://127.0.0.1:8787`
+- `POST /api/wintalent/resolve` (resolve tokenized PDF URL)
+- `POST /api/wintalent/download` (download PDF stream directly)
 
 ## Architecture
 
@@ -141,10 +138,10 @@ Then set `Automation Service URL` in Settings to the matching address, such as `
 
 The app uses built-in CORS proxies for both local development and Docker deployment:
 
-| Environment | AI API | Feishu API |
-|-------------|--------|------------|
-| Local (`npm run dev`) | Vite proxy → `VITE_AI_BASE_URL` | Vite proxy → Feishu |
-| Docker | nginx proxy → `VITE_AI_BASE_URL` | nginx proxy → Feishu |
+| Environment | AI API | Feishu API | Wintalent API |
+|-------------|--------|------------|---------------|
+| Local (`npm run dev`) | Vite proxy → `VITE_AI_BASE_URL` | Vite proxy → Feishu | Vite proxy → `VITE_WINTALENT_PROXY_URL` |
+| Docker | nginx proxy → `VITE_AI_BASE_URL` | nginx proxy → Feishu | nginx proxy → `VITE_WINTALENT_PROXY_URL` |
 
 ### Tech Stack
 

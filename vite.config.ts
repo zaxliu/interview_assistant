@@ -6,6 +6,7 @@ import path from 'path'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const aiBaseUrl = (env.VITE_AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '')
+  const wintalentProxyUrl = (env.VITE_WINTALENT_PROXY_URL || 'http://127.0.0.1:8787').replace(/\/+$/, '')
 
   return {
     plugins: [react()],
@@ -34,6 +35,10 @@ export default defineConfig(({ mode }) => {
           target: 'https://open.feishu.cn',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/feishu/, '/open-apis'),
+        },
+        '/api/wintalent': {
+          target: wintalentProxyUrl,
+          changeOrigin: true,
         },
       },
     },

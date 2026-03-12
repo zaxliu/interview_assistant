@@ -1,0 +1,519 @@
+import http from 'node:http';
+import { URL } from 'node:url';
+
+const PORT = Number(process.env.WINTALENT_PROXY_PORT || 8787);
+const HOST = process.env.WINTALENT_PROXY_HOST || '127.0.0.1';
+const ORIGIN = 'https://www.wintalent.cn';
+
+const JSON_HEADERS = {
+  'Content-Type': 'application/json; charset=utf-8',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+class CookieJar {
+  constructor() {
+    this.cookies = [];
+  }
+
+  setFromHeader(setCookieHeader, requestUrl) {
+    const parts = splitSetCookieHeader(setCookieHeader);
+    for (const cookieStr of parts) {
+      this.#setSingleCookie(cookieStr, requestUrl);
+    }
+  }
+
+  #setSingleCookie(cookieStr, requestUrl) {
+    const segments = cookieStr.split(';').map((x) => x.trim());
+    if (!segments[0] || !segments[0].includes('=')) return;
+
+    const [name, ...valueRest] = segments[0].split('=');
+    const value = valueRest.join('=');
+    const reqUrl = new URL(requestUrl);
+    const defaults = {
+      name,
+      value,
+      domain: reqUrl.hostname,
+      hostOnly: true,
+      path: defaultCookiePath(reqUrl.pathname),
+      secure: false,
+      expiresAt: null,
+    };
+
+    for (const attr of segments.slice(1)) {
+      const [rawKey, ...rawVal] = attr.split('=');
+      const key = rawKey.toLowerCase();
+      const val = rawVal.join('=');
+
+      if (key === 'domain' && val) {
+        defaults.domain = val.replace(/^\./, '').toLowerCase();
+        defaults.hostOnly = false;
+      } else if (key === 'path' && val) {
+        defaults.path = val;
+      } else if (key === 'secure') {
+        defaults.secure = true;
+      } else if (key === 'max-age') {
+        const sec = Number(val);
+        if (Number.isFinite(sec)) {
+          defaults.expiresAt = Date.now() + sec * 1000;
+        }
+      } else if (key === 'expires') {
+        const ts = Date.parse(val);
+        if (!Number.isNaN(ts)) {
+          defaults.expiresAt = ts;
+        }
+      }
+    }
+
+    this.cookies = this.cookies.filter((c) => {
+      return !(c.name === defaults.name && c.domain === defaults.domain && c.path === defaults.path);
+    });
+
+    if (defaults.expiresAt !== null && defaults.expiresAt <= Date.now()) {
+      return;
+    }
+
+    this.cookies.push(defaults);
+  }
+
+  getCookie(name) {
+    const now = Date.now();
+    const matches = this.cookies
+      .filter((c) => c.name === name && (c.expiresAt === null || c.expiresAt > now))
+      .sort((a, b) => b.path.length - a.path.length);
+    return matches[0]?.value ?? null;
+  }
+
+  getHeader(urlStr) {
+    const now = Date.now();
+    const url = new URL(urlStr);
+    const matches = this.cookies.filter((cookie) => {
+      if (cookie.expiresAt !== null && cookie.expiresAt <= now) return false;
+      if (cookie.secure && url.protocol !== 'https:') return false;
+      if (!pathMatch(url.pathname, cookie.path)) return false;
+      if (cookie.hostOnly) {
+        return url.hostname === cookie.domain;
+      }
+      return domainMatch(url.hostname, cookie.domain);
+    });
+
+    matches.sort((a, b) => b.path.length - a.path.length);
+    return matches.map((c) => `${c.name}=${c.value}`).join('; ');
+  }
+}
+
+function splitSetCookieHeader(headerValue) {
+  if (!headerValue) return [];
+  if (Array.isArray(headerValue)) return headerValue;
+
+  const list = [];
+  let current = '';
+  let inExpires = false;
+
+  for (let i = 0; i < headerValue.length; i += 1) {
+    const ch = headerValue[i];
+    current += ch;
+
+    if (!inExpires && current.toLowerCase().endsWith('expires=')) {
+      inExpires = true;
+    } else if (inExpires && ch === ';') {
+      inExpires = false;
+    } else if (!inExpires && ch === ',') {
+      const next = headerValue.slice(i + 1);
+      if (/^\s*[A-Za-z0-9!#$%&'*+.^_`|~-]+=/.test(next)) {
+        list.push(current.slice(0, -1).trim());
+        current = '';
+      }
+    }
+  }
+
+  if (current.trim()) list.push(current.trim());
+  return list;
+}
+
+function defaultCookiePath(pathname) {
+  if (!pathname || !pathname.startsWith('/')) return '/';
+  if (pathname === '/') return '/';
+  const lastSlash = pathname.lastIndexOf('/');
+  if (lastSlash <= 0) return '/';
+  return pathname.slice(0, lastSlash);
+}
+
+function domainMatch(hostname, domain) {
+  const host = hostname.toLowerCase();
+  const dom = domain.toLowerCase();
+  return host === dom || host.endsWith(`.${dom}`);
+}
+
+function pathMatch(pathname, cookiePath) {
+  if (pathname === cookiePath) return true;
+  return pathname.startsWith(cookiePath.endsWith('/') ? cookiePath : `${cookiePath}/`);
+}
+
+function getSetCookieHeaders(headers) {
+  if (typeof headers.getSetCookie === 'function') {
+    return headers.getSetCookie();
+  }
+  const raw = headers.get('set-cookie');
+  return raw ? splitSetCookieHeader(raw) : [];
+}
+
+async function requestWithJar(jar, url, options = {}) {
+  const {
+    method = 'GET',
+    headers = {},
+    body,
+    referer,
+    followRedirects = 0,
+  } = options;
+
+  let currentUrl = url;
+  let currentMethod = method;
+  let currentBody = body;
+  let currentHeaders = { ...headers };
+  const history = [];
+
+  for (let i = 0; i <= followRedirects; i += 1) {
+    const cookieHeader = jar.getHeader(currentUrl);
+    const reqHeaders = { ...currentHeaders };
+    if (cookieHeader) reqHeaders.Cookie = cookieHeader;
+    if (referer && !reqHeaders.Referer) reqHeaders.Referer = referer;
+
+    const res = await fetch(currentUrl, {
+      method: currentMethod,
+      headers: reqHeaders,
+      body: currentBody,
+      redirect: 'manual',
+    });
+
+    for (const setCookie of getSetCookieHeaders(res.headers)) {
+      jar.setFromHeader(setCookie, currentUrl);
+    }
+
+    history.push({ url: currentUrl, status: res.status });
+
+    const isRedirect = res.status >= 300 && res.status < 400;
+    const location = res.headers.get('location');
+    if (!isRedirect || !location || i === followRedirects) {
+      return { res, url: currentUrl, history };
+    }
+
+    const nextUrl = new URL(location, currentUrl).toString();
+    if (res.status === 303 || ((res.status === 301 || res.status === 302) && currentMethod === 'POST')) {
+      currentMethod = 'GET';
+      currentBody = undefined;
+      currentHeaders = {};
+    }
+    currentUrl = nextUrl;
+  }
+
+  throw new Error('Unexpected redirect handling state');
+}
+
+function extractShowResumeUrl(history, fallbackUrl) {
+  const match = history.find((h) => h.url.includes('/interviewPlatform/newpc/jsp/showResume.html'));
+  return match?.url || fallbackUrl;
+}
+
+function getShowResumeParams(showResumeUrl) {
+  const url = new URL(showResumeUrl);
+  const q = url.searchParams;
+  return {
+    currentApplyId: q.get('currentApplyId') || '',
+    moduleCode: q.get('moduleCode') || '',
+    resumeType: q.get('resumeType') || '1',
+    fromMessage: q.get('fromMessage') || 'false',
+    mailOperateId: q.get('mailOperateId') || '',
+    batchKey: q.get('batchKey') || '',
+    sendToCCBool: q.get('sendToCCBool') || 'false',
+    isShowAnalyzeResume: q.get('isShowAnalyzeResume') || '1',
+    isShowOriginalResume: q.get('isShowOriginalResume') || '1',
+  };
+}
+
+function encodeForm(data) {
+  return new URLSearchParams(data).toString();
+}
+
+async function postFormJson(jar, url, formObj, referer) {
+  const { res } = await requestWithJar(jar, url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: encodeForm(formObj),
+    referer,
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} calling ${url}: ${text.slice(0, 200)}`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Expected JSON from ${url}, got: ${text.slice(0, 200)}`);
+  }
+}
+
+async function createTokenizedUrl(jar, createTokenUrl, rawPath, referer) {
+  const json = await postFormJson(
+    jar,
+    new URL(createTokenUrl, ORIGIN).toString(),
+    { url: rawPath },
+    referer
+  );
+  if (!json?.tokenUrl) {
+    throw new Error(`createToken failed for ${rawPath}`);
+  }
+  return new URL(json.tokenUrl, ORIGIN).toString();
+}
+
+function appendQueryParam(url, key, value) {
+  const u = new URL(url);
+  if (!u.searchParams.has(key)) {
+    u.searchParams.set(key, value);
+  } else if (u.searchParams.get(key) !== value) {
+    u.searchParams.set(key, value);
+  }
+  return u.toString();
+}
+
+async function resolvePdfFlow(interviewUrl, lanType = 1) {
+  const jar = new CookieJar();
+
+  const entry = await requestWithJar(jar, interviewUrl, { followRedirects: 8 });
+  const showResumeUrl = extractShowResumeUrl(entry.history, entry.url);
+
+  if (!showResumeUrl.includes('/showResume.html')) {
+    throw new Error('无法定位 showResume 页面，链接可能已失效');
+  }
+
+  const createTokenUrl = jar.getCookie('createTokenUrl');
+  if (!createTokenUrl) {
+    throw new Error('未拿到 createTokenUrl Cookie，无法继续 token 链路');
+  }
+
+  const p = getShowResumeParams(showResumeUrl);
+  const currentResumeInfoUrl = await createTokenizedUrl(
+    jar,
+    createTokenUrl,
+    '/interviewPlatform/currentResumeInfo',
+    showResumeUrl
+  );
+
+  const currentResumeInfo = await postFormJson(
+    jar,
+    currentResumeInfoUrl,
+    {
+      operateObjStr: '',
+      currentApplyId: p.currentApplyId,
+      currentPlanId: '',
+      operateToEv: 'false',
+      moduleCode: p.moduleCode,
+      resumeType: p.resumeType,
+      currentIndex: '1',
+      fromMessage: p.fromMessage,
+      mailOperateId: p.mailOperateId,
+      isNewPc: 'true',
+      isShowAnalyzeResume: p.isShowAnalyzeResume,
+      isShowOriginalResume: p.isShowOriginalResume,
+      isHomePage: 'false',
+      isSequenceOne: 'false',
+      linkDataId: '',
+      batchKey: p.batchKey,
+      sendToCCBool: p.sendToCCBool,
+    },
+    showResumeUrl
+  );
+
+  const resumeTab0 = currentResumeInfo?.resumeTab?.[0];
+  const applyId = String(resumeTab0?.applyId || p.currentApplyId || '');
+  const resumeId = String(resumeTab0?.resumeId || '');
+  const postId = String(resumeTab0?.postId || '');
+  const detailUrlRaw = currentResumeInfo?.getResumeDetailTypeUrl;
+
+  if (!detailUrlRaw || !applyId || !resumeId || !postId) {
+    throw new Error('currentResumeInfo 返回数据不完整，无法继续');
+  }
+
+  const getResumeDetailTypeUrl = new URL(detailUrlRaw, ORIGIN).toString();
+  const detailType = await postFormJson(
+    jar,
+    getResumeDetailTypeUrl,
+    {
+      applyId,
+      resumeId,
+      postId,
+      lanType: String(lanType),
+      fromMessage: p.fromMessage,
+      isShowAnalyzeResume: p.isShowAnalyzeResume,
+      isShowOriginalResume: p.isShowOriginalResume,
+      linkDataId: '',
+    },
+    showResumeUrl
+  );
+
+  if (!detailType?.resumeOriginalInfoUrl) {
+    throw new Error('未拿到 resumeOriginalInfoUrl，可能无原始简历权限');
+  }
+
+  const resumeOriginalRaw = appendQueryParam(
+    new URL(detailType.resumeOriginalInfoUrl, ORIGIN).toString(),
+    'lanType',
+    String(lanType)
+  );
+  const resumeOriginalPath = new URL(resumeOriginalRaw).pathname + new URL(resumeOriginalRaw).search;
+
+  const tokenizedResumeOriginalUrl = await createTokenizedUrl(
+    jar,
+    createTokenUrl,
+    resumeOriginalPath,
+    showResumeUrl
+  );
+  const pdfUrl = appendQueryParam(tokenizedResumeOriginalUrl, 'showPdf', 'true');
+
+  return {
+    jar,
+    showResumeUrl,
+    createTokenUrl: new URL(createTokenUrl, ORIGIN).toString(),
+    currentResumeInfoUrl,
+    getResumeDetailTypeUrl,
+    tokenizedResumeOriginalUrl,
+    pdfUrl,
+    metadata: {
+      applyId,
+      resumeId,
+      postId,
+      originalFileId: detailType.originalFileId || null,
+      originalFileName: detailType.originalFileName || null,
+      encryptId: detailType.encryptId || null,
+    },
+  };
+}
+
+async function streamPdfFromFlow(flow) {
+  const { res } = await requestWithJar(flow.jar, flow.pdfUrl, {
+    method: 'GET',
+    referer: flow.showResumeUrl,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`拉取 PDF 失败: HTTP ${res.status}, ${text.slice(0, 200)}`);
+  }
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return {
+    buffer,
+    contentType: res.headers.get('content-type') || 'application/pdf',
+    contentDisposition: res.headers.get('content-disposition') || 'inline; filename="resume.pdf"',
+  };
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        reject(new Error('Invalid JSON body'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function sendJson(res, status, payload) {
+  res.writeHead(status, JSON_HEADERS);
+  res.end(JSON.stringify(payload, null, 2));
+}
+
+const server = http.createServer(async (req, res) => {
+  if (!req.url) {
+    sendJson(res, 400, { error: 'Bad request' });
+    return;
+  }
+
+  const requestUrl = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`);
+  const path = requestUrl.pathname;
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, JSON_HEADERS);
+    res.end();
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/healthz') {
+    sendJson(res, 200, { ok: true, service: 'wintalent-proxy' });
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/wintalent/resolve') {
+    try {
+      const body = await readJsonBody(req);
+      const interviewUrl = String(body.interviewUrl || '');
+      const lanType = Number(body.lanType || 1);
+      if (!interviewUrl.startsWith('http')) {
+        sendJson(res, 400, { error: 'interviewUrl is required' });
+        return;
+      }
+
+      const flow = await resolvePdfFlow(interviewUrl, lanType);
+      sendJson(res, 200, {
+        ok: true,
+        pdfUrl: flow.pdfUrl,
+        metadata: flow.metadata,
+        debug: {
+          showResumeUrl: flow.showResumeUrl,
+          currentResumeInfoUrl: flow.currentResumeInfoUrl,
+          getResumeDetailTypeUrl: flow.getResumeDetailTypeUrl,
+          tokenizedResumeOriginalUrl: flow.tokenizedResumeOriginalUrl,
+        },
+      });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: String(error?.message || error) });
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/wintalent/download') {
+    try {
+      const body = await readJsonBody(req);
+      const interviewUrl = String(body.interviewUrl || '');
+      const lanType = Number(body.lanType || 1);
+      if (!interviewUrl.startsWith('http')) {
+        sendJson(res, 400, { error: 'interviewUrl is required' });
+        return;
+      }
+
+      const flow = await resolvePdfFlow(interviewUrl, lanType);
+      const file = await streamPdfFromFlow(flow);
+
+      res.writeHead(200, {
+        'Content-Type': file.contentType,
+        'Content-Disposition': file.contentDisposition,
+        'Content-Length': String(file.buffer.length),
+        'Access-Control-Allow-Origin': '*',
+        'X-Wintalent-Pdf-Url': flow.pdfUrl,
+        'X-Wintalent-Resume-Id': flow.metadata.resumeId,
+      });
+      res.end(file.buffer);
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: String(error?.message || error) });
+    }
+    return;
+  }
+
+  sendJson(res, 404, { error: 'Not found' });
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`[wintalent-proxy] listening on http://${HOST}:${PORT}`);
+  console.log('[wintalent-proxy] endpoints:');
+  console.log('  GET  /healthz');
+  console.log('  POST /api/wintalent/resolve');
+  console.log('  POST /api/wintalent/download');
+});
