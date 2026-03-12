@@ -212,8 +212,12 @@ async function requestWithJar(jar, url, options = {}) {
 }
 
 function extractShowResumeUrl(history, fallbackUrl) {
-  const match = history.find((h) => h.url.includes('/interviewPlatform/newpc/jsp/showResume.html'));
-  return match?.url || fallbackUrl;
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    if (history[i].url.includes('/interviewPlatform/newpc/jsp/showResume.html')) {
+      return history[i].url;
+    }
+  }
+  return fallbackUrl;
 }
 
 function getShowResumeParams(showResumeUrl) {
@@ -258,9 +262,14 @@ async function postFormJson(jar, url, formObj, referer) {
 }
 
 async function createTokenizedUrl(jar, createTokenUrl, rawPath, referer) {
+  const createTokenEndpoint = normalizeTokenEndpoint(createTokenUrl);
+  if (!createTokenEndpoint) {
+    throw new Error('createTokenUrl 无效，无法继续 token 链路');
+  }
+
   const json = await postFormJson(
     jar,
-    new URL(createTokenUrl, ORIGIN).toString(),
+    createTokenEndpoint,
     { url: rawPath },
     referer
   );
@@ -268,6 +277,90 @@ async function createTokenizedUrl(jar, createTokenUrl, rawPath, referer) {
     throw new Error(`createToken failed for ${rawPath}`);
   }
   return new URL(json.tokenUrl, ORIGIN).toString();
+}
+
+function decodeMaybeEncodedUrl(value) {
+  let result = value;
+  for (let i = 0; i < 2; i += 1) {
+    try {
+      const decoded = decodeURIComponent(result);
+      if (decoded === result) break;
+      result = decoded;
+    } catch {
+      break;
+    }
+  }
+  return result;
+}
+
+function normalizeTokenEndpoint(rawValue) {
+  if (!rawValue) return null;
+
+  let value = String(rawValue).trim().replace(/^["']|["']$/g, '');
+  if (!value) return null;
+
+  // Common escaping patterns seen in inline script or cookie payloads.
+  value = value.replace(/&amp;/g, '&').replace(/\\u0026/g, '&').replace(/\\\//g, '/');
+  value = decodeMaybeEncodedUrl(value);
+
+  try {
+    return new URL(value, ORIGIN).toString();
+  } catch {
+    return null;
+  }
+}
+
+function extractCreateTokenUrlFromHtml(html) {
+  if (!html) return null;
+
+  const patterns = [
+    /createTokenUrl\s*[:=]\s*['"]([^"'<>]+)['"]/i,
+    /["']createTokenUrl["']\s*:\s*["']([^"']+)["']/i,
+    /createTokenUrl=([^"'&\s<>]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    const tokenEndpoint = normalizeTokenEndpoint(match?.[1] || '');
+    if (tokenEndpoint) return tokenEndpoint;
+  }
+
+  return null;
+}
+
+async function resolveCreateTokenEndpoint(jar, showResumeUrl, entryResponse) {
+  const cookieValue = normalizeTokenEndpoint(jar.getCookie('createTokenUrl'));
+  if (cookieValue) return cookieValue;
+
+  const entryHtml = entryResponse ? await entryResponse.clone().text().catch(() => '') : '';
+  const fromEntry = extractCreateTokenUrlFromHtml(entryHtml);
+  if (fromEntry) return fromEntry;
+
+  const showResumeEntry = await requestWithJar(jar, showResumeUrl, {
+    followRedirects: 2,
+    referer: showResumeUrl,
+  });
+
+  const refreshedCookieValue = normalizeTokenEndpoint(jar.getCookie('createTokenUrl'));
+  if (refreshedCookieValue) return refreshedCookieValue;
+
+  const showResumeHtml = await showResumeEntry.res.text().catch(() => '');
+  return extractCreateTokenUrlFromHtml(showResumeHtml);
+}
+
+function getErrorStatus(error) {
+  const message = String(error?.message || error || '');
+  const lower = message.toLowerCase();
+
+  if (message.includes('interviewUrl is required') || message.includes('Invalid JSON body')) return 400;
+  if (message.includes('showResume') || message.includes('链接可能已失效')) return 400;
+  if (message.includes('未拿到 resumeOriginalInfoUrl') || message.includes('无原始简历权限')) return 403;
+  if (message.includes('未拿到 createTokenUrl') || message.includes('createTokenUrl 无效')) return 401;
+  if (lower.includes('http 401') || lower.includes('unauthorized')) return 401;
+  if (lower.includes('http 403') || lower.includes('forbidden')) return 403;
+  if (lower.includes('http 404')) return 404;
+  if (message.includes('拉取 PDF 失败')) return 502;
+  return 500;
 }
 
 function appendQueryParam(url, key, value) {
@@ -290,7 +383,7 @@ async function resolvePdfFlow(interviewUrl, lanType = 1) {
     throw new Error('无法定位 showResume 页面，链接可能已失效');
   }
 
-  const createTokenUrl = jar.getCookie('createTokenUrl');
+  const createTokenUrl = await resolveCreateTokenEndpoint(jar, showResumeUrl, entry.res);
   if (!createTokenUrl) {
     throw new Error('未拿到 createTokenUrl Cookie，无法继续 token 链路');
   }
@@ -474,7 +567,7 @@ const server = http.createServer(async (req, res) => {
         },
       });
     } catch (error) {
-      sendJson(res, 500, { ok: false, error: String(error?.message || error) });
+      sendJson(res, getErrorStatus(error), { ok: false, error: String(error?.message || error) });
     }
     return;
   }
@@ -502,7 +595,7 @@ const server = http.createServer(async (req, res) => {
       });
       res.end(file.buffer);
     } catch (error) {
-      sendJson(res, 500, { ok: false, error: String(error?.message || error) });
+      sendJson(res, getErrorStatus(error), { ok: false, error: String(error?.message || error) });
     }
     return;
   }
