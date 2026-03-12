@@ -49,7 +49,11 @@ export const testAIApiKey = async (
     }
 
     const data = await response.json();
-    if (data.choices?.[0]?.message?.content) {
+    const firstChoice = data.choices?.[0];
+    const hasAssistantMessage = firstChoice?.message?.role === 'assistant';
+    const hasCompletion = typeof firstChoice?.finish_reason === 'string' || hasAssistantMessage;
+
+    if (hasCompletion) {
       return { success: true, message: `Connected successfully (${model})` };
     }
     return { success: false, message: 'Unexpected response from API' };

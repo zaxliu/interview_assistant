@@ -19,10 +19,12 @@ server {
 
     # AI API proxy - target URL from environment variable
     location /api/ai/ {
-        rewrite ^/api/ai/(.*)$ /v1/$1 break;
-
-        proxy_pass ${VITE_AI_BASE_URL};
+        proxy_pass ${VITE_AI_BASE_URL}/;
+        proxy_http_version 1.1;
         proxy_ssl_server_name on;
+        proxy_ssl_name $proxy_host;
+        proxy_set_header Host $proxy_host;
+        proxy_set_header Connection "";
 
         # Pass through auth header from browser
         proxy_pass_header Authorization;
@@ -39,9 +41,7 @@ server {
 
     # Feishu API proxy
     location /api/feishu/ {
-        rewrite ^/api/feishu/(.*)$ /open-apis/$1 break;
-
-        proxy_pass https://open.feishu.cn;
+        proxy_pass https://open.feishu.cn/open-apis/;
         proxy_ssl_server_name on;
 
         proxy_pass_header Authorization;

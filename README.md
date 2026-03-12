@@ -57,9 +57,9 @@ A web-based interview assistant that helps interviewers prepare for interviews, 
 |----------|-------------|---------|
 | `VITE_AI_API_KEY` | Your AI provider API key | Required |
 | `VITE_AI_MODEL` | Model to use | `gpt-4` |
-| `VITE_AI_BASE_URL` | AI provider URL | `https://api.openai.com` |
+| `VITE_AI_BASE_URL` | AI provider base URL, including OpenAI-compatible prefix such as `/v1` | `https://api.openai.com/v1` |
 
-**Note**: The AI provider URL is configured server-side via environment variables, not in browser settings. API keys are stored in browser localStorage and sent with each request.
+**Note**: The AI provider URL is configured server-side via environment variables, not in browser settings. It should point to the OpenAI-compatible API root, for example `https://api.openai.com/v1` or `https://api.openai-proxy.org/v1`. API keys are stored in browser localStorage and sent with each request.
 
 ### Feishu Configuration
 

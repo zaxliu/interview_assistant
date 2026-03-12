@@ -30,6 +30,10 @@ const getDefaultSettings = () => ({
   interviewSplitRatio: 0.5,
 });
 
+const preferEnvString = (envValue: string, storedValue?: string): string => {
+  return envValue || storedValue || '';
+};
+
 const persistSettings = (state: SettingsState) => {
   const settings: Settings & { feishuUser: User | null; interviewSplitRatio: number } = {
     aiApiKey: state.aiApiKey,
@@ -84,10 +88,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const defaults = getDefaultSettings();
 
       set({
-        aiApiKey: data.aiApiKey || defaults.aiApiKey,
-        aiModel: data.aiModel || defaults.aiModel,
-        feishuAppId: data.feishuAppId || defaults.feishuAppId,
-        feishuAppSecret: data.feishuAppSecret || defaults.feishuAppSecret,
+        aiApiKey: preferEnvString(defaults.aiApiKey, data.aiApiKey),
+        aiModel: preferEnvString(defaults.aiModel, data.aiModel),
+        feishuAppId: preferEnvString(defaults.feishuAppId, data.feishuAppId),
+        feishuAppSecret: preferEnvString(defaults.feishuAppSecret, data.feishuAppSecret),
         feishuUserAccessToken: data.feishuUserAccessToken || '',
         feishuRefreshToken: data.feishuRefreshToken || '',
         automationServiceUrl: data.automationServiceUrl || defaults.automationServiceUrl,

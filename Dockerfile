@@ -19,12 +19,15 @@ ENV VITE_FEISHU_APP_SECRET=$VITE_FEISHU_APP_SECRET
 RUN npm run build
 
 # Stage 2: Serve with nginx
-FROM nginx:alpine
+FROM nginx:stable
 
-# Copy template - nginx:alpine automatically processes templates in /etc/nginx/templates/
+# Copy template - nginx image automatically processes templates in /etc/nginx/templates/
 # using envsubst when the container starts
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY docker-entrypoint.sh /usr/local/bin/app-entrypoint.sh
+RUN chmod +x /usr/local/bin/app-entrypoint.sh
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 EXPOSE 80
+ENTRYPOINT ["/usr/local/bin/app-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]

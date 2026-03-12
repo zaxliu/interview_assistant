@@ -5,7 +5,7 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const aiBaseUrl = env.VITE_AI_BASE_URL || 'https://api.openai.com'
+  const aiBaseUrl = (env.VITE_AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '')
 
   return {
     plugins: [react()],
@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => {
         '/api/ai': {
           target: aiBaseUrl,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/ai/, '/v1'),
+          rewrite: (requestPath) => requestPath.replace(/^\/api\/ai/, ''),
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq, req) => {
               // Log large requests for debugging

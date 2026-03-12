@@ -10,6 +10,10 @@ services:
         VITE_FEISHU_APP_SECRET: ${VITE_FEISHU_APP_SECRET}
     environment:
       - VITE_AI_BASE_URL=${VITE_AI_BASE_URL:-https://api.openai.com}
+      - HTTP_PROXY=${DOCKER_HTTP_PROXY:-http://host.docker.internal:7890}
+      - HTTPS_PROXY=${DOCKER_HTTPS_PROXY:-http://host.docker.internal:7890}
+      - ALL_PROXY=${DOCKER_ALL_PROXY:-http://host.docker.internal:7890}
+      - NO_PROXY=${DOCKER_NO_PROXY:-localhost,127.0.0.1,host.docker.internal}
     ports:
       - "3000:80"
     restart: unless-stopped
