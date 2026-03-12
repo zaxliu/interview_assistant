@@ -28,9 +28,26 @@ const InterviewPage = lazy(() => import('@/pages/InterviewPage'));
 const SummaryPage = lazy(() => import('@/pages/SummaryPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 
-const getBackTarget = (pathname: string, positionId?: string, candidateId?: string): string | null => {
+const getSettingsFrom = (state: unknown): string | undefined => {
+  if (!state || typeof state !== 'object') return undefined;
+
+  const from = (state as { from?: unknown }).from;
+  return typeof from === 'string' ? from : undefined;
+};
+
+const getBackTarget = (
+  pathname: string,
+  positionId?: string,
+  candidateId?: string,
+  settingsFrom?: string
+): string | null => {
   if (pathname === '/') return null;
-  if (pathname === '/settings') return '/';
+  if (pathname === '/settings') {
+    if (settingsFrom && settingsFrom !== '/settings') {
+      return settingsFrom;
+    }
+    return '/';
+  }
   if (pathname === '/positions/new') return '/';
   if (pathname.endsWith('/summary') && positionId && candidateId) {
     return `/positions/${positionId}/candidates/${candidateId}/interview`;
@@ -76,7 +93,13 @@ const AppHeader = () => {
   const isInterviewRoute = location.pathname.endsWith('/interview');
   const isWideLayout = isInterviewRoute;
   const containerClass = isWideLayout ? 'w-full' : 'max-w-4xl mx-auto';
-  const backTarget = getBackTarget(location.pathname, params.positionId, params.candidateId);
+  const settingsFrom = getSettingsFrom(location.state);
+  const backTarget = getBackTarget(
+    location.pathname,
+    params.positionId,
+    params.candidateId,
+    settingsFrom
+  );
   const showPdf = searchParams.get('resume') !== 'hidden';
 
   const toggleResume = () => {
@@ -142,7 +165,21 @@ const AppHeader = () => {
             </>
           )}
           {location.pathname === '/' && isAuthenticated && <CalendarSync />}
-          <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (location.pathname === '/settings') {
+                if (backTarget) {
+                  navigate(backTarget);
+                }
+                return;
+              }
+              navigate('/settings', {
+                state: { from: `${location.pathname}${location.search}${location.hash}` },
+              });
+            }}
+          >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
