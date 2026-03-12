@@ -72,10 +72,14 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
   const { isLoading: feishuLoading, createDoc } = useFeishuCalendar();
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [latestDocUrl, setLatestDocUrl] = useState<string | null>(null);
+  const [copyDocUrlSuccess, setCopyDocUrlSuccess] = useState(false);
 
   const handleFeishuExport = async () => {
     const response = await createDoc(result, candidateName, positionTitle);
     if (response.success && response.docUrl) {
+      setLatestDocUrl(response.docUrl);
+      setCopyDocUrlSuccess(false);
       window.open(response.docUrl, '_blank');
     } else if (!response.success) {
       alert(`导出到飞书失败：${response.message}`);
@@ -93,23 +97,59 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
     }
   };
 
+  const handleCopyDocUrl = async () => {
+    if (!latestDocUrl) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(latestDocUrl);
+      setCopyDocUrlSuccess(true);
+      setTimeout(() => setCopyDocUrlSuccess(false), 2000);
+    } catch (err) {
+      console.error('复制文档链接失败:', err);
+    }
+  };
+
   const markdown = formatAsMarkdown(result, candidateName, positionTitle);
 
   return (
     <>
-      <div className="flex gap-2">
-        <Button
-          variant="secondary"
-          onClick={() => setShowCopyModal(true)}
-        >
-          复制 Markdown
-        </Button>
-        <Button
-          onClick={handleFeishuExport}
-          isLoading={feishuLoading}
-        >
-          导出到飞书
-        </Button>
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setShowCopyModal(true)}
+          >
+            复制 Markdown
+          </Button>
+          <Button
+            onClick={handleFeishuExport}
+            isLoading={feishuLoading}
+          >
+            导出到飞书
+          </Button>
+        </div>
+
+        {latestDocUrl && (
+          <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800 flex flex-wrap items-center gap-2">
+            <span className="font-medium">已导出到飞书：</span>
+            <a
+              href={latestDocUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline break-all text-green-700 hover:text-green-900"
+            >
+              {latestDocUrl}
+            </a>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleCopyDocUrl}
+            >
+              {copyDocUrlSuccess ? '已复制' : '复制链接'}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Copy Modal */}

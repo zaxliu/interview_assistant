@@ -16,7 +16,7 @@ let cachedToken: FeishuToken | null = null;
 
 /**
  * Generate OAuth authorization URL.
- * Includes calendar + docx read scopes for interview sync and meeting-notes import.
+ * Includes calendar + docx read/write scopes for sync, meeting-notes import and export.
  */
 export const getOAuthAuthorizationUrl = (
   appId: string,
@@ -24,7 +24,7 @@ export const getOAuthAuthorizationUrl = (
   state?: string
 ): string => {
   // Space-separated scopes, following Feishu OAuth convention.
-  const scope = 'calendar:calendar:readonly docx:document:readonly';
+  const scope = 'calendar:calendar:readonly docx:document:readonly docx:document';
 
   const params = new URLSearchParams({
     app_id: appId,
@@ -482,6 +482,184 @@ export const syncInterviewsFromCalendar = async (
 /**
  * Create a Feishu Doc with interview result
  */
+interface FeishuApiError extends Error {
+  status?: number;
+  code?: number | string;
+}
+
+const toObjectRecord = (value: unknown): Record<string, unknown> | null => {
+  if (typeof value === 'object' && value !== null) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+};
+
+const toFeishuApiError = (
+  error: unknown,
+  fallbackMessage: string
+): FeishuApiError => {
+  if (error instanceof Error) {
+    return error as FeishuApiError;
+  }
+  return new Error(fallbackMessage) as FeishuApiError;
+};
+
+const extractFeishuCode = (payload: Record<string, unknown> | null): number | string | undefined => {
+  if (!payload) {
+    return undefined;
+  }
+  const code = payload.code;
+  if (typeof code === 'number' || typeof code === 'string') {
+    return code;
+  }
+  return undefined;
+};
+
+const extractFeishuMessage = (
+  payload: Record<string, unknown> | null,
+  fallbackMessage: string
+): string => {
+  if (!payload) {
+    return fallbackMessage;
+  }
+
+  if (typeof payload.msg === 'string' && payload.msg.trim()) {
+    return payload.msg.trim();
+  }
+
+  const nestedError = toObjectRecord(payload.error);
+  if (nestedError && typeof nestedError.message === 'string' && nestedError.message.trim()) {
+    return nestedError.message.trim();
+  }
+
+  return fallbackMessage;
+};
+
+const formatFeishuMessageWithCode = (
+  payload: Record<string, unknown> | null,
+  fallbackMessage: string
+): string => {
+  const message = extractFeishuMessage(payload, fallbackMessage);
+  const code = extractFeishuCode(payload);
+  if (code !== undefined) {
+    return `${message} (code: ${code})`;
+  }
+  return message;
+};
+
+const createFeishuApiError = (
+  message: string,
+  status?: number,
+  code?: number | string
+): FeishuApiError => {
+  const error = new Error(message) as FeishuApiError;
+  error.status = status;
+  error.code = code;
+  return error;
+};
+
+const isPermissionRelatedError = (error: FeishuApiError): boolean => {
+  if (error.status === 401 || error.status === 403) {
+    return true;
+  }
+
+  const scope = `${String(error.code ?? '')} ${error.message}`.toLowerCase();
+  const permissionKeywords = [
+    'permission',
+    'forbidden',
+    'scope',
+    'unauthorized',
+    'access denied',
+    'no permission',
+    'insufficient scope',
+    '无权限',
+    '权限不足',
+    '没有权限',
+    '访问被拒绝',
+  ];
+
+  return permissionKeywords.some((keyword) => scope.includes(keyword));
+};
+
+const createFeishuDocWithToken = async (
+  accessToken: string,
+  result: InterviewResult,
+  candidateName: string,
+  positionTitle: string
+): Promise<string> => {
+  const createResponse = await fetch('/api/feishu/docx/v1/documents', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      title: `面试结果 - ${candidateName} - ${positionTitle}`,
+    }),
+  });
+  const createPayload = toObjectRecord(await createResponse.json().catch(() => null));
+
+  if (!createResponse.ok) {
+    const code = extractFeishuCode(createPayload);
+    throw createFeishuApiError(
+      `创建飞书文档失败：${formatFeishuMessageWithCode(createPayload, `HTTP ${createResponse.status}`)} (HTTP ${createResponse.status})`,
+      createResponse.status,
+      code
+    );
+  }
+
+  const createCode = extractFeishuCode(createPayload);
+  if (createCode !== 0) {
+    throw createFeishuApiError(
+      `创建飞书文档失败：${formatFeishuMessageWithCode(createPayload, '未知飞书 API 错误')}`,
+      createResponse.status,
+      createCode
+    );
+  }
+
+  const createData = toObjectRecord(createPayload?.data);
+  const document = toObjectRecord(createData?.document);
+  const documentIdRaw = document?.document_id;
+  if (typeof documentIdRaw !== 'string' || !documentIdRaw.trim()) {
+    throw createFeishuApiError('创建飞书文档失败：响应中缺少 document_id');
+  }
+  const documentId = documentIdRaw.trim();
+
+  const blocks = formatResultAsBlocks(result);
+  const batchResponse = await fetch(`/api/feishu/docx/v1/documents/${documentId}/blocks/${documentId}/children/batch_create`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      children: blocks,
+      index: 0,
+    }),
+  });
+  const batchPayload = toObjectRecord(await batchResponse.json().catch(() => null));
+
+  if (!batchResponse.ok) {
+    const code = extractFeishuCode(batchPayload);
+    throw createFeishuApiError(
+      `写入飞书文档内容失败：${formatFeishuMessageWithCode(batchPayload, `HTTP ${batchResponse.status}`)} (HTTP ${batchResponse.status})`,
+      batchResponse.status,
+      code
+    );
+  }
+
+  const batchCode = extractFeishuCode(batchPayload);
+  if (batchCode !== 0) {
+    throw createFeishuApiError(
+      `写入飞书文档内容失败：${formatFeishuMessageWithCode(batchPayload, '未知飞书 API 错误')}`,
+      batchResponse.status,
+      batchCode
+    );
+  }
+
+  return documentId;
+};
+
 export const createFeishuDoc = async (
   result: InterviewResult,
   candidateName: string,
@@ -490,58 +668,58 @@ export const createFeishuDoc = async (
   appId?: string,
   appSecret?: string
 ): Promise<{ success: boolean; message: string; docUrl?: string }> => {
+  const normalizedUserToken = userAccessToken?.trim();
+  const canFallbackToTenantToken = Boolean(appId && appSecret);
+  let userPermissionError: FeishuApiError | null = null;
+
   try {
-    const accessToken = await getAccessToken(userAccessToken, appId, appSecret);
-
-    // Create document
-    const createResponse = await fetch('/api/feishu/docx/v1/documents', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        title: `面试结果 - ${candidateName} - ${positionTitle}`,
-      }),
-    });
-
-    if (!createResponse.ok) {
-      throw new Error('创建飞书文档失败');
+    if (normalizedUserToken) {
+      try {
+        const documentId = await createFeishuDocWithToken(normalizedUserToken, result, candidateName, positionTitle);
+        return {
+          success: true,
+          message: '已成功创建飞书文档',
+          docUrl: `https://feishu.cn/docx/${documentId}`,
+        };
+      } catch (error) {
+        const tokenError = toFeishuApiError(error, '创建飞书文档失败');
+        if (!isPermissionRelatedError(tokenError)) {
+          throw tokenError;
+        }
+        if (!canFallbackToTenantToken) {
+          throw createFeishuApiError(
+            `${tokenError.message}。请在设置中补全 App ID 与 App Secret，或重新登录飞书刷新授权范围。`,
+            tokenError.status,
+            tokenError.code
+          );
+        }
+        userPermissionError = tokenError;
+      }
     }
 
-    const createData = await createResponse.json();
-
-    if (createData.code !== 0) {
-      throw new Error(createData.msg || '创建飞书文档失败');
+    if (!normalizedUserToken && !canFallbackToTenantToken) {
+      throw createFeishuApiError('缺少飞书访问凭证，请先登录飞书或配置 App ID / App Secret。');
     }
 
-    const documentId = createData.data?.document?.document_id;
-
-    // Add content blocks
-    const blocks = formatResultAsBlocks(result);
-
-    await fetch(`/api/feishu/docx/v1/documents/${documentId}/blocks/${documentId}/children/batch_create`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        children: blocks,
-        index: 0,
-      }),
-    });
+    const tenantToken = await getAccessToken(undefined, appId, appSecret);
+    const documentId = await createFeishuDocWithToken(tenantToken, result, candidateName, positionTitle);
 
     return {
       success: true,
-      message: '已成功创建飞书文档',
+      message: userPermissionError
+        ? '用户 token 缺少导出权限，已自动回退到应用凭证完成导出。'
+        : '已成功创建飞书文档',
       docUrl: `https://feishu.cn/docx/${documentId}`,
     };
   } catch (error) {
+    const finalError = toFeishuApiError(error, '创建飞书文档失败');
+    const message = userPermissionError
+      ? `用户 token 导出失败：${userPermissionError.message}；回退租户 token 失败：${finalError.message}`
+      : finalError.message;
     console.error('Feishu doc creation error:', error);
     return {
       success: false,
-      message: error instanceof Error ? error.message : '创建飞书文档失败',
+      message,
     };
   }
 };
