@@ -56,6 +56,48 @@ describe('ai api parsing', () => {
     ).resolves.toEqual([]);
   });
 
+  it('tops up generated questions when first response count is too low', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '```json\n[{"text":"讲讲你在项目A里的职责","source":"resume","evaluationDimension":"专业能力","context":"项目A"},{"text":"为什么想加入我们团队？","source":"common","evaluationDimension":"适配度","context":""}]\n```',
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '```json\n{"questions":[{"text":"讲讲你在项目A里的职责","source":"resume","evaluationDimension":"专业能力","context":"项目A"},{"text":"如何做线上故障定位？","source":"coding","evaluationDimension":"专业能力","context":""},{"text":"你如何权衡交付质量和速度？","source":"jd","evaluationDimension":"通用素质","context":"快速交付"},{"text":"遇到跨团队协作冲突你怎么处理？","source":"common","evaluationDimension":"通用素质","context":""},{"text":"为什么选择这份工作？","source":"common","evaluationDimension":"适配度","context":""},{"text":"描述一次复杂问题拆解过程","source":"resume","evaluationDimension":"专业能力","context":"复杂系统"},{"text":"你如何推动项目落地？","source":"jd","evaluationDimension":"通用素质","context":"推动执行"},{"text":"未来两年职业规划是什么？","source":"common","evaluationDimension":"适配度","context":""}]}\n```',
+              },
+            },
+          ],
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const questions = await generateQuestions(
+      { apiKey: 'key', model: 'model' },
+      'JD',
+      'Resume',
+      []
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(questions.length).toBeGreaterThanOrEqual(8);
+    expect(new Set(questions.map((q) => q.text)).size).toBe(questions.length);
+  });
+
   it('processes resume text into markdown and highlights', async () => {
     vi.stubGlobal(
       'fetch',

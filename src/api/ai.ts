@@ -59,6 +59,115 @@ const extractJsonFromModelContent = (content: string): string => {
   return content;
 };
 
+interface GeneratedQuestionPayloadItem {
+  text?: string;
+  source?: string;
+  evaluationDimension?: string;
+  evaluation_dimension?: string;
+  context?: string;
+}
+
+interface GeneratedQuestionDraft {
+  text: string;
+  source: QuestionSource;
+  evaluationDimension: EvaluationDimensionName;
+  context: string;
+}
+
+const MIN_GENERATED_QUESTION_COUNT = 8;
+const MAX_GENERATED_QUESTION_COUNT = 12;
+
+const normalizeQuestionTextKey = (text: string): string =>
+  text.trim().toLowerCase().replace(/\s+/g, ' ');
+
+const parseGeneratedQuestionDrafts = (content: string): GeneratedQuestionDraft[] => {
+  try {
+    const parsed = JSON.parse(extractJsonFromModelContent(content)) as unknown;
+    const items: unknown[] = Array.isArray(parsed)
+      ? parsed
+      : (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        Array.isArray((parsed as { questions?: unknown[] }).questions)
+      )
+        ? (parsed as { questions: unknown[] }).questions
+        : [];
+
+    return items
+      .map((item) => {
+        if (!item || typeof item !== 'object') {
+          return null;
+        }
+        const payload = item as GeneratedQuestionPayloadItem;
+        const text = payload.text?.trim() || '';
+        if (!text) {
+          return null;
+        }
+
+        const rawDimension = payload.evaluationDimension || payload.evaluation_dimension;
+        return {
+          text,
+          source: normalizeQuestionSource(payload.source?.trim()),
+          evaluationDimension: normalizeEvaluationDimension(rawDimension?.trim()),
+          context: payload.context?.trim() || '',
+        } satisfies GeneratedQuestionDraft;
+      })
+      .filter((item): item is GeneratedQuestionDraft => Boolean(item));
+  } catch (error) {
+    console.error('Failed to parse AI response:', content, error);
+    return [];
+  }
+};
+
+const dedupeGeneratedQuestionDrafts = (drafts: GeneratedQuestionDraft[]): GeneratedQuestionDraft[] => {
+  const seen = new Set<string>();
+  const deduped: GeneratedQuestionDraft[] = [];
+
+  for (const draft of drafts) {
+    const key = normalizeQuestionTextKey(draft.text);
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(draft);
+    if (deduped.length >= MAX_GENERATED_QUESTION_COUNT) {
+      break;
+    }
+  }
+
+  return deduped;
+};
+
+const requestAICompletionContent = async (
+  config: AIServiceConfig,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<string> => {
+  const response = await fetch('/api/ai/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 2400,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI API 错误：${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '[]';
+};
+
 /**
  * Test AI API key by making a simple request
  */
@@ -180,55 +289,44 @@ ${criteriaSection}
 \`\`\`
 
 只返回JSON数组，不要包含其他文字。`;
+  const questionGenerationSystemPrompt = '你是一位专业的面试官，擅长根据职位需求和候选人背景设计面试问题。请确保返回有效的JSON格式。';
+  const firstPassContent = await requestAICompletionContent(config, questionGenerationSystemPrompt, prompt);
+  let drafts = parseGeneratedQuestionDrafts(firstPassContent);
 
-  // Use proxy endpoint instead of configurable base URL
-  const response = await fetch('/api/ai/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: 'system', content: '你是一位专业的面试官，擅长根据职位需求和候选人背景设计面试问题。请确保返回有效的JSON格式。' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.7,
-    }),
-  });
+  if (drafts.length < MIN_GENERATED_QUESTION_COUNT) {
+    const existingQuestionList = drafts.length > 0
+      ? drafts.map((item, index) => `${index + 1}. ${item.text}`).join('\n')
+      : '（无可用问题）';
 
-  if (!response.ok) {
-    throw new Error(`AI API 错误：${response.statusText}`);
+    const topUpPrompt = `你刚才生成的问题数量不足（当前 ${drafts.length} 个）。请补齐并返回最终完整列表，要求如下：
+- 总数必须为 8-12 个
+- 问题不能重复
+- 必须覆盖 专业能力 / 通用素质 / 适配度（管理能力按岗位需要）
+- 输出格式仍为 JSON 数组，字段与之前完全一致
+
+已有问题：
+${existingQuestionList}
+
+请给出补齐后的最终 JSON 数组（可重排）。`;
+
+    const topUpContent = await requestAICompletionContent(config, questionGenerationSystemPrompt, topUpPrompt);
+    const topUpDrafts = parseGeneratedQuestionDrafts(topUpContent);
+    drafts = dedupeGeneratedQuestionDrafts([...drafts, ...topUpDrafts]);
+  } else {
+    drafts = dedupeGeneratedQuestionDrafts(drafts);
   }
 
-  const data = await response.json();
-  const content = data.choices[0]?.message?.content || '[]';
-
-  try {
-    // Extract JSON from code block if present
-    let jsonContent = content;
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      jsonContent = jsonMatch[1];
-    }
-
-    const questions = JSON.parse(jsonContent);
-    return questions.map((q: { text: string; source: string; evaluationDimension: string; context?: string }, index: number) => ({
-      id: `ai-q-${Date.now()}-${index}`,
-      text: q.text,
-      source: (q.source || 'common') as QuestionSource,
-      evaluationDimension: (q.evaluationDimension || '专业能力') as EvaluationDimensionName,
-      context: q.context || '',  // Text from resume/JD that this question is based on
-      category: q.source || 'common', // Keep for backward compatibility
-      isAIGenerated: true,
-      notes: '',
-      status: 'not_reached' as const,
-    }));
-  } catch (e) {
-    console.error('Failed to parse AI response:', content, e);
-    return [];
-  }
+  return drafts.map((draft, index) => ({
+    id: `ai-q-${Date.now()}-${index}`,
+    text: draft.text,
+    source: draft.source,
+    evaluationDimension: draft.evaluationDimension,
+    context: draft.context,
+    category: draft.source,
+    isAIGenerated: true,
+    notes: '',
+    status: 'not_reached' as const,
+  }));
 };
 
 export const processResumeText = async (
