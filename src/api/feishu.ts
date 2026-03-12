@@ -15,15 +15,16 @@ interface OAuthTokens {
 let cachedToken: FeishuToken | null = null;
 
 /**
- * Generate OAuth authorization URL with calendar scope
+ * Generate OAuth authorization URL.
+ * Includes calendar + docx read scopes for interview sync and meeting-notes import.
  */
 export const getOAuthAuthorizationUrl = (
   appId: string,
   redirectUri: string,
   state?: string
 ): string => {
-  // Request calendar readonly permission
-  const scope = 'calendar:calendar:readonly';
+  // Space-separated scopes, following Feishu OAuth convention.
+  const scope = 'calendar:calendar:readonly docx:document:readonly';
 
   const params = new URLSearchParams({
     app_id: appId,
@@ -543,6 +544,142 @@ export const createFeishuDoc = async (
       message: error instanceof Error ? error.message : 'Failed to create Feishu document',
     };
   }
+};
+
+export interface FeishuDocRawContent {
+  documentId: string;
+  title: string;
+  content: string;
+}
+
+const parseFeishuError = async (response: Response): Promise<string> => {
+  try {
+    const data = await response.json();
+    const code = data?.code;
+    const msg = data?.msg || data?.error?.message || 'Unknown Feishu API error';
+    if (code) {
+      return `${msg} (code: ${code})`;
+    }
+    return msg;
+  } catch {
+    return `HTTP ${response.status}`;
+  }
+};
+
+const fetchDocRawContentWithToken = async (
+  docToken: string,
+  accessToken: string
+): Promise<{ content: string; title: string }> => {
+  const headers = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+
+  const rawContentResponse = await fetch(`/api/feishu/docx/v1/documents/${docToken}/raw_content`, {
+    method: 'GET',
+    headers,
+  });
+
+  if (!rawContentResponse.ok) {
+    throw new Error(await parseFeishuError(rawContentResponse));
+  }
+
+  const rawContentData = await rawContentResponse.json();
+  if (rawContentData.code !== 0) {
+    throw new Error(rawContentData.msg || 'Failed to fetch Feishu doc content');
+  }
+
+  const content = rawContentData.data?.content;
+  if (typeof content !== 'string') {
+    throw new Error('Feishu doc content is empty or invalid');
+  }
+
+  let title = docToken;
+  const documentResponse = await fetch(`/api/feishu/docx/v1/documents/${docToken}`, {
+    method: 'GET',
+    headers,
+  });
+  if (documentResponse.ok) {
+    const documentData = await documentResponse.json();
+    const fetchedTitle = documentData.data?.document?.title;
+    if (documentData.code === 0 && typeof fetchedTitle === 'string' && fetchedTitle.trim()) {
+      title = fetchedTitle.trim();
+    }
+  }
+
+  return { content, title };
+};
+
+export const extractFeishuDocTokenFromUrl = (docUrl: string): string | null => {
+  if (!docUrl) {
+    return null;
+  }
+
+  const fromPath = (value: string): string | null => {
+    const match = value.match(/\/(?:docx|wiki)\/([A-Za-z0-9]+)/i);
+    return match?.[1] || null;
+  };
+
+  try {
+    const parsed = new URL(docUrl.trim());
+    const token = fromPath(parsed.pathname);
+    if (token) {
+      return token;
+    }
+  } catch {
+    // Fall back to regex extraction from raw string when URL constructor fails.
+  }
+
+  return fromPath(docUrl.trim());
+};
+
+/**
+ * Fetch Feishu doc raw content by doc/wiki link.
+ * Wiki links are treated as doc tokens when possible.
+ */
+export const getFeishuDocRawContentFromLink = async (
+  docUrl: string,
+  userAccessToken?: string,
+  appId?: string,
+  appSecret?: string
+): Promise<FeishuDocRawContent> => {
+  const docToken = extractFeishuDocTokenFromUrl(docUrl);
+  if (!docToken) {
+    throw new Error('Invalid Feishu doc link. Expected /docx/{token} or /wiki/{token}.');
+  }
+
+  const tokensToTry: string[] = [];
+  if (userAccessToken?.trim()) {
+    tokensToTry.push(userAccessToken.trim());
+  }
+  if (appId && appSecret) {
+    const tenantToken = await getAccessToken(undefined, appId, appSecret);
+    if (tenantToken && !tokensToTry.includes(tenantToken)) {
+      tokensToTry.push(tenantToken);
+    }
+  }
+  if (!tokensToTry.length) {
+    throw new Error('Missing Feishu access token. Please login with Feishu or configure app credentials.');
+  }
+
+  const errors: string[] = [];
+  for (const token of tokensToTry) {
+    try {
+      const doc = await fetchDocRawContentWithToken(docToken, token);
+      return {
+        documentId: docToken,
+        title: doc.title,
+        content: doc.content,
+      };
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  throw new Error(
+    `Failed to read Feishu document. ${errors.join(' | ')}. ` +
+    'If you just updated OAuth scopes, please logout/login again to refresh user token permissions.'
+  );
 };
 
 /**

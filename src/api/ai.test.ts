@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateQuestions, processResumeText } from './ai';
+import { extractMeetingNotesInsights, generateQuestions, processResumeText } from './ai';
 
 describe('ai api parsing', () => {
   beforeEach(() => {
@@ -84,5 +84,81 @@ describe('ai api parsing', () => {
         keywords: ['Go', 'Redis'],
       },
     });
+  });
+
+  it('extracts matched answers and new qa from meeting notes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '```json\n{"matched_answers":[{"question_id":"q-1","answer":"讲了 checkpoint 自动恢复","evidence":"提到异常后加载 checkpoint"}],"new_qa":[{"question":"如何做故障节点隔离？","answer":"打污点并迁移任务","source":"coding","evaluation_dimension":"专业能力"}]}\n```',
+              },
+            },
+          ],
+        }),
+      })
+    );
+
+    const result = await extractMeetingNotesInsights(
+      { apiKey: 'key', model: 'model' },
+      [{ id: 'q-1', text: '如何保障训练稳定性？', source: 'common', isAIGenerated: true, status: 'not_reached' }],
+      'meeting notes'
+    );
+
+    expect(result.matchedAnswers).toEqual([
+      {
+        questionId: 'q-1',
+        answer: '讲了 checkpoint 自动恢复',
+        evidence: '提到异常后加载 checkpoint',
+      },
+    ]);
+    expect(result.newQAs).toEqual([
+      {
+        question: '如何做故障节点隔离？',
+        answer: '打污点并迁移任务',
+        source: 'coding',
+        evaluationDimension: '专业能力',
+      },
+    ]);
+  });
+
+  it('drops extracted matched answers that do not map to existing question ids', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '{"matched_answers":[{"question_id":"unknown","answer":"something"}],"new_qa":[{"question":"Q","answer":"A","source":"unknown","evaluation_dimension":"unknown"}]}',
+              },
+            },
+          ],
+        }),
+      })
+    );
+
+    const result = await extractMeetingNotesInsights(
+      { apiKey: 'key', model: 'model' },
+      [{ id: 'q-1', text: 'existing', source: 'common', isAIGenerated: true, status: 'not_reached' }],
+      'meeting notes'
+    );
+
+    expect(result.matchedAnswers).toEqual([]);
+    expect(result.newQAs).toEqual([
+      {
+        question: 'Q',
+        answer: 'A',
+        source: 'common',
+        evaluationDimension: '专业能力',
+      },
+    ]);
   });
 });

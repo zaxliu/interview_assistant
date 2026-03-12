@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
-import { generateQuestions, generateSummary } from '@/api/ai';
+import { extractMeetingNotesInsights, generateQuestions, generateSummary } from '@/api/ai';
 import { useSettingsStore } from '@/store/settingsStore';
 import type { Question, InterviewResult, CodingChallenge } from '@/types';
+import type { MeetingNotesExtractionResult } from '@/api/ai';
 
 export const useAI = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -77,10 +78,40 @@ export const useAI = () => {
     [aiApiKey, aiModel]
   );
 
+  const extractInterviewNotesInsights = useCallback(
+    async (
+      existingQuestions: Question[],
+      meetingNotesContent: string
+    ): Promise<MeetingNotesExtractionResult | null> => {
+      if (!aiApiKey) {
+        setError('AI API key not configured');
+        return null;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        return await extractMeetingNotesInsights(
+          { apiKey: aiApiKey, model: aiModel },
+          existingQuestions,
+          meetingNotesContent
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to extract insights from notes');
+        return null;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [aiApiKey, aiModel]
+  );
+
   return {
     isLoading,
     error,
     generateInterviewQuestions,
     generateInterviewSummary,
+    extractInterviewNotesInsights,
   };
 };

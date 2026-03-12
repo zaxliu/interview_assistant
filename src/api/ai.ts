@@ -19,6 +19,46 @@ interface ResumeProcessingResult {
   highlights: ResumeHighlights;
 }
 
+export interface ExtractedMatchedAnswer {
+  questionId: string;
+  answer: string;
+  evidence?: string;
+}
+
+export interface ExtractedNewQA {
+  question: string;
+  answer: string;
+  source: QuestionSource;
+  evaluationDimension: EvaluationDimensionName;
+}
+
+export interface MeetingNotesExtractionResult {
+  matchedAnswers: ExtractedMatchedAnswer[];
+  newQAs: ExtractedNewQA[];
+}
+
+const normalizeQuestionSource = (source?: string): QuestionSource => {
+  if (source === 'resume' || source === 'jd' || source === 'coding') {
+    return source;
+  }
+  return 'common';
+};
+
+const normalizeEvaluationDimension = (dimension?: string): EvaluationDimensionName => {
+  if (dimension === '专业能力' || dimension === '通用素质' || dimension === '适配度' || dimension === '管理能力') {
+    return dimension;
+  }
+  return '专业能力';
+};
+
+const extractJsonFromModelContent = (content: string): string => {
+  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch) {
+    return jsonMatch[1];
+  }
+  return content;
+};
+
 /**
  * Test AI API key by making a simple request
  */
@@ -269,6 +309,137 @@ ${rawText}`;
     return {
       markdown: normalizeMarkdownText(rawText),
       highlights: emptyResumeHighlights(),
+    };
+  }
+};
+
+/**
+ * Extract answers for existing questions and discover new Q&A from meeting notes.
+ */
+export const extractMeetingNotesInsights = async (
+  config: AIServiceConfig,
+  existingQuestions: Question[],
+  meetingNotesContent: string
+): Promise<MeetingNotesExtractionResult> => {
+  const normalizedQuestions = existingQuestions.map((question) => ({
+    id: question.id,
+    text: question.text.trim(),
+  }));
+  const noteContentForPrompt = meetingNotesContent.length > 20000
+    ? `${meetingNotesContent.slice(0, 20000)}\n\n[内容过长，以上为截断后的纪要片段]`
+    : meetingNotesContent;
+
+  const prompt = `你是面试助手。你会收到：
+1) 已有面试问题列表（包含 question_id）
+2) 一份面试纪要正文
+
+请完成两件事：
+1. 从纪要中提取对“已有问题”的回答，输出到 matched_answers
+2. 发现“纪要里出现但不在已有问题中的新问答”，输出到 new_qa
+
+规则：
+- matched_answers 里必须引用已有的 question_id
+- answer 必须基于纪要原文，不要编造
+- evidence 用 1 句短句引用依据（可概述，不要求逐字拷贝）
+- new_qa 的 source 只能是 resume/jd/common/coding
+- new_qa 的 evaluation_dimension 只能是 专业能力/通用素质/适配度/管理能力
+- 如果没有内容，对应数组返回空数组
+
+已有问题：
+${JSON.stringify(normalizedQuestions, null, 2)}
+
+面试纪要正文：
+${noteContentForPrompt}
+
+只返回 JSON，格式如下：
+\`\`\`json
+{
+  "matched_answers": [
+    {
+      "question_id": "已有问题ID",
+      "answer": "提炼后的候选人回答",
+      "evidence": "纪要中的依据"
+    }
+  ],
+  "new_qa": [
+    {
+      "question": "新增问题",
+      "answer": "对应回答",
+      "source": "common",
+      "evaluation_dimension": "专业能力"
+    }
+  ]
+}
+\`\`\``;
+
+  const response = await fetch('/api/ai/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        {
+          role: 'system',
+          content: '你擅长从面试纪要中提取结构化问答。必须返回严格 JSON。',
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.2,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI API error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '{}';
+
+  try {
+    const parsedContent = JSON.parse(extractJsonFromModelContent(content)) as {
+      matched_answers?: Array<{
+        question_id?: string;
+        answer?: string;
+        evidence?: string;
+      }>;
+      new_qa?: Array<{
+        question?: string;
+        answer?: string;
+        source?: string;
+        evaluation_dimension?: string;
+      }>;
+    };
+
+    const validQuestionIds = new Set(normalizedQuestions.map((question) => question.id));
+    const matchedAnswers: ExtractedMatchedAnswer[] = (parsedContent.matched_answers || [])
+      .map((item) => ({
+        questionId: item.question_id?.trim() || '',
+        answer: item.answer?.trim() || '',
+        evidence: item.evidence?.trim(),
+      }))
+      .filter((item) => item.questionId && item.answer && validQuestionIds.has(item.questionId));
+
+    const newQAs: ExtractedNewQA[] = (parsedContent.new_qa || [])
+      .map((item) => ({
+        question: item.question?.trim() || '',
+        answer: item.answer?.trim() || '',
+        source: normalizeQuestionSource(item.source?.trim()),
+        evaluationDimension: normalizeEvaluationDimension(item.evaluation_dimension?.trim()),
+      }))
+      .filter((item) => item.question && item.answer);
+
+    return {
+      matchedAnswers,
+      newQAs,
+    };
+  } catch (error) {
+    console.error('Failed to parse meeting notes extraction response:', content, error);
+    return {
+      matchedAnswers: [],
+      newQAs: [],
     };
   }
 };

@@ -4,7 +4,7 @@ import type { Position, Candidate } from '@/types';
 import { QuestionList } from './QuestionList';
 import { AddQuestionForm } from './AddQuestionForm';
 import { PDFViewer } from '@/components/ui/PDFViewer';
-import { Card, CardHeader, CardBody, Button, Textarea } from '@/components/ui';
+import { Card, CardHeader, CardBody, Button, Textarea, Input } from '@/components/ui';
 import { useAI } from '@/hooks/useAI';
 import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -12,6 +12,7 @@ import { useInterviewUIStore } from '@/store/interviewUIStore';
 import { getPDF } from '@/utils/pdfStorage';
 import { getPreferredResumeText } from '@/utils/resume';
 import { ResumeHighlightsPanel } from '@/components/candidates/ResumeHighlightsPanel';
+import { getFeishuDocRawContentFromLink } from '@/api/feishu';
 
 interface InterviewPanelProps {
   position: Position;
@@ -25,9 +26,10 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   showPdfViewer: showPdfViewerProp = true,
 }) => {
   const navigate = useNavigate();
-  const { isLoading: aiLoading, generateInterviewQuestions } = useAI();
+  const { isLoading: aiLoading, generateInterviewQuestions, extractInterviewNotesInsights } = useAI();
   const {
     setQuestions,
+    addQuestion,
     updateCandidate,
     updateQuestion,
   } = usePositionStore();
@@ -39,11 +41,21 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isSnapshotOpen, setIsSnapshotOpen] = useState(false);
   const [quickNotesDraft, setQuickNotesDraft] = useState(candidate.quickNotes || '');
+  const [meetingNotesUrl, setMeetingNotesUrl] = useState('');
+  const [isImportingMeetingNotes, setIsImportingMeetingNotes] = useState(false);
+  const [meetingImportStatus, setMeetingImportStatus] = useState<string | null>(null);
+  const [meetingImportError, setMeetingImportError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const quickNotesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get split ratio from settings store
-  const { interviewSplitRatio, setInterviewSplitRatio } = useSettingsStore();
+  const {
+    interviewSplitRatio,
+    setInterviewSplitRatio,
+    feishuUserAccessToken,
+    feishuAppId,
+    feishuAppSecret,
+  } = useSettingsStore();
   const setHasPdf = useInterviewUIStore((state) => state.setHasPdf);
 
   // Load PDF from IndexedDB on mount
@@ -73,6 +85,12 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   useEffect(() => {
     setIsSnapshotOpen(false);
   }, [candidate.id]);
+
+  useEffect(() => {
+    setMeetingNotesUrl(candidate.interviewLink || '');
+    setMeetingImportStatus(null);
+    setMeetingImportError(null);
+  }, [candidate.id, candidate.interviewLink]);
 
   useEffect(() => {
     if (quickNotesTimerRef.current) {
@@ -145,6 +163,114 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     setQuickNotesDraft(quickNotes);
   };
 
+  const normalizeQuestionText = (text: string): string => text.trim().toLowerCase().replace(/\s+/g, ' ');
+
+  const buildImportedNotes = (answer: string, evidence?: string): string => {
+    const lines = [`[Imported from meeting notes] ${answer.trim()}`];
+    if (evidence?.trim()) {
+      lines.push(`Evidence: ${evidence.trim()}`);
+    }
+    return lines.join('\n');
+  };
+
+  const handleExtractFromMeetingNotes = async () => {
+    const trimmedUrl = meetingNotesUrl.trim();
+    if (!trimmedUrl) {
+      setMeetingImportError('Please enter a Feishu meeting notes link.');
+      setMeetingImportStatus(null);
+      return;
+    }
+
+    setIsImportingMeetingNotes(true);
+    setMeetingImportStatus(null);
+    setMeetingImportError(null);
+
+    try {
+      const doc = await getFeishuDocRawContentFromLink(
+        trimmedUrl,
+        feishuUserAccessToken || undefined,
+        feishuAppId || undefined,
+        feishuAppSecret || undefined
+      );
+      const extracted = await extractInterviewNotesInsights(candidate.questions, doc.content);
+      if (!extracted) {
+        throw new Error('Failed to extract Q&A from meeting notes.');
+      }
+
+      const existingByNormalizedText = new Map<string, string>();
+      candidate.questions.forEach((question) => {
+        existingByNormalizedText.set(normalizeQuestionText(question.text), question.id);
+      });
+
+      const notesByQuestionId = new Map<string, string[]>();
+      extracted.matchedAnswers.forEach((answer) => {
+        const notes = buildImportedNotes(answer.answer, answer.evidence);
+        notesByQuestionId.set(answer.questionId, [...(notesByQuestionId.get(answer.questionId) || []), notes]);
+      });
+
+      extracted.newQAs.forEach((qa) => {
+        const normalized = normalizeQuestionText(qa.question);
+        const existingQuestionId = existingByNormalizedText.get(normalized);
+        if (existingQuestionId) {
+          const notes = buildImportedNotes(qa.answer);
+          notesByQuestionId.set(existingQuestionId, [...(notesByQuestionId.get(existingQuestionId) || []), notes]);
+        }
+      });
+
+      let updatedExistingCount = 0;
+      candidate.questions.forEach((question) => {
+        const additions = notesByQuestionId.get(question.id);
+        if (!additions?.length) {
+          return;
+        }
+
+        const mergedNotes = [question.notes?.trim(), ...additions]
+          .filter((value) => Boolean(value && value.trim()))
+          .join('\n\n');
+
+        updateQuestion(position.id, candidate.id, question.id, {
+          notes: mergedNotes,
+          status: 'asked',
+        });
+        updatedExistingCount += 1;
+      });
+
+      const existingNormalizedSet = new Set(candidate.questions.map((question) => normalizeQuestionText(question.text)));
+      let addedNewCount = 0;
+      extracted.newQAs.forEach((qa) => {
+        const normalized = normalizeQuestionText(qa.question);
+        if (existingNormalizedSet.has(normalized)) {
+          return;
+        }
+
+        addQuestion(position.id, candidate.id, {
+          text: qa.question,
+          source: qa.source,
+          evaluationDimension: qa.evaluationDimension,
+          context: '',
+          isAIGenerated: true,
+          notes: buildImportedNotes(qa.answer),
+          status: 'asked',
+          category: qa.source,
+        });
+        existingNormalizedSet.add(normalized);
+        addedNewCount += 1;
+      });
+
+      if (!updatedExistingCount && !addedNewCount) {
+        setMeetingImportStatus(`No actionable Q&A found in "${doc.title}".`);
+      } else {
+        setMeetingImportStatus(
+          `Imported from "${doc.title}": updated ${updatedExistingCount} existing question(s), added ${addedNewCount} new Q&A item(s).`
+        );
+      }
+    } catch (error) {
+      setMeetingImportError(error instanceof Error ? error.message : 'Failed to import meeting notes.');
+    } finally {
+      setIsImportingMeetingNotes(false);
+    }
+  };
+
   const handlePdfTextSelect = (text: string) => {
     if (!activeQuestionId || !text.trim()) return;
 
@@ -170,6 +296,37 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const generateQuestionsHint = missingRequirements.length
     ? `Add ${missingRequirements.join(' and ')} to enable AI question generation.`
     : null;
+  const isMeetingImportBusy = isImportingMeetingNotes || aiLoading;
+
+  const renderMeetingNotesImporter = () => (
+    <Card>
+      <CardHeader>
+        <h3 className="text-sm font-medium text-gray-700">Meeting Notes Import</h3>
+        <p className="text-xs text-gray-500">
+          Paste a Feishu meeting notes link to enrich existing answers and add new Q&A before generating summary.
+        </p>
+      </CardHeader>
+      <CardBody className="space-y-2">
+        <Input
+          placeholder="https://xxx.feishu.cn/docx/... or /wiki/..."
+          value={meetingNotesUrl}
+          onChange={(event) => setMeetingNotesUrl(event.target.value)}
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleExtractFromMeetingNotes}
+            isLoading={isMeetingImportBusy}
+            disabled={!meetingNotesUrl.trim() || isMeetingImportBusy}
+          >
+            Extract Q&A from Notes
+          </Button>
+        </div>
+        {meetingImportStatus && <p className="text-xs text-green-700">{meetingImportStatus}</p>}
+        {meetingImportError && <p className="text-xs text-red-600">{meetingImportError}</p>}
+      </CardBody>
+    </Card>
+  );
 
   // Layout with side panel for PDF viewer
   if (showPdfViewerProp && pdfData) {
@@ -287,6 +444,8 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
                 </CardBody>
               </Card>
 
+              {renderMeetingNotesImporter()}
+
               {/* Question Generation */}
               <div className="space-y-2">
                 <div className="flex gap-2">
@@ -393,6 +552,8 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
           />
         </CardBody>
       </Card>
+
+      {renderMeetingNotesImporter()}
 
       {/* Question Generation */}
       <div className="space-y-2">
