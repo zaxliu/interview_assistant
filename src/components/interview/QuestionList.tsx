@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import type { Question, QuestionSource } from '@/types';
 import { QuestionCard } from './QuestionCard';
 import { usePositionStore } from '@/store/positionStore';
-import { zhCN as t } from '@/i18n/zhCN';
 
 interface QuestionListProps {
   positionId: string;
@@ -14,10 +13,10 @@ interface QuestionListProps {
 
 // Source display configuration
 const sourceConfig: Record<QuestionSource, { label: string; icon: string; color: string }> = {
-  resume: { label: t.questionSource.resume, icon: '📄', color: 'text-blue-600' },
-  jd: { label: t.questionSource.jd, icon: '📋', color: 'text-purple-600' },
-  common: { label: t.questionSource.common, icon: '💡', color: 'text-amber-600' },
-  coding: { label: t.questionSource.coding, icon: '💻', color: 'text-green-600' },
+  resume: { label: '来自简历', icon: '📄', color: 'text-blue-600' },
+  jd: { label: '来自职位描述', icon: '📋', color: 'text-purple-600' },
+  common: { label: '通用 / 行为面', icon: '💡', color: 'text-amber-600' },
+  coding: { label: '编程 / 技术', icon: '💻', color: 'text-green-600' },
 };
 
 // Order for displaying sources
