@@ -14,16 +14,16 @@ interface ResumeHighlightsPanelProps {
 const highlightGroups = (
   highlights: ResumeHighlights
 ): Array<{ label: string; items: string[] }> => [
-  { label: 'Strengths', items: highlights.strengths },
-  { label: 'Risks', items: highlights.risks },
-  { label: 'Experience', items: highlights.experience },
-  { label: 'Keywords', items: highlights.keywords },
+  { label: '优势', items: highlights.strengths },
+  { label: '风险点', items: highlights.risks },
+  { label: '关键经历', items: highlights.experience },
+  { label: '关键词', items: highlights.keywords },
 ];
 
 export const ResumeHighlightsPanel: React.FC<ResumeHighlightsPanelProps> = ({
   highlights,
-  title = 'Resume Highlights',
-  emptyText = 'No resume highlights yet.',
+  title = '简历亮点',
+  emptyText = '暂无简历亮点。',
   collapsible = false,
   defaultExpanded = true,
   compact = false,
@@ -41,7 +41,7 @@ export const ResumeHighlightsPanel: React.FC<ResumeHighlightsPanelProps> = ({
     <>
       {highlights?.summary && (
         <div>
-          <p className="text-xs font-medium text-gray-600 mb-1">Summary</p>
+          <p className="text-xs font-medium text-gray-600 mb-1">摘要</p>
           <p className={`${compact ? 'text-xs' : 'text-sm'} text-gray-700`}>{highlights.summary}</p>
         </div>
       )}

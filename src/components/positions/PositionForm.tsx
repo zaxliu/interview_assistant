@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Position } from '@/types';
 import { usePositionStore } from '@/store/positionStore';
 import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea } from '@/components/ui';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface PositionFormProps {
   position?: Position;
@@ -53,27 +54,27 @@ export const PositionForm: React.FC<PositionFormProps> = ({
     <Card>
       <CardHeader>
         <h3 className="text-sm font-medium text-gray-700">
-          {position ? 'Edit Position' : 'New Position'}
+          {position ? '编辑岗位' : '新建岗位'}
         </h3>
       </CardHeader>
       <CardBody className="space-y-3">
         <Input
-          label="Position Title"
+          label="岗位名称"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="e.g., Senior Software Engineer"
+          placeholder="例如：高级后端工程师"
         />
         <Input
-          label="Team (Optional)"
+          label="团队（可选）"
           value={team}
           onChange={(e) => setTeam(e.target.value)}
-          placeholder="e.g., Platform Team"
+          placeholder="例如：平台研发团队"
         />
         <Textarea
-          label="Job Description"
+          label="岗位描述"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Describe the role and responsibilities..."
+          placeholder="请输入岗位职责与要求..."
           autoResize
           rows={4}
         />
@@ -88,10 +89,10 @@ export const PositionForm: React.FC<PositionFormProps> = ({
       </CardBody>
       <CardFooter className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onCancel}>
-          Cancel
+          {t.common.cancel}
         </Button>
         <Button onClick={handleSubmit} disabled={!title.trim()}>
-          {position ? 'Save Changes' : 'Create Position'}
+          {position ? t.common.saveChanges : '创建岗位'}
         </Button>
       </CardFooter>
     </Card>

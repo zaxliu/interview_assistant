@@ -4,6 +4,7 @@ import { useFeishuOAuth } from '@/hooks/useFeishuOAuth';
 import { Input, Card, CardHeader, CardBody, Button } from '@/components/ui';
 import { testAIApiKey } from '@/api/ai';
 import { testFeishuCredentials } from '@/api/feishu';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface SettingsPanelProps {
   onClose?: () => void;
@@ -13,12 +14,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
   const {
     aiApiKey,
     aiModel,
-    automationServiceUrl,
     feishuAppId,
     feishuAppSecret,
     setApiKey,
     setModel,
-    setAutomationServiceUrl,
     setFeishuAppId,
     setFeishuAppSecret,
   } = useSettingsStore();
@@ -30,7 +29,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
 
   const handleTestAI = async () => {
     if (!aiApiKey) {
-      setAiTestStatus({ loading: false, success: false, message: 'Please enter an API key' });
+      setAiTestStatus({ loading: false, success: false, message: '请先填写 API Key' });
       return;
     }
     setAiTestStatus({ loading: true });
@@ -40,7 +39,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
 
   const handleTestFeishu = async () => {
     if (!feishuAppId || !feishuAppSecret) {
-      setFeishuTestStatus({ loading: false, success: false, message: 'Please enter App ID and Secret' });
+      setFeishuTestStatus({ loading: false, success: false, message: '请先填写飞书 App ID 和 App Secret' });
       return;
     }
     setFeishuTestStatus({ loading: true });
@@ -51,10 +50,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Settings</h2>
+        <h2 className="text-lg font-semibold text-gray-900">{t.app.settings}</h2>
         {onClose && (
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Close
+            {t.common.close}
           </Button>
         )}
       </div>
@@ -62,7 +61,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
       {/* AI Configuration */}
       <Card>
         <CardHeader>
-          <h3 className="text-sm font-medium text-gray-700">AI Configuration</h3>
+          <h3 className="text-sm font-medium text-gray-700">AI 配置</h3>
         </CardHeader>
         <CardBody className="space-y-3">
           <Input
@@ -70,10 +69,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             type="password"
             value={aiApiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Enter your AI API key"
+            placeholder="请输入 AI API Key"
           />
           <Input
-            label="Model"
+            label="模型"
             type="text"
             value={aiModel}
             onChange={(e) => setModel(e.target.value)}
@@ -86,7 +85,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
               onClick={handleTestAI}
               disabled={aiTestStatus.loading}
             >
-              {aiTestStatus.loading ? 'Testing...' : 'Test Connection'}
+              {aiTestStatus.loading ? t.common.testing : '测试连接'}
             </Button>
             {aiTestStatus.message && (
               <span className={`text-xs ${aiTestStatus.success ? 'text-green-600' : 'text-red-600'}`}>
@@ -95,36 +94,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             )}
           </div>
           <p className="text-xs text-gray-500">
-            AI provider URL is configured server-side via environment variables.
+            AI 提供方地址由服务端环境变量配置，无需在前端填写。
           </p>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <h3 className="text-sm font-medium text-gray-700">Local Automation</h3>
-        </CardHeader>
-        <CardBody className="space-y-3">
-          <Input
-            label="Automation Service URL"
-            type="text"
-            value={automationServiceUrl || ''}
-            onChange={(e) => setAutomationServiceUrl(e.target.value)}
-            placeholder="http://127.0.0.1:3456"
-          />
-          <p className="text-xs text-gray-500">
-            Start the local Playwright bridge once, then use the upload button on candidate/interview pages.
-          </p>
-          <code className="block text-xs text-blue-600 bg-gray-50 rounded px-2 py-2 break-all">
-            npm run upload:resume-server -- --user-data-dir "$HOME/Library/Application Support/Google/Chrome" --profile-dir Default
-          </code>
         </CardBody>
       </Card>
 
       {/* Feishu Configuration */}
       <Card>
         <CardHeader>
-          <h3 className="text-sm font-medium text-gray-700">Feishu Configuration</h3>
+          <h3 className="text-sm font-medium text-gray-700">飞书配置</h3>
         </CardHeader>
         <CardBody className="space-y-3">
           <Input
@@ -139,7 +117,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             type="password"
             value={feishuAppSecret}
             onChange={(e) => setFeishuAppSecret(e.target.value)}
-            placeholder="Enter your Feishu app secret"
+            placeholder="请输入飞书 App Secret"
           />
           <div className="flex items-center gap-2">
             <Button
@@ -148,7 +126,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
               onClick={handleTestFeishu}
               disabled={feishuTestStatus.loading}
             >
-              {feishuTestStatus.loading ? 'Testing...' : 'Test Credentials'}
+              {feishuTestStatus.loading ? t.common.testing : '测试凭证'}
             </Button>
             {feishuTestStatus.message && (
               <span className={`text-xs ${feishuTestStatus.success ? 'text-green-600' : 'text-red-600'}`}>
@@ -157,7 +135,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             )}
           </div>
           <p className="text-xs text-gray-500">
-            CORS proxy is built-in. No additional configuration needed.
+            已内置 CORS 代理，无需额外配置。
           </p>
 
           {/* OAuth Status and Login */}
@@ -166,28 +144,28 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
               <span className="text-sm text-gray-600">
                 {isAuthenticated ? (
                   <div className="flex items-center gap-2">
-                    <span className="text-green-600">Connected</span>
+                    <span className="text-green-600">已连接</span>
                     {user && (
-                      <span className="text-gray-500">as {user.name}</span>
+                      <span className="text-gray-500">账号：{user.name}</span>
                     )}
                   </div>
                 ) : (
-                  <span className="text-gray-500">Not connected - Login via header</span>
+                  <span className="text-gray-500">未连接，请在页头点击登录</span>
                 )}
               </span>
               {isAuthenticated && (
                 <Button variant="secondary" size="sm" onClick={logout}>
-                  Logout
+                  {t.common.logout}
                 </Button>
               )}
             </div>
             {!feishuAppId || !feishuAppSecret ? (
               <p className="text-xs text-amber-600 mt-1">
-                Please fill in App ID and App Secret first
+                请先填写 App ID 和 App Secret
               </p>
             ) : null}
             <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
-              <p className="text-gray-600 mb-1">Configure this exact URL in Feishu (安全设置 → 重定向 URL):</p>
+              <p className="text-gray-600 mb-1">请在飞书后台配置以下精确回调地址（安全设置 → 重定向 URL）：</p>
               <code className="text-blue-600 font-mono break-all">
                 {window.location.origin}{window.location.pathname}
               </code>

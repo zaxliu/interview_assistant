@@ -9,6 +9,7 @@ import { downloadWintalentResumePDF } from '@/api/wintalent';
 import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea } from '@/components/ui';
 import { ResumeHighlightsPanel } from './ResumeHighlightsPanel';
 import { emptyResumeHighlights, getPreferredResumeText, getRawResumeText } from '@/utils/resume';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface CandidateFormProps {
   positionId: string;
@@ -75,7 +76,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     if (file) {
       // Check file type
       if (!file.name.toLowerCase().endsWith('.pdf')) {
-        alert('Please upload a PDF file. If you have a ZIP file, extract it first to get the PDF.');
+        alert('请上传 PDF 文件。如果你拿到的是 ZIP，请先解压后再上传 PDF。');
         return;
       }
       setResumeFilename(file.name);
@@ -121,7 +122,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
         await applyProcessedResume(text);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to import resume from Wintalent';
+      const message = error instanceof Error ? error.message : '从 Wintalent 导入简历失败';
       setWintalentError(message);
     } finally {
       setWintalentLoading(false);
@@ -167,7 +168,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
       }
     } catch (error) {
       console.error('[CandidateForm] Error saving candidate:', error);
-      alert('Failed to save candidate. Please try again.');
+      alert('保存候选人失败，请重试。');
     }
   };
 
@@ -175,19 +176,19 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     <Card>
       <CardHeader>
         <h3 className="text-sm font-medium text-gray-700">
-          {candidate ? 'Edit Candidate' : 'Add Candidate'}
+          {candidate ? '编辑候选人' : '新增候选人'}
         </h3>
       </CardHeader>
       <CardBody className="space-y-3">
         <Input
-          label="Candidate Name"
+          label="候选人姓名"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Full name"
+          placeholder="请输入姓名"
         />
 
         <Input
-          label="Interview Time"
+          label="面试时间"
           type="datetime-local"
           value={interviewTime}
           onChange={(e) => setInterviewTime(e.target.value)}
@@ -195,10 +196,10 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
 
         {(candidate?.interviewLink || candidate?.candidateLink) && (
           <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3 space-y-2">
-            <p className="text-sm font-medium text-gray-700">Calendar Links</p>
+            <p className="text-sm font-medium text-gray-700">日历链接</p>
             {candidate?.interviewLink && (
               <div className="text-sm">
-                <span className="text-gray-500">Video interview:</span>{' '}
+                <span className="text-gray-500">视频面试：</span>{' '}
                 <a
                   href={candidate.interviewLink}
                   target="_blank"
@@ -211,7 +212,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
             )}
             {candidate?.candidateLink && (
               <div className="text-sm">
-                <span className="text-gray-500">Candidate profile:</span>{' '}
+                <span className="text-gray-500">候选人资料：</span>{' '}
                 <a
                   href={candidate.candidateLink}
                   target="_blank"
@@ -227,19 +228,19 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Resume
+            简历
           </label>
 
           {/* Instructions */}
           <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-800">
-            <p className="font-medium mb-2">Wintalent import options:</p>
-            <p className="mb-2">Recommended: paste interview link below and click <strong>Import</strong>.</p>
-            <p className="font-medium mb-1">Manual fallback:</p>
+            <p className="font-medium mb-2">Wintalent 导入说明：</p>
+            <p className="mb-2">推荐：粘贴面试链接后，点击<strong>导入</strong>。</p>
+            <p className="font-medium mb-1">手动兜底：</p>
             <ol className="list-decimal list-inside space-y-1">
-              <li>Click the "候选人链接" in the calendar event</li>
-              <li>On Wintalent page, click "预览" next to the file</li>
-              <li>Download the ZIP file and <strong>extract it</strong></li>
-              <li>Upload the <strong>PDF file</strong> (not ZIP)</li>
+              <li>打开日历事件中的“候选人链接”</li>
+              <li>在 Wintalent 页面点击文件旁“预览”</li>
+              <li>下载 ZIP 后先<strong>解压</strong></li>
+              <li>上传解压后的<strong>PDF 文件</strong>（不要传 ZIP）</li>
             </ol>
           </div>
 
@@ -261,12 +262,12 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                   className="rounded border-purple-300 text-purple-600 focus:ring-purple-500"
                 />
                 <span className="text-xs text-purple-800">
-                  <strong>AI-powered parsing</strong> - Better for scanned documents & complex layouts
+                  <strong>AI 智能解析</strong> - 更适合扫描件和复杂排版
                 </span>
               </label>
               {useAIParsing && (
                 <p className="text-xs text-purple-600 mt-1 ml-6">
-                  Uses AI Vision to extract text. Limited to first 5 pages.
+                  使用 AI Vision 抽取文本，默认仅解析前 5 页。
                 </p>
               )}
             </div>
@@ -279,7 +280,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                 type="url"
                 value={wintalentLink}
                 onChange={(e) => setWintalentLink(e.target.value)}
-                placeholder="Paste Wintalent interview link for one-click import"
+                placeholder="粘贴 Wintalent 面试链接，一键导入"
               />
               <Button
                 variant="secondary"
@@ -288,7 +289,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                 disabled={!wintalentLink.trim() || isResumeBusy}
                 isLoading={wintalentLoading}
               >
-                Import
+                {t.common.import}
               </Button>
             </div>
 
@@ -307,7 +308,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                 onClick={() => fileInputRef.current?.click()}
                 isLoading={isResumeBusy}
               >
-                {isResumeBusy ? 'Parsing...' : 'Upload PDF'}
+                {isResumeBusy ? '解析中...' : '上传 PDF'}
               </Button>
               {resumeFilename && !isResumeBusy && (
                 <span className="text-sm text-green-600 flex items-center">
@@ -320,8 +321,8 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
             {pdfLoading && parseProgress && (
               <div className="space-y-1">
                 <div className="flex justify-between text-xs text-gray-600">
-                  <span>AI parsing in progress...</span>
-                  <span>{parseProgress.current} / {parseProgress.total} pages</span>
+                  <span>AI 正在解析...</span>
+                  <span>{parseProgress.current} / {parseProgress.total} 页</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
@@ -334,7 +335,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
 
             {resumeProcessing && (
               <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                Formatting extracted resume and generating highlights...
+                正在整理简历内容并生成亮点...
               </div>
             )}
 
@@ -352,7 +353,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                 }}
                 className="text-xs text-gray-500"
               >
-                🐛 Download Page 1 as Image
+                🐛 下载第 1 页图片
               </Button>
             )}
 
@@ -362,7 +363,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                 type="url"
                 value={resumeUrl}
                 onChange={(e) => setResumeUrl(e.target.value)}
-                placeholder="Or paste direct PDF URL (not Wintalent page)"
+                placeholder="或粘贴 PDF 直链（非 Wintalent 页面）"
               />
               <Button
                 variant="secondary"
@@ -371,7 +372,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                 disabled={!resumeUrl || isResumeBusy}
                 isLoading={isResumeBusy}
               >
-                Parse
+                {t.common.parse}
               </Button>
             </div>
 
@@ -379,15 +380,15 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
             <div className="mt-2">
               <p className="text-xs text-gray-500 mb-1">
                 {resumeText
-                  ? 'Normalized resume (Markdown, editable):'
-                  : 'Resume text (upload PDF or paste manually):'}
+                  ? '规范化简历（Markdown，可编辑）：'
+                  : '简历文本（上传 PDF 或手动粘贴）：'}
               </p>
               <Textarea
                 value={resumeText}
                 onChange={(e) => setResumeText(e.target.value)}
                 rows={8}
                 className="text-xs"
-                placeholder="Resume content will appear here after PDF upload, or paste manually..."
+                placeholder="上传 PDF 后将在此显示简历内容，也可手动粘贴..."
                 autoResize
               />
             </div>
@@ -400,20 +401,20 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                 disabled={isResumeBusy || !(resumeRawText || resumeText)}
                 isLoading={resumeProcessing}
               >
-                Refresh Highlights
+                刷新亮点
               </Button>
             </div>
 
             <ResumeHighlightsPanel
               highlights={resumeHighlights}
-              title="Resume Highlights"
-              emptyText="Upload or paste a resume to generate highlights."
+              title="简历亮点"
+              emptyText="上传或粘贴简历后，可自动生成亮点。"
             />
 
             {(resumeRawText || resumeText) && (
               <details className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
                 <summary className="cursor-pointer text-xs font-medium text-gray-600">
-                  Raw extracted text
+                  原始提取文本
                 </summary>
                 <Textarea
                   value={resumeRawText}
@@ -421,7 +422,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
                   rows={6}
                   className="text-xs mt-2"
                   autoResize
-                  placeholder="Raw OCR text will appear here..."
+                  placeholder="原始 OCR 文本会显示在这里..."
                 />
               </details>
             )}
@@ -430,10 +431,10 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
       </CardBody>
       <CardFooter className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onCancel}>
-          Cancel
+          {t.common.cancel}
         </Button>
         <Button onClick={handleSubmit} disabled={!name.trim() || isResumeBusy}>
-          {candidate ? 'Save Changes' : 'Add Candidate'}
+          {candidate ? t.common.saveChanges : '新增候选人'}
         </Button>
       </CardFooter>
     </Card>

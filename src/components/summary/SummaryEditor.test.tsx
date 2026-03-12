@@ -55,7 +55,7 @@ describe('SummaryEditor', () => {
 
     expect(screen.getByDisplayValue('Lewis')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText('Comprehensive evaluation of the candidate...'), {
+    fireEvent.change(screen.getByPlaceholderText('请输入对候选人的综合评价...'), {
       target: { value: 'Very strong communication.' },
     });
 

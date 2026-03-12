@@ -13,7 +13,7 @@ export const useAI = () => {
   const generateInterviewQuestions = useCallback(
     async (jobDescription: string, resumeText: string, criteria: string[]): Promise<Question[]> => {
       if (!aiApiKey) {
-        setError('AI API key not configured');
+        setError('未配置 AI API Key');
         return [];
       }
 
@@ -29,7 +29,7 @@ export const useAI = () => {
         );
         return questions;
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to generate questions');
+        setError(err instanceof Error ? err.message : '生成面试问题失败');
         return [];
       } finally {
         setIsLoading(false);
@@ -49,7 +49,7 @@ export const useAI = () => {
       codingChallenges?: CodingChallenge[]
     ): Promise<InterviewResult | null> => {
       if (!aiApiKey) {
-        setError('AI API key not configured');
+        setError('未配置 AI API Key');
         return null;
       }
 
@@ -69,7 +69,7 @@ export const useAI = () => {
         );
         return result;
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to generate summary');
+        setError(err instanceof Error ? err.message : '生成面试总结失败');
         return null;
       } finally {
         setIsLoading(false);
@@ -84,7 +84,7 @@ export const useAI = () => {
       meetingNotesContent: string
     ): Promise<MeetingNotesExtractionResult | null> => {
       if (!aiApiKey) {
-        setError('AI API key not configured');
+        setError('未配置 AI API Key');
         return null;
       }
 
@@ -98,7 +98,7 @@ export const useAI = () => {
           meetingNotesContent
         );
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to extract insights from notes');
+        setError(err instanceof Error ? err.message : '提取会议纪要洞察失败');
         return null;
       } finally {
         setIsLoading(false);

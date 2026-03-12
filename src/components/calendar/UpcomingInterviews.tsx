@@ -1,6 +1,7 @@
 import React from 'react';
 import { usePositionStore } from '@/store/positionStore';
 import { Card, CardBody, Button } from '@/components/ui';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface UpcomingInterviewsProps {
   onStartInterview: (positionId: string, candidateId: string) => void;
@@ -74,7 +75,7 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
       {/* Today's Interviews */}
       {todayInterviews.length > 0 && (
         <div>
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Today's Interviews</h3>
+          <h3 className="text-sm font-medium text-gray-700 mb-2">今日面试</h3>
           <div className="space-y-2">
             {todayInterviews.map(({ position, candidate }) => (
               <Card key={candidate.id}>
@@ -96,7 +97,7 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
                     size="sm"
                     onClick={() => onStartInterview(position.id, candidate.id)}
                   >
-                    Start
+                    {t.common.start}
                   </Button>
                 </CardBody>
               </Card>
@@ -108,7 +109,7 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
       {/* Upcoming Interviews */}
       {upcomingInterviews.length > 0 && (
         <div>
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Upcoming Interviews</h3>
+          <h3 className="text-sm font-medium text-gray-700 mb-2">未来 7 天面试</h3>
           <div className="space-y-2">
             {upcomingInterviews.slice(0, 5).map(({ position, candidate }) => (
               <Card key={candidate.id}>
@@ -134,7 +135,7 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
                     variant="secondary"
                     onClick={() => onStartInterview(position.id, candidate.id)}
                   >
-                    View
+                    {t.common.view}
                   </Button>
                 </CardBody>
               </Card>

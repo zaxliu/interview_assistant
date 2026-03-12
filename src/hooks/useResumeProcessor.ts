@@ -34,7 +34,7 @@ export const useResumeProcessor = () => {
 
         return await processResumeText({ apiKey: aiApiKey, model: aiModel }, trimmed);
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to process resume';
+        const message = err instanceof Error ? err.message : '简历处理失败';
         setError(message);
         return {
           markdown: normalizeMarkdownText(trimmed),

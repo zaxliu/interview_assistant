@@ -2,6 +2,7 @@ import React from 'react';
 import type { Candidate } from '@/types';
 import { Card, CardBody } from '@/components/ui';
 import { getPreferredResumeText } from '@/utils/resume';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface CandidateCardProps {
   candidate: Candidate;
@@ -17,13 +18,7 @@ const statusColors: Record<Candidate['status'], string> = {
   cancelled: 'bg-red-100 text-red-700',
 };
 
-const statusLabels: Record<Candidate['status'], string> = {
-  pending: 'Pending',
-  scheduled: 'Scheduled',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
-};
+const statusLabels: Record<Candidate['status'], string> = t.candidateStatus;
 
 export const CandidateCard: React.FC<CandidateCardProps> = ({
   candidate,
@@ -64,7 +59,7 @@ export const CandidateCard: React.FC<CandidateCardProps> = ({
           </div>
           <div className="flex items-center gap-2">
             {hasResume && (
-              <span className="text-xs text-gray-400" title="Resume uploaded">
+              <span className="text-xs text-gray-400" title="已上传简历">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
@@ -76,9 +71,9 @@ export const CandidateCard: React.FC<CandidateCardProps> = ({
                 onEdit();
               }}
               className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded hover:bg-blue-50"
-              title="Edit candidate / Upload resume"
+              title="编辑候选人 / 上传简历"
             >
-              Edit
+              {t.common.edit}
             </button>
             <span
               className={`text-xs px-2 py-0.5 rounded ${statusColors[candidate.status]}`}

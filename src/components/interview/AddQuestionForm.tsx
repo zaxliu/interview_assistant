@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { QuestionSource, EvaluationDimensionName } from '@/types';
 import { usePositionStore } from '@/store/positionStore';
 import { Button, Select, Textarea } from '@/components/ui';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface AddQuestionFormProps {
   positionId: string;
@@ -9,10 +10,10 @@ interface AddQuestionFormProps {
 }
 
 const sourceOptions = [
-  { value: 'resume', label: '📄 From Resume' },
-  { value: 'jd', label: '📋 From Job Description' },
-  { value: 'common', label: '💡 Common / Behavioral' },
-  { value: 'coding', label: '💻 Coding / Technical' },
+  { value: 'resume', label: t.questionSource.resume },
+  { value: 'jd', label: t.questionSource.jd },
+  { value: 'common', label: t.questionSource.common },
+  { value: 'coding', label: t.questionSource.coding },
 ];
 
 const evaluationDimensionOptions = [
@@ -56,7 +57,7 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({
         <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
-        Add Custom Question
+        添加自定义问题
       </Button>
     );
   }
@@ -64,28 +65,28 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl p-4 w-full max-w-md mx-4">
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Add Custom Question</h3>
+        <h3 className="text-sm font-medium text-gray-900 mb-3">添加自定义问题</h3>
 
         <div className="space-y-3">
           <Select
-            label="Source"
+            label="来源"
             value={source}
             onChange={(e) => setSource(e.target.value as QuestionSource)}
             options={sourceOptions}
           />
 
           <Select
-            label="Evaluation Dimension"
+            label="评估维度"
             value={evaluationDimension}
             onChange={(e) => setEvaluationDimension(e.target.value as EvaluationDimensionName)}
             options={evaluationDimensionOptions}
           />
 
           <Textarea
-            label="Question"
+            label="问题"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Enter your question..."
+            placeholder="请输入问题..."
             rows={3}
             autoFocus
           />
@@ -93,10 +94,10 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({
 
         <div className="flex justify-end gap-2 mt-4">
           <Button variant="secondary" onClick={() => setIsOpen(false)}>
-            Cancel
+            {t.common.cancel}
           </Button>
           <Button onClick={handleSubmit} disabled={!text.trim()}>
-            Add Question
+            添加问题
           </Button>
         </div>
       </div>

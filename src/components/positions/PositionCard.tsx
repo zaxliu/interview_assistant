@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Position } from '@/types';
 import { Card, CardBody } from '@/components/ui';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface PositionCardProps {
   position: Position;
@@ -57,13 +58,13 @@ export const PositionCard: React.FC<PositionCardProps> = ({ position, onClick, o
               {/* Cancelled indicator */}
               {cancelledCount > 0 && (
                 <span className="text-xs text-gray-400 line-through">
-                  {cancelledCount} cancelled
+                  {cancelledCount} 已取消
                 </span>
               )}
 
               {/* No candidates */}
               {candidates.length === 0 && (
-                <span className="text-xs text-gray-400">No candidates</span>
+                <span className="text-xs text-gray-400">暂无候选人</span>
               )}
             </div>
 
@@ -73,9 +74,9 @@ export const PositionCard: React.FC<PositionCardProps> = ({ position, onClick, o
                 onEdit();
               }}
               className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded hover:bg-blue-50"
-              title="Edit position / Add job description"
+              title="编辑岗位 / 补充岗位描述"
             >
-              Edit
+              {t.common.edit}
             </button>
           </div>
         </div>

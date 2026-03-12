@@ -20,7 +20,7 @@ export const useFeishuCalendar = () => {
     } | null> => {
       // Check if we have user_access_token (from OAuth)
       if (!feishuUserAccessToken) {
-        setError('Please login with Feishu first (click "Login with Feishu" in Settings)');
+        setError('请先登录飞书（可在设置页点击“登录”）');
         return null;
       }
 
@@ -36,7 +36,7 @@ export const useFeishuCalendar = () => {
         );
         return result;
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to sync calendar';
+        const errorMessage = err instanceof Error ? err.message : '同步日历失败';
         setError(errorMessage);
         return null;
       } finally {
@@ -53,8 +53,8 @@ export const useFeishuCalendar = () => {
       positionTitle: string
     ): Promise<{ success: boolean; message: string; docUrl?: string }> => {
       if (!feishuUserAccessToken) {
-        setError('Please login with Feishu first');
-        return { success: false, message: 'Not authenticated with Feishu' };
+        setError('请先登录飞书');
+        return { success: false, message: '当前未登录飞书' };
       }
 
       setIsLoading(true);
@@ -76,7 +76,7 @@ export const useFeishuCalendar = () => {
 
         return response;
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to create Feishu doc';
+        const errorMessage = err instanceof Error ? err.message : '创建飞书文档失败';
         setError(errorMessage);
         return { success: false, message: errorMessage };
       } finally {

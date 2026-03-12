@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import type { Position, Candidate } from '@/types';
 import { CandidateCard } from './CandidateCard';
 import { Card, CardBody, Button } from '@/components/ui';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface CandidateListProps {
   position: Position;
@@ -64,19 +65,19 @@ export const CandidateList: React.FC<CandidateListProps> = ({
     <div>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-gray-700">
-          Candidates ({sortedCandidates.length})
+          候选人（{sortedCandidates.length}）
         </h3>
         <Button size="sm" onClick={onAddCandidate}>
-          + Add Candidate
+          + {t.common.add}候选人
         </Button>
       </div>
 
       {sortedCandidates.length === 0 ? (
         <Card>
           <CardBody className="text-center py-6">
-            <p className="text-gray-500 text-sm">No candidates yet</p>
+            <p className="text-gray-500 text-sm">暂无候选人</p>
             <Button size="sm" className="mt-2" onClick={onAddCandidate}>
-              Add First Candidate
+              添加首位候选人
             </Button>
           </CardBody>
         </Card>

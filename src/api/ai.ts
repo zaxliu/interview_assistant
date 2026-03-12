@@ -76,7 +76,7 @@ export const testAIApiKey = async (
       body: JSON.stringify({
         model: model,
         messages: [
-          { role: 'user', content: 'Say "OK" if you can read this.' },
+          { role: 'user', content: '如果你能读取这条消息，请回复“OK”。' },
         ],
         max_tokens: 5,
       }),
@@ -85,7 +85,7 @@ export const testAIApiKey = async (
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const errorMessage = errorData.error?.message || response.statusText;
-      return { success: false, message: `API error: ${errorMessage}` };
+      return { success: false, message: `API 错误：${errorMessage}` };
     }
 
     const data = await response.json();
@@ -94,13 +94,13 @@ export const testAIApiKey = async (
     const hasCompletion = typeof firstChoice?.finish_reason === 'string' || hasAssistantMessage;
 
     if (hasCompletion) {
-      return { success: true, message: `Connected successfully (${model})` };
+      return { success: true, message: `连接成功（${model}）` };
     }
-    return { success: false, message: 'Unexpected response from API' };
+    return { success: false, message: 'API 返回结果异常' };
   } catch (error) {
     return {
       success: false,
-      message: error instanceof Error ? error.message : 'Connection failed',
+      message: error instanceof Error ? error.message : '连接失败',
     };
   }
 };
@@ -199,7 +199,7 @@ ${criteriaSection}
   });
 
   if (!response.ok) {
-    throw new Error(`AI API error: ${response.statusText}`);
+    throw new Error(`AI API 错误：${response.statusText}`);
   }
 
   const data = await response.json();
@@ -286,7 +286,7 @@ ${rawText}`;
   });
 
   if (!response.ok) {
-    throw new Error(`AI API error: ${response.statusText}`);
+    throw new Error(`AI API 错误：${response.statusText}`);
   }
 
   const data = await response.json();
@@ -392,7 +392,7 @@ ${noteContentForPrompt}
   });
 
   if (!response.ok) {
-    throw new Error(`AI API error: ${response.statusText}`);
+    throw new Error(`AI API 错误：${response.statusText}`);
   }
 
   const data = await response.json();
@@ -617,7 +617,7 @@ ${quickNotesSection}${codingChallengesSection}${skippedTopics.length > 0 ? `\n�
   });
 
   if (!response.ok) {
-    throw new Error(`AI API error: ${response.statusText}`);
+    throw new Error(`AI API 错误：${response.statusText}`);
   }
 
   const data = await response.json();

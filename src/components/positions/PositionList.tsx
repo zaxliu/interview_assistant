@@ -22,10 +22,10 @@ export const PositionList: React.FC<PositionListProps> = ({
     return (
       <Card>
         <CardBody className="text-center py-8">
-          <p className="text-gray-500 mb-4">No positions yet</p>
+          <p className="text-gray-500 mb-4">暂无岗位</p>
           <div className="flex gap-2 justify-center">
-            <Button onClick={onAddPosition}>Add Position</Button>
-            {isAuthenticated && <Button variant="secondary">Sync from Calendar</Button>}
+            <Button onClick={onAddPosition}>新增岗位</Button>
+            {isAuthenticated && <Button variant="secondary">从日历同步</Button>}
           </div>
         </CardBody>
       </Card>
@@ -35,9 +35,9 @@ export const PositionList: React.FC<PositionListProps> = ({
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-gray-700">All Positions</h3>
+        <h3 className="text-sm font-medium text-gray-700">全部岗位</h3>
         <Button size="sm" onClick={onAddPosition}>
-          + New Position
+          + 新建岗位
         </Button>
       </div>
       <div className="space-y-2">

@@ -31,7 +31,7 @@ export const parsePDFFromFile = async (file: File): Promise<string> => {
 export const parsePDFFromUrl = async (url: string): Promise<string> => {
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Failed to fetch PDF: ${response.statusText}`);
+    throw new Error(`获取 PDF 失败：${response.statusText}`);
   }
   const arrayBuffer = await response.arrayBuffer();
   return parsePDF(arrayBuffer);
@@ -258,7 +258,7 @@ export const parsePDFWithAI = async (
           errorMsg = errorJson.error?.message || errorMsg;
         } catch {
           if (response.status === 413) {
-            errorMsg = 'Request too large - try using a smaller PDF or disable AI parsing';
+            errorMsg = '请求体过大，请使用更小的 PDF 或关闭 AI 解析';
           }
         }
         console.error(`[AI PDF Parse] Page ${i} failed: ${errorMsg}`);
@@ -332,7 +332,7 @@ export const parsePDFFromUrlWithAI = async (
 ): Promise<string> => {
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Failed to fetch PDF: ${response.statusText}`);
+    throw new Error(`获取 PDF 失败：${response.statusText}`);
   }
   const arrayBuffer = await response.arrayBuffer();
   return parsePDFWithAI(arrayBuffer, config, options);
@@ -376,4 +376,3 @@ export const parsePDFSmart = async (
   // No AI config, return standard result
   return { text: standardText, method: 'standard' };
 };
-

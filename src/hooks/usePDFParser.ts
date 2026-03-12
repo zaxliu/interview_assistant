@@ -54,7 +54,7 @@ export const usePDFParser = () => {
       setText(extractedText);
       return extractedText;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to parse PDF';
+      const errorMessage = err instanceof Error ? err.message : 'PDF 解析失败';
       setError(errorMessage);
       return '';
     } finally {
@@ -91,7 +91,7 @@ export const usePDFParser = () => {
       setText(extractedText);
       return extractedText;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to parse PDF from URL';
+      const errorMessage = err instanceof Error ? err.message : '从 URL 解析 PDF 失败';
       setError(errorMessage);
       return '';
     } finally {

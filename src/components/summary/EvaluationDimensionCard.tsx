@@ -10,11 +10,11 @@ interface EvaluationDimensionCardProps {
 }
 
 const scoreOptions = [
-  { value: '1', label: '1 - Poor' },
-  { value: '2', label: '2 - Below Average' },
-  { value: '3', label: '3 - Average' },
-  { value: '4', label: '4 - Good' },
-  { value: '5', label: '5 - Excellent' },
+  { value: '1', label: '1 - 较弱' },
+  { value: '2', label: '2 - 偏弱' },
+  { value: '3', label: '3 - 合格' },
+  { value: '4', label: '4 - 良好' },
+  { value: '5', label: '5 - 优秀' },
 ];
 
 export const EvaluationDimensionCard: React.FC<EvaluationDimensionCardProps> = ({
@@ -33,10 +33,10 @@ export const EvaluationDimensionCard: React.FC<EvaluationDimensionCardProps> = (
                 value={dimension.dimension}
                 onChange={(e) => onUpdate({ dimension: e.target.value })}
                 className="w-40"
-                placeholder="Dimension name"
+                placeholder="维度名称"
               />
               <div className="flex items-center gap-1">
-                <span className="text-sm text-gray-600">Score:</span>
+                <span className="text-sm text-gray-600">评分：</span>
                 <Select
                   value={dimension.score.toString()}
                   onChange={(e) => onUpdate({ score: parseInt(e.target.value) })}
@@ -61,7 +61,7 @@ export const EvaluationDimensionCard: React.FC<EvaluationDimensionCardProps> = (
             <Textarea
               value={dimension.assessment_points}
               onChange={(e) => onUpdate({ assessment_points: e.target.value })}
-              placeholder="Detailed assessment points..."
+              placeholder="请输入详细评价..."
               autoResize
               className="text-sm"
             />

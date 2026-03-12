@@ -1,6 +1,7 @@
 import React from 'react';
 import type { CodingChallenge } from '@/types';
 import { Card, CardBody, Textarea, Select, Button } from '@/components/ui';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface CodingChallengeCardProps {
   challenge: CodingChallenge;
@@ -9,17 +10,17 @@ interface CodingChallengeCardProps {
 }
 
 const evaluationOptions = [
-  { value: 'excellent', label: 'Excellent' },
-  { value: 'good', label: 'Good' },
-  { value: 'acceptable', label: 'Acceptable' },
-  { value: 'needs_improvement', label: 'Needs Improvement' },
+  { value: 'excellent', label: t.codingEvaluation.excellent },
+  { value: 'good', label: t.codingEvaluation.good },
+  { value: 'acceptable', label: t.codingEvaluation.acceptable },
+  { value: 'needs_improvement', label: t.codingEvaluation.needs_improvement },
 ];
 
 const resultOptions = [
-  { value: 'pass', label: 'Pass' },
-  { value: 'partial', label: 'Partial' },
-  { value: 'fail', label: 'Fail' },
-  { value: 'not_completed', label: 'Not Completed' },
+  { value: 'pass', label: t.codingResult.pass },
+  { value: 'partial', label: t.codingResult.partial },
+  { value: 'fail', label: t.codingResult.fail },
+  { value: 'not_completed', label: t.codingResult.not_completed },
 ];
 
 const resultColors = {
@@ -41,10 +42,10 @@ export const CodingChallengeCard: React.FC<CodingChallengeCardProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">
-              Code
+              编程
             </span>
             <span className={`text-xs px-1.5 py-0.5 rounded ${resultColors[challenge.result]}`}>
-              {resultOptions.find(o => o.value === challenge.result)?.label || 'Not Completed'}
+              {resultOptions.find(o => o.value === challenge.result)?.label || t.codingResult.not_completed}
             </span>
           </div>
           <Button
@@ -61,20 +62,20 @@ export const CodingChallengeCard: React.FC<CodingChallengeCardProps> = ({
 
         {/* Problem */}
         <Textarea
-          label="Problem Description"
+          label="题目描述"
           value={challenge.problem}
           onChange={(e) => onUpdate({ problem: e.target.value })}
-          placeholder="Describe the coding challenge..."
+          placeholder="请输入编程题目..."
           rows={2}
           className="text-sm"
         />
 
         {/* Solution/Notes */}
         <Textarea
-          label="Solution / Notes"
+          label="解题过程 / 记录"
           value={challenge.solution || ''}
           onChange={(e) => onUpdate({ solution: e.target.value })}
-          placeholder="Candidate's solution and notes..."
+          placeholder="记录候选人的解题思路与细节..."
           rows={3}
           className="text-sm font-mono text-xs"
         />
@@ -82,7 +83,7 @@ export const CodingChallengeCard: React.FC<CodingChallengeCardProps> = ({
         {/* Evaluation */}
         <div className="grid grid-cols-4 gap-2">
           <Select
-            label="Time"
+            label="时间"
             value={challenge.evaluation?.timeComplexity || ''}
             onChange={(e) =>
               onUpdate({
@@ -96,7 +97,7 @@ export const CodingChallengeCard: React.FC<CodingChallengeCardProps> = ({
             className="text-xs"
           />
           <Select
-            label="Code Quality"
+            label="代码质量"
             value={challenge.evaluation?.codeQuality || ''}
             onChange={(e) =>
               onUpdate({
@@ -110,7 +111,7 @@ export const CodingChallengeCard: React.FC<CodingChallengeCardProps> = ({
             className="text-xs"
           />
           <Select
-            label="Communication"
+            label="沟通表达"
             value={challenge.evaluation?.communication || ''}
             onChange={(e) =>
               onUpdate({
@@ -124,7 +125,7 @@ export const CodingChallengeCard: React.FC<CodingChallengeCardProps> = ({
             className="text-xs"
           />
           <Select
-            label="Result"
+            label="结果"
             value={challenge.result}
             onChange={(e) => onUpdate({ result: e.target.value as 'pass' | 'partial' | 'fail' | 'not_completed' })}
             options={resultOptions}

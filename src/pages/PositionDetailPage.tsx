@@ -25,21 +25,21 @@ export default function PositionDetailPage() {
           {position.team && <p className="text-sm text-gray-500">{position.team}</p>}
         </div>
         <Button variant="secondary" size="sm" onClick={() => navigate(`/positions/${position.id}/edit`)}>
-          Edit Position
+          编辑岗位
         </Button>
       </div>
 
       {position.description && (
         <div className="bg-white p-3 rounded-lg border border-gray-200">
           <div className="flex items-start justify-between gap-3 mb-1">
-            <h3 className="text-sm font-medium text-gray-700">Job Description</h3>
+            <h3 className="text-sm font-medium text-gray-700">岗位描述</h3>
             {shouldClampDescription && (
               <button
                 type="button"
                 onClick={() => setIsDescriptionExpanded((value) => !value)}
                 className="text-xs text-blue-600 hover:text-blue-800 shrink-0"
               >
-                {isDescriptionExpanded ? 'Show less' : 'Show more'}
+                {isDescriptionExpanded ? '收起' : '展开'}
               </button>
             )}
           </div>

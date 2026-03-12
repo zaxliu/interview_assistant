@@ -1,6 +1,7 @@
 import React from 'react';
 import { useSettingsStore } from '@/store/settingsStore';
 import { Card, CardBody } from '@/components/ui';
+import { zhCN as t } from '@/i18n/zhCN';
 
 export const SettingsWarning: React.FC = () => {
   const {
@@ -16,13 +17,13 @@ export const SettingsWarning: React.FC = () => {
     missingItems.push('AI API Key');
   }
   if (!feishuAppId) {
-    missingItems.push('Feishu App ID');
+    missingItems.push('飞书 App ID');
   }
   if (!feishuAppSecret) {
-    missingItems.push('Feishu App Secret');
+    missingItems.push('飞书 App Secret');
   }
   if (!feishuUserAccessToken) {
-    missingItems.push('Login to Feishu');
+    missingItems.push('飞书登录');
   }
 
   if (missingItems.length === 0) {
@@ -37,9 +38,9 @@ export const SettingsWarning: React.FC = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <div className="flex-1">
-            <h3 className="text-sm font-medium text-amber-800">Setup Required</h3>
+            <h3 className="text-sm font-medium text-amber-800">{t.app.settings}未完成</h3>
             <p className="text-xs text-amber-700 mt-1">
-              Please configure: {missingItems.join(', ')}
+              请先完成以下配置：{missingItems.join('、')}
             </p>
           </div>
         </div>

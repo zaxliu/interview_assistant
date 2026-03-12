@@ -29,7 +29,7 @@ const parseFilenameFromContentDisposition = (contentDisposition: string | null):
 
 const parseErrorMessage = async (response: Response): Promise<string> => {
   const text = await response.text();
-  if (!text) return `Request failed: HTTP ${response.status}`;
+  if (!text) return `请求失败：HTTP ${response.status}`;
   try {
     const json = JSON.parse(text) as { error?: string };
     if (json.error) return json.error;
@@ -49,7 +49,7 @@ export interface WintalentDownloadResult {
 export const downloadWintalentResumePDF = async (interviewUrl: string): Promise<WintalentDownloadResult> => {
   const normalized = interviewUrl.trim();
   if (!normalized) {
-    throw new Error('Wintalent interview link is required');
+    throw new Error('请输入 Wintalent 面试链接');
   }
 
   const response = await fetch(WINTALENT_DOWNLOAD_API, {
@@ -67,7 +67,7 @@ export const downloadWintalentResumePDF = async (interviewUrl: string): Promise<
   const blob = await response.blob();
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.toLowerCase().includes('pdf')) {
-    throw new Error(`Unexpected content type: ${contentType || 'unknown'}`);
+    throw new Error(`返回内容类型异常：${contentType || '未知'}`);
   }
 
   const filename =
@@ -80,4 +80,3 @@ export const downloadWintalentResumePDF = async (interviewUrl: string): Promise<
     resumeId: response.headers.get('x-wintalent-resume-id'),
   };
 };
-

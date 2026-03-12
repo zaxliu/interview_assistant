@@ -78,7 +78,7 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
     if (response.success && response.docUrl) {
       window.open(response.docUrl, '_blank');
     } else if (!response.success) {
-      alert(`Failed to export to Feishu: ${response.message}`);
+      alert(`导出到飞书失败：${response.message}`);
     }
   };
 
@@ -89,7 +89,7 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 2000);
     } catch (err) {
-      console.error('Failed to copy:', err);
+      console.error('复制失败:', err);
     }
   };
 
@@ -102,13 +102,13 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
           variant="secondary"
           onClick={() => setShowCopyModal(true)}
         >
-          Copy as Markdown
+          复制 Markdown
         </Button>
         <Button
           onClick={handleFeishuExport}
           isLoading={feishuLoading}
         >
-          Export to Feishu
+          导出到飞书
         </Button>
       </div>
 
@@ -117,20 +117,20 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl p-4 w-full max-w-2xl mx-4 max-h-[80vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-900">Markdown Preview</h3>
+              <h3 className="text-sm font-medium text-gray-900">Markdown 预览</h3>
               <div className="flex gap-2">
                 <Button
                   size="sm"
                   onClick={handleCopyMarkdown}
                 >
-                  {copySuccess ? 'Copied!' : 'Copy to Clipboard'}
+                  {copySuccess ? '已复制！' : '复制到剪贴板'}
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowCopyModal(false)}
                 >
-                  Close
+                  关闭
                 </Button>
               </div>
             </div>

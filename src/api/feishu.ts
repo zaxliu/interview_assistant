@@ -68,14 +68,14 @@ export const exchangeCodeForToken = async (
   if (!response.ok) {
     const errorText = await response.text();
     console.error('OAuth token exchange error:', errorText);
-    throw new Error(`Failed to exchange code for token: ${response.status}`);
+    throw new Error(`通过授权码换取 token 失败：${response.status}`);
   }
 
   const data = await response.json();
   console.log('Token exchange response:', data);
 
   if (data.code !== 0) {
-    const errorMsg = data.msg || 'Failed to get access token';
+    const errorMsg = data.msg || '获取 access token 失败';
     console.error('Feishu API error:', data.code, errorMsg);
     throw new Error(`${errorMsg} (code: ${data.code})`);
   }
@@ -83,7 +83,7 @@ export const exchangeCodeForToken = async (
   // Response structure: { code: 0, access_token: '...', refresh_token: '...', ... }
   if (!data.access_token) {
     console.error('No access_token in response:', data);
-    throw new Error('No access token in response');
+    throw new Error('响应中缺少 access token');
   }
 
   return {
@@ -120,13 +120,13 @@ export const refreshAccessToken = async (
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Token refresh error:', errorText);
-    throw new Error(`Failed to refresh token: ${response.status}`);
+    throw new Error(`刷新 token 失败：${response.status}`);
   }
 
   const data = await response.json();
 
   if (data.code !== 0) {
-    throw new Error(data.msg || 'Failed to refresh access token');
+    throw new Error(data.msg || '刷新 access token 失败');
   }
 
   // Response structure: { code: 0, access_token: '...', refresh_token: '...', ... }
@@ -156,21 +156,21 @@ export const getUserInfo = async (
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Get user info error:', errorText);
-    throw new Error(`Failed to get user info: ${response.status}`);
+    throw new Error(`获取用户信息失败：${response.status}`);
   }
 
   const data = await response.json();
   console.log('User info response:', data);
 
   if (data.code !== 0) {
-    throw new Error(data.msg || 'Failed to get user info');
+    throw new Error(data.msg || '获取用户信息失败');
   }
 
   // Response structure: { code: 0, data: { user_id, name, avatar_url, ... } }
   const userData = data.data;
   return {
     id: userData.user_id || userData.open_id || '',
-    name: userData.name || 'Unknown User',
+    name: userData.name || '未知用户',
     avatarUrl: userData.avatar_url || userData.avatar_thumb || undefined,
     loginTime: new Date().toISOString(),
   };
@@ -191,7 +191,7 @@ const getAccessToken = async (
 
   // Otherwise, get tenant_access_token using app credentials
   if (!appId || !appSecret) {
-    throw new Error('Either user_access_token or app_id + app_secret must be provided');
+    throw new Error('请提供 user_access_token 或 app_id + app_secret');
   }
 
   // Check cache
@@ -213,17 +213,17 @@ const getAccessToken = async (
 
     if (!response.ok) {
       if (response.type === 'opaque' || response.status === 0) {
-        throw new Error('CORS error: Feishu API blocked by browser. Please check proxy configuration.');
+        throw new Error('CORS 错误：浏览器无法直接访问飞书 API，请检查代理配置。');
       }
       const errorText = await response.text();
       console.error('Token API error response:', errorText);
-      throw new Error(`Failed to get Feishu access token: ${response.status}`);
+      throw new Error(`获取飞书 access token 失败：${response.status}`);
     }
 
     const data = await response.json();
 
     if (data.code !== 0) {
-      throw new Error(data.msg || 'Failed to get Feishu access token');
+      throw new Error(data.msg || '获取飞书 access token 失败');
     }
 
     cachedToken = {
@@ -234,7 +234,7 @@ const getAccessToken = async (
     return cachedToken.accessToken;
   } catch (error) {
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      throw new Error('Network error: Cannot reach Feishu API. Please check your network connection.');
+      throw new Error('网络错误：无法连接飞书 API，请检查网络连接。');
     }
     throw error;
   }
@@ -266,12 +266,12 @@ export const getCalendarEvents = async (
   });
 
   if (!calendarsResponse.ok) {
-    throw new Error('Failed to get calendar list');
+    throw new Error('获取日历列表失败');
   }
 
   const calendarsData = await calendarsResponse.json();
   if (calendarsData.code !== 0) {
-    throw new Error(calendarsData.msg || 'Failed to get calendar list');
+    throw new Error(calendarsData.msg || '获取日历列表失败');
   }
 
   const calendars = calendarsData.data?.calendar_list || [];
@@ -506,13 +506,13 @@ export const createFeishuDoc = async (
     });
 
     if (!createResponse.ok) {
-      throw new Error('Failed to create Feishu document');
+      throw new Error('创建飞书文档失败');
     }
 
     const createData = await createResponse.json();
 
     if (createData.code !== 0) {
-      throw new Error(createData.msg || 'Failed to create Feishu document');
+      throw new Error(createData.msg || '创建飞书文档失败');
     }
 
     const documentId = createData.data?.document?.document_id;
@@ -534,14 +534,14 @@ export const createFeishuDoc = async (
 
     return {
       success: true,
-      message: 'Successfully created Feishu document',
+      message: '已成功创建飞书文档',
       docUrl: `https://feishu.cn/docx/${documentId}`,
     };
   } catch (error) {
     console.error('Feishu doc creation error:', error);
     return {
       success: false,
-      message: error instanceof Error ? error.message : 'Failed to create Feishu document',
+      message: error instanceof Error ? error.message : '创建飞书文档失败',
     };
   }
 };
@@ -556,7 +556,7 @@ const parseFeishuError = async (response: Response): Promise<string> => {
   try {
     const data = await response.json();
     const code = data?.code;
-    const msg = data?.msg || data?.error?.message || 'Unknown Feishu API error';
+    const msg = data?.msg || data?.error?.message || '未知飞书 API 错误';
     if (code) {
       return `${msg} (code: ${code})`;
     }
@@ -586,12 +586,12 @@ const fetchDocRawContentWithToken = async (
 
   const rawContentData = await rawContentResponse.json();
   if (rawContentData.code !== 0) {
-    throw new Error(rawContentData.msg || 'Failed to fetch Feishu doc content');
+    throw new Error(rawContentData.msg || '获取飞书文档内容失败');
   }
 
   const content = rawContentData.data?.content;
   if (typeof content !== 'string') {
-    throw new Error('Feishu doc content is empty or invalid');
+    throw new Error('飞书文档内容为空或格式无效');
   }
 
   let title = docToken;
@@ -645,7 +645,7 @@ export const getFeishuDocRawContentFromLink = async (
 ): Promise<FeishuDocRawContent> => {
   const docToken = extractFeishuDocTokenFromUrl(docUrl);
   if (!docToken) {
-    throw new Error('Invalid Feishu doc link. Expected /docx/{token} or /wiki/{token}.');
+    throw new Error('飞书文档链接无效，应为 /docx/{token} 或 /wiki/{token}。');
   }
 
   const tokensToTry: string[] = [];
@@ -659,7 +659,7 @@ export const getFeishuDocRawContentFromLink = async (
     }
   }
   if (!tokensToTry.length) {
-    throw new Error('Missing Feishu access token. Please login with Feishu or configure app credentials.');
+    throw new Error('缺少飞书 access token，请先登录飞书或配置应用凭证。');
   }
 
   const errors: string[] = [];
@@ -672,13 +672,13 @@ export const getFeishuDocRawContentFromLink = async (
         content: doc.content,
       };
     } catch (error) {
-      errors.push(error instanceof Error ? error.message : 'Unknown error');
+      errors.push(error instanceof Error ? error.message : '未知错误');
     }
   }
 
   throw new Error(
-    `Failed to read Feishu document. ${errors.join(' | ')}. ` +
-    'If you just updated OAuth scopes, please logout/login again to refresh user token permissions.'
+    `读取飞书文档失败：${errors.join(' | ')}。` +
+    '若你刚更新 OAuth 权限范围，请重新登录飞书以刷新用户令牌权限。'
   );
 };
 
@@ -844,7 +844,7 @@ export const testFeishuCredentials = async (
   appSecret: string
 ): Promise<{ success: boolean; message: string }> => {
   if (!appId || !appSecret) {
-    return { success: false, message: 'App ID and App Secret are required' };
+    return { success: false, message: 'App ID 和 App Secret 不能为空' };
   }
 
   try {
@@ -860,24 +860,24 @@ export const testFeishuCredentials = async (
     });
 
     if (!response.ok) {
-      return { success: false, message: `HTTP error: ${response.status}` };
+      return { success: false, message: `HTTP 错误：${response.status}` };
     }
 
     const data = await response.json();
 
     if (data.code !== 0) {
-      return { success: false, message: data.msg || `Error code: ${data.code}` };
+      return { success: false, message: data.msg || `错误码：${data.code}` };
     }
 
     if (data.tenant_access_token) {
-      return { success: true, message: 'Feishu credentials verified' };
+      return { success: true, message: '飞书凭证验证成功' };
     }
 
-    return { success: false, message: 'No access token received' };
+    return { success: false, message: '未获取到 access token' };
   } catch (error) {
     return {
       success: false,
-      message: error instanceof Error ? error.message : 'Connection failed',
+      message: error instanceof Error ? error.message : '连接失败',
     };
   }
 };

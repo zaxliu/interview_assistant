@@ -18,6 +18,7 @@ import { migrateLegacyData } from '@/utils/migration';
 import { UserLoginBanner } from '@/components/auth/UserLoginBanner';
 import { CalendarSync } from '@/components/calendar/CalendarSync';
 import { Button, Logo } from '@/components/ui';
+import { zhCN as t } from '@/i18n/zhCN';
 
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const PositionFormPage = lazy(() => import('@/pages/PositionFormPage'));
@@ -47,14 +48,14 @@ const getBackTarget = (pathname: string, positionId?: string, candidateId?: stri
 
 const LoadingScreen = () => (
   <div className="bg-white border border-gray-200 rounded-lg p-8 text-center text-sm text-gray-500">
-    Loading...
+    {t.app.loading}
   </div>
 );
 
 const NotFoundPage = () => (
   <div className="bg-white border border-gray-200 rounded-lg p-8 text-center space-y-3">
-    <h2 className="text-lg font-semibold text-gray-900">Page Not Found</h2>
-    <p className="text-sm text-gray-500">The requested page does not exist.</p>
+    <h2 className="text-lg font-semibold text-gray-900">{t.app.notFoundTitle}</h2>
+    <p className="text-sm text-gray-500">{t.app.notFoundDescription}</p>
   </div>
 );
 
@@ -97,12 +98,12 @@ const AppHeader = () => {
               <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
-              Back
+              {t.app.back}
             </Button>
           )}
           <div className="flex items-center gap-2">
             <Logo size={28} />
-            <h1 className="text-lg font-semibold text-gray-900">Interview Assistant</h1>
+            <h1 className="text-lg font-semibold text-gray-900">{t.app.name}</h1>
           </div>
         </div>
 
@@ -112,7 +113,7 @@ const AppHeader = () => {
             <>
               {hasPdf && (
                 <Button variant="secondary" size="sm" onClick={toggleResume}>
-                  {showPdf ? 'Hide Resume' : 'View Resume'}
+                  {showPdf ? t.app.hideResume : t.app.viewResume}
                 </Button>
               )}
               <Button
@@ -124,7 +125,7 @@ const AppHeader = () => {
                   )
                 }
               >
-                Edit Candidate
+                {t.app.editCandidate}
               </Button>
               {selectedCandidate.questions.length > 0 && (
                 <Button
@@ -135,7 +136,7 @@ const AppHeader = () => {
                     )
                   }
                 >
-                  {selectedCandidate.interviewResult ? 'View Summary' : 'Generate Summary'}
+                  {selectedCandidate.interviewResult ? t.app.viewSummary : t.app.generateSummary}
                 </Button>
               )}
             </>

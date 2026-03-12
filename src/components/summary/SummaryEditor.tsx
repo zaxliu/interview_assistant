@@ -257,12 +257,12 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h2 className="text-sm font-medium text-gray-900">
-            Interview Result: {candidate.name} - {position.title}
+            面试结果：{candidate.name} - {position.title}
           </h2>
           {/* Completion status */}
           {isCompleted && (
             <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
-              Completed
+              已完成
             </span>
           )}
           {/* Save status indicator */}
@@ -271,9 +271,9 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
             saveStatus === 'saving' ? 'text-yellow-600' :
             'text-gray-400'
           }`}>
-            {saveStatus === 'saved' && '✓ Saved'}
+            {saveStatus === 'saved' && '✓ 已保存'}
             {saveStatus === 'saving' && '...'}
-            {saveStatus === 'unsaved' && '(unsaved)'}
+            {saveStatus === 'unsaved' && '（未保存）'}
           </span>
         </div>
 
@@ -284,11 +284,11 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
             isLoading={aiLoading}
             disabled={!position.description || !preferredResumeText}
           >
-            Generate from AI
+            AI 生成总结
           </Button>
           {!isCompleted && (
             <Button onClick={handleComplete}>
-              Complete Interview
+              完成面试
             </Button>
           )}
         </div>
@@ -297,7 +297,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       {hasPageLink && (
         <Card>
           <CardHeader>
-            <h3 className="text-sm font-medium text-gray-700">Candidate Page</h3>
+            <h3 className="text-sm font-medium text-gray-700">候选人页面</h3>
           </CardHeader>
           <CardBody>
             <a
@@ -315,12 +315,12 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       {/* Interview Info */}
       <Card>
         <CardHeader>
-          <h3 className="text-sm font-medium text-gray-700">Interview Info</h3>
+          <h3 className="text-sm font-medium text-gray-700">面试信息</h3>
         </CardHeader>
         <CardBody>
           <div className="grid grid-cols-3 gap-3">
             <Input
-              label="Interviewer"
+              label="面试官"
               value={result.interview_info.interviewer}
               onChange={(e) =>
                 setResult({
@@ -330,7 +330,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
               }
             />
             <Input
-              label="Time"
+              label="时间"
               value={result.interview_info.interview_time}
               onChange={(e) =>
                 setResult({
@@ -340,7 +340,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
               }
             />
             <Select
-              label="Overall Result"
+              label="总体结果"
               value={result.interview_info.overall_result}
               onChange={(e) =>
                 setResult({
@@ -361,9 +361,9 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-gray-700">Evaluation Dimensions</h3>
+            <h3 className="text-sm font-medium text-gray-700">评估维度</h3>
             <Button variant="ghost" size="sm" onClick={addDimension}>
-              + Add Dimension
+              + 添加维度
             </Button>
           </div>
         </CardHeader>
@@ -383,12 +383,12 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       {/* Summary */}
       <Card>
         <CardHeader>
-          <h3 className="text-sm font-medium text-gray-700">Summary</h3>
+          <h3 className="text-sm font-medium text-gray-700">综合评价</h3>
         </CardHeader>
         <CardBody className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Suggested Level"
+              label="建议级别"
               value={result.summary.suggested_level}
               onChange={(e) =>
                 setResult({
@@ -396,10 +396,10 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
                   summary: { ...result.summary, suggested_level: e.target.value },
                 })
               }
-              placeholder="e.g., H7, P6"
+              placeholder="例如：H7、P6"
             />
             <Select
-              label="Comprehensive Score"
+              label="综合评分"
               value={result.summary.comprehensive_score.toString()}
               onChange={(e) =>
                 setResult({
@@ -413,7 +413,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <Select
-              label="Interview Conclusion"
+              label="面试结论"
               value={result.summary.interview_conclusion}
               onChange={(e) =>
                 setResult({
@@ -442,13 +442,13 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
                   }
                   className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                 />
-                <span className="text-sm text-gray-700">Strongly Recommended</span>
+                <span className="text-sm text-gray-700">强烈推荐</span>
               </label>
             </div>
           </div>
 
           <Textarea
-            label="Overall Comment"
+            label="总体评价"
             value={result.summary.overall_comment}
             onChange={(e) =>
               setResult({
@@ -457,7 +457,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
               })
             }
             autoResize
-            placeholder="Comprehensive evaluation of the candidate..."
+            placeholder="请输入对候选人的综合评价..."
           />
         </CardBody>
       </Card>
@@ -465,21 +465,21 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       {/* Additional Info */}
       <Card>
         <CardHeader>
-          <h3 className="text-sm font-medium text-gray-700">Additional Info (Optional)</h3>
+          <h3 className="text-sm font-medium text-gray-700">补充信息（可选）</h3>
         </CardHeader>
         <CardBody className="space-y-3">
           <StringListInput
-            label="Strengths"
+            label="优势"
             items={strengths}
             onChange={setStrengths}
           />
           <StringListInput
-            label="Concerns"
+            label="顾虑"
             items={concerns}
             onChange={setConcerns}
           />
           <StringListInput
-            label="Follow-up Questions"
+            label="后续跟进问题"
             items={followUps}
             onChange={setFollowUps}
           />
@@ -491,7 +491,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
         <CardBody className="flex justify-end gap-2">
           {!isCompleted && (
             <Button onClick={handleComplete}>
-              Complete Interview
+              完成面试
             </Button>
           )}
           <ExportButtons
@@ -552,11 +552,11 @@ const StringListInput: React.FC<{
           <Input
             value={newItem}
             onChange={(e) => setNewItem(e.target.value)}
-            placeholder={`Add ${label.toLowerCase()}...`}
+            placeholder={`添加${label}...`}
             onKeyPress={(e) => e.key === 'Enter' && handleAdd()}
           />
           <Button variant="ghost" size="sm" onClick={handleAdd} disabled={!newItem.trim()}>
-            Add
+            添加
           </Button>
         </div>
       </div>

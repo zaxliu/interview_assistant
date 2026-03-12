@@ -62,13 +62,13 @@ describe('CandidateForm', () => {
 
     render(<CandidateForm positionId="position-1" onSave={onSave} onCancel={() => undefined} />);
 
-    fireEvent.change(screen.getByLabelText('Candidate Name'), {
+    fireEvent.change(screen.getByLabelText('候选人姓名'), {
       target: { value: 'Alice' },
     });
-    fireEvent.change(screen.getByPlaceholderText('Resume content will appear here after PDF upload, or paste manually...'), {
+    fireEvent.change(screen.getByPlaceholderText('上传 PDF 后将在此显示简历内容，也可手动粘贴...'), {
       target: { value: 'Candidate resume summary' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add Candidate' }));
+    fireEvent.click(screen.getByRole('button', { name: '新增候选人' }));
 
     expect(onSave).toHaveBeenCalledTimes(1);
     const savedCandidateId = onSave.mock.calls[0][0];
@@ -80,10 +80,10 @@ describe('CandidateForm', () => {
 
     render(<CandidateForm positionId="position-1" onSave={() => undefined} onCancel={() => undefined} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Or paste direct PDF URL (not Wintalent page)'), {
+    fireEvent.change(screen.getByPlaceholderText('或粘贴 PDF 直链（非 Wintalent 页面）'), {
       target: { value: 'https://example.com/resume.pdf' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Parse' }));
+    fireEvent.click(screen.getByRole('button', { name: '解析' }));
 
     await waitFor(() => {
       expect(parseFromUrl).toHaveBeenCalledWith(
@@ -112,7 +112,7 @@ describe('CandidateForm', () => {
       />
     );
 
-    expect(screen.getByText('Calendar Links')).toBeInTheDocument();
+    expect(screen.getByText('日历链接')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'https://vc.feishu.cn/j/681359281' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc' })).toBeInTheDocument();
   });
@@ -128,10 +128,10 @@ describe('CandidateForm', () => {
 
     render(<CandidateForm positionId="position-1" onSave={() => undefined} onCancel={() => undefined} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Paste Wintalent interview link for one-click import'), {
+    fireEvent.change(screen.getByPlaceholderText('粘贴 Wintalent 面试链接，一键导入'), {
       target: { value: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    fireEvent.click(screen.getByRole('button', { name: '导入' }));
 
     await waitFor(() => {
       expect(downloadWintalentResumePDF).toHaveBeenCalledWith(

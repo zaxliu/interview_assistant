@@ -76,9 +76,9 @@ export const useFeishuOAuth = () => {
         console.error('OAuth error:', error);
         let message = error.message;
         if (message.includes('Failed to fetch') || message.includes('Network error')) {
-          message = 'Network error: Cannot reach Feishu API. Please check your network connection.';
+          message = '网络错误：无法连接飞书 API，请检查网络连接。';
         }
-        alert(`OAuth failed: ${message}`);
+        alert(`飞书 OAuth 失败：${message}`);
         const newUrl = returnView
           ? `${window.location.pathname}#${returnView}`
           : window.location.pathname;
@@ -92,7 +92,7 @@ export const useFeishuOAuth = () => {
   // Start OAuth flow
   const startOAuth = useCallback((returnTo?: string) => {
     if (!feishuAppId) {
-      alert('Please enter Feishu App ID first');
+      alert('请先填写飞书 App ID');
       return;
     }
 

@@ -13,6 +13,7 @@ import { getPDF } from '@/utils/pdfStorage';
 import { getPreferredResumeText } from '@/utils/resume';
 import { ResumeHighlightsPanel } from '@/components/candidates/ResumeHighlightsPanel';
 import { getFeishuDocRawContentFromLink } from '@/api/feishu';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface InterviewPanelProps {
   position: Position;
@@ -34,7 +35,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     updateQuestion,
   } = usePositionStore();
 
-  // PDF Viewer state - visibility controlled by parent via prop
   const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
   const [pdfFilename, setPdfFilename] = useState<string>('');
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
@@ -48,7 +48,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const quickNotesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Get split ratio from settings store
   const {
     interviewSplitRatio,
     setInterviewSplitRatio,
@@ -58,7 +57,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   } = useSettingsStore();
   const setHasPdf = useInterviewUIStore((state) => state.setHasPdf);
 
-  // Load PDF from IndexedDB on mount
   useEffect(() => {
     const loadPdf = async () => {
       try {
@@ -112,7 +110,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     };
   }, [candidate.id, candidate.quickNotes, position.id, quickNotesDraft, updateCandidate]);
 
-  // Drag handlers for resizable divider
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -126,7 +123,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       if (!container) return;
       const rect = container.getBoundingClientRect();
       const newRatio = (e.clientX - rect.left) / rect.width;
-      // Clamp between 20% and 80%
       const clampedRatio = Math.min(0.8, Math.max(0.2, newRatio));
       setInterviewSplitRatio(clampedRatio);
     };
@@ -144,7 +140,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const handleGenerateQuestions = async () => {
     const resumeContent = getPreferredResumeText(candidate);
     if (!position.description || !resumeContent) {
-      alert('Please add job description and candidate resume first');
+      alert('请先补充岗位描述与候选人简历');
       return;
     }
 
@@ -166,9 +162,9 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const normalizeQuestionText = (text: string): string => text.trim().toLowerCase().replace(/\s+/g, ' ');
 
   const buildImportedNotes = (answer: string, evidence?: string): string => {
-    const lines = [`[Imported from meeting notes] ${answer.trim()}`];
+    const lines = [`[来自会议纪要导入] ${answer.trim()}`];
     if (evidence?.trim()) {
-      lines.push(`Evidence: ${evidence.trim()}`);
+      lines.push(`依据：${evidence.trim()}`);
     }
     return lines.join('\n');
   };
@@ -176,7 +172,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const handleExtractFromMeetingNotes = async () => {
     const trimmedUrl = meetingNotesUrl.trim();
     if (!trimmedUrl) {
-      setMeetingImportError('Please enter a Feishu meeting notes link.');
+      setMeetingImportError('请输入飞书会议纪要链接。');
       setMeetingImportStatus(null);
       return;
     }
@@ -194,7 +190,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       );
       const extracted = await extractInterviewNotesInsights(candidate.questions, doc.content);
       if (!extracted) {
-        throw new Error('Failed to extract Q&A from meeting notes.');
+        throw new Error('从会议纪要提取问答失败。');
       }
 
       const existingByNormalizedText = new Map<string, string>();
@@ -258,14 +254,12 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       });
 
       if (!updatedExistingCount && !addedNewCount) {
-        setMeetingImportStatus(`No actionable Q&A found in "${doc.title}".`);
+        setMeetingImportStatus(`未在“${doc.title}”中识别到可导入的问答。`);
       } else {
-        setMeetingImportStatus(
-          `Imported from "${doc.title}": updated ${updatedExistingCount} existing question(s), added ${addedNewCount} new Q&A item(s).`
-        );
+        setMeetingImportStatus(`已从“${doc.title}”导入：更新${updatedExistingCount}个已有问题，新增${addedNewCount}个问答。`);
       }
     } catch (error) {
-      setMeetingImportError(error instanceof Error ? error.message : 'Failed to import meeting notes.');
+      setMeetingImportError(error instanceof Error ? error.message : '导入会议纪要失败。');
     } finally {
       setIsImportingMeetingNotes(false);
     }
@@ -274,8 +268,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const handlePdfTextSelect = (text: string) => {
     if (!activeQuestionId || !text.trim()) return;
 
-    // Add quoted text to the active question's notes
-    const question = candidate.questions.find(q => q.id === activeQuestionId);
+    const question = candidate.questions.find((q) => q.id === activeQuestionId);
     if (question) {
       const currentNotes = question.notes || '';
       const quotedText = `\n> "${text.trim()}"\n`;
@@ -290,25 +283,25 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const canGenerateQuestions = position.description && preferredResumeText;
   const hasInterviewLink = Boolean(candidate.interviewLink);
   const missingRequirements = [
-    !position.description ? 'position description' : null,
-    !preferredResumeText ? 'candidate resume' : null,
+    !position.description ? '岗位描述' : null,
+    !preferredResumeText ? '候选人简历' : null,
   ].filter(Boolean) as string[];
   const generateQuestionsHint = missingRequirements.length
-    ? `Add ${missingRequirements.join(' and ')} to enable AI question generation.`
+    ? `请先补充${missingRequirements.join('和')}，再使用 AI 生成问题。`
     : null;
   const isMeetingImportBusy = isImportingMeetingNotes || aiLoading;
 
   const renderMeetingNotesImporter = () => (
     <Card>
       <CardHeader>
-        <h3 className="text-sm font-medium text-gray-700">Meeting Notes Import</h3>
+        <h3 className="text-sm font-medium text-gray-700">会议纪要导入</h3>
         <p className="text-xs text-gray-500">
-          Paste a Feishu meeting notes link to enrich existing answers and add new Q&A before generating summary.
+          粘贴飞书会议纪要链接，可补全已有问题回答并新增问答，再生成面试总结。
         </p>
       </CardHeader>
       <CardBody className="space-y-2">
         <Input
-          placeholder="https://xxx.feishu.cn/docx/... or /wiki/..."
+          placeholder="https://xxx.feishu.cn/docx/... 或 /wiki/..."
           value={meetingNotesUrl}
           onChange={(event) => setMeetingNotesUrl(event.target.value)}
         />
@@ -319,7 +312,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
             isLoading={isMeetingImportBusy}
             disabled={!meetingNotesUrl.trim() || isMeetingImportBusy}
           >
-            Extract Q&A from Notes
+            从纪要提取问答
           </Button>
         </div>
         {meetingImportStatus && <p className="text-xs text-green-700">{meetingImportStatus}</p>}
@@ -328,164 +321,154 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     </Card>
   );
 
-  // Layout with side panel for PDF viewer
   if (showPdfViewerProp && pdfData) {
     return (
       <div ref={containerRef} className="flex h-[calc(100vh-120px)] w-full">
-          {/* PDF Viewer - Left side with dynamic width */}
-          <div
-            style={{ width: `${interviewSplitRatio * 100}%` }}
-            className="relative min-w-[300px] bg-white"
-          >
-            <div className="border-b bg-gray-50 px-3 py-2">
-              <div className="flex items-stretch gap-2">
-                {hasInterviewLink && (
-                  <div className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-3 py-2 shadow-sm">
-                    <p className="text-xs font-medium text-gray-700">Meeting</p>
-                    {candidate.interviewLink && (
-                      <a
-                        href={candidate.interviewLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1 block break-all text-xs text-blue-600 hover:text-blue-800"
-                      >
-                        {candidate.interviewLink}
-                      </a>
-                    )}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setIsSnapshotOpen((open) => !open)}
-                  className="flex flex-1 items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-sm text-gray-700 shadow-sm hover:bg-gray-50"
-                >
-                  <div>
-                    <p className="font-medium">Candidate Snapshot</p>
-                    <p className="text-xs text-gray-500">
-                      {isSnapshotOpen ? 'Collapse highlights and summary' : 'Expand highlights and summary'}
-                    </p>
-                  </div>
-                  <span className={`text-xs text-gray-400 transition-transform ${isSnapshotOpen ? 'rotate-180' : ''}`}>▾</span>
-                </button>
-              </div>
-            </div>
-
-            <PDFViewer
-              pdfData={pdfData}
-              filename={pdfFilename}
-              onPageSelect={handlePdfTextSelect}
-            />
-            <div className="pointer-events-none absolute left-3 top-[60px] z-10 max-w-[min(360px,calc(100%-24px))]">
-              <div
-                className={`pointer-events-auto transition-all duration-200 ${
-                  isSnapshotOpen
-                    ? 'translate-x-0 opacity-100'
-                    : '-translate-x-3 opacity-0'
-                }`}
+        <div
+          style={{ width: `${interviewSplitRatio * 100}%` }}
+          className="relative min-w-[300px] bg-white"
+        >
+          <div className="border-b bg-gray-50 px-3 py-2">
+            <div className="flex items-stretch gap-2">
+              {hasInterviewLink && (
+                <div className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-3 py-2 shadow-sm">
+                  <p className="text-xs font-medium text-gray-700">面试链接</p>
+                  {candidate.interviewLink && (
+                    <a
+                      href={candidate.interviewLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 block break-all text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      {candidate.interviewLink}
+                    </a>
+                  )}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsSnapshotOpen((open) => !open)}
+                className="flex flex-1 items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-sm text-gray-700 shadow-sm hover:bg-gray-50"
               >
-                {isSnapshotOpen && (
-                  <div className="w-[320px] max-w-full rounded-xl border border-gray-200 bg-white/95 p-1 shadow-lg backdrop-blur">
-                    <ResumeHighlightsPanel
-                      highlights={candidate.resumeHighlights}
-                      title="Candidate Snapshot"
-                      emptyText="No extracted highlights yet."
-                      compact
-                    />
-                  </div>
-                )}
-              </div>
+                <div>
+                  <p className="font-medium">候选人快照</p>
+                  <p className="text-xs text-gray-500">
+                    {isSnapshotOpen ? '收起亮点与摘要' : '展开亮点与摘要'}
+                  </p>
+                </div>
+                <span className={`text-xs text-gray-400 transition-transform ${isSnapshotOpen ? 'rotate-180' : ''}`}>▾</span>
+              </button>
             </div>
           </div>
 
-          {/* Draggable Divider */}
-          <div
-            className={`w-1 flex-shrink-0 cursor-col-resize transition-colors ${
-              isDragging ? 'bg-blue-500' : 'bg-gray-200 hover:bg-blue-400'
-            }`}
-            onMouseDown={handleMouseDown}
+          <PDFViewer
+            pdfData={pdfData}
+            filename={pdfFilename}
+            onPageSelect={handlePdfTextSelect}
           />
-
-          {/* Questions - Right side with remaining width */}
-          <div
-            style={{ width: `${(1 - interviewSplitRatio) * 100}%` }}
-            className="min-w-[300px] overflow-auto"
-          >
-            <div className="space-y-4 p-4">
-              {/* Header */}
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
-                  <p className="text-xs text-gray-500">{position.title}</p>
-                </div>
-                {isMissingResume && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => navigate(`/positions/${position.id}/candidates/${candidate.id}/edit`)}
-                  >
-                    Edit Candidate
-                  </Button>
-                )}
-              </div>
-
-              {/* Quick Notes */}
-              <Card>
-                <CardHeader>
-                  <h3 className="text-sm font-medium text-gray-700">Quick Notes</h3>
-                </CardHeader>
-                <CardBody>
-                  <Textarea
-                    placeholder="Jot down quick observations..."
-                    value={quickNotesDraft}
-                    onChange={(e) => handleQuickNotesChange(e.target.value)}
-                    autoResize
-                    className="text-sm"
+          <div className="pointer-events-none absolute left-3 top-[60px] z-10 max-w-[min(360px,calc(100%-24px))]">
+            <div
+              className={`pointer-events-auto transition-all duration-200 ${
+                isSnapshotOpen
+                  ? 'translate-x-0 opacity-100'
+                  : '-translate-x-3 opacity-0'
+              }`}
+            >
+              {isSnapshotOpen && (
+                <div className="w-[320px] max-w-full rounded-xl border border-gray-200 bg-white/95 p-1 shadow-lg backdrop-blur">
+                  <ResumeHighlightsPanel
+                    highlights={candidate.resumeHighlights}
+                    title="候选人快照"
+                    emptyText="暂无提取亮点。"
+                    compact
                   />
-                </CardBody>
-              </Card>
-
-              {renderMeetingNotesImporter()}
-
-              {/* Question Generation */}
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={handleGenerateQuestions}
-                    isLoading={aiLoading}
-                    disabled={!canGenerateQuestions || aiLoading}
-                    title={generateQuestionsHint || ''}
-                  >
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Generate Questions
-                  </Button>
-                  <AddQuestionForm positionId={position.id} candidateId={candidate.id} />
                 </div>
-                {generateQuestionsHint && (
-                  <p className="text-xs text-amber-700">{generateQuestionsHint}</p>
-                )}
-              </div>
-
-              {/* Questions List */}
-              <QuestionList
-                positionId={position.id}
-                candidateId={candidate.id}
-                questions={candidate.questions}
-                onQuestionClick={setActiveQuestionId}
-                activeQuestionId={activeQuestionId}
-              />
+              )}
             </div>
           </div>
         </div>
+
+        <div
+          className={`w-1 flex-shrink-0 cursor-col-resize transition-colors ${
+            isDragging ? 'bg-blue-500' : 'bg-gray-200 hover:bg-blue-400'
+          }`}
+          onMouseDown={handleMouseDown}
+        />
+
+        <div
+          style={{ width: `${(1 - interviewSplitRatio) * 100}%` }}
+          className="min-w-[300px] overflow-auto"
+        >
+          <div className="space-y-4 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
+                <p className="text-xs text-gray-500">{position.title}</p>
+              </div>
+              {isMissingResume && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate(`/positions/${position.id}/candidates/${candidate.id}/edit`)}
+                >
+                  {t.app.editCandidate}
+                </Button>
+              )}
+            </div>
+
+            <Card>
+              <CardHeader>
+                <h3 className="text-sm font-medium text-gray-700">快速记录</h3>
+              </CardHeader>
+              <CardBody>
+                <Textarea
+                  placeholder="记录面试中的即时观察..."
+                  value={quickNotesDraft}
+                  onChange={(e) => handleQuickNotesChange(e.target.value)}
+                  autoResize
+                  className="text-sm"
+                />
+              </CardBody>
+            </Card>
+
+            {renderMeetingNotesImporter()}
+
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={handleGenerateQuestions}
+                  isLoading={aiLoading}
+                  disabled={!canGenerateQuestions || aiLoading}
+                  title={generateQuestionsHint || ''}
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  生成面试问题
+                </Button>
+                <AddQuestionForm positionId={position.id} candidateId={candidate.id} />
+              </div>
+              {generateQuestionsHint && (
+                <p className="text-xs text-amber-700">{generateQuestionsHint}</p>
+              )}
+            </div>
+
+            <QuestionList
+              positionId={position.id}
+              candidateId={candidate.id}
+              questions={candidate.questions}
+              onQuestionClick={setActiveQuestionId}
+              activeQuestionId={activeQuestionId}
+            />
+          </div>
+        </div>
+      </div>
     );
   }
 
-  // Normal layout without PDF viewer
   return (
     <div className="space-y-4">
-      {/* Header - just info, buttons are in top banner */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
@@ -497,31 +480,30 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
             size="sm"
             onClick={() => navigate(`/positions/${position.id}/candidates/${candidate.id}/edit`)}
           >
-            Edit Candidate
+            {t.app.editCandidate}
           </Button>
         )}
       </div>
 
-      {/* Job Description & Resume Summary */}
       <Card>
         <CardHeader>
-          <h3 className="text-sm font-medium text-gray-700">Context</h3>
+          <h3 className="text-sm font-medium text-gray-700">上下文</h3>
         </CardHeader>
         <CardBody className="space-y-3">
           <div>
-            <p className="text-xs font-medium text-gray-600 mb-1">Job Description</p>
+            <p className="text-xs font-medium text-gray-600 mb-1">岗位描述</p>
             {position.description ? (
               <p className="text-xs text-gray-700 line-clamp-3">{position.description}</p>
             ) : (
-              <p className="text-xs text-gray-400 italic">No job description added</p>
+              <p className="text-xs text-gray-400 italic">尚未填写岗位描述</p>
             )}
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-600 mb-1">Resume Summary</p>
+            <p className="text-xs font-medium text-gray-600 mb-1">简历摘要</p>
             {preferredResumeText ? (
               <p className="text-xs text-gray-700 line-clamp-3">{preferredResumeText}</p>
             ) : (
-              <p className="text-xs text-gray-400 italic">No resume uploaded</p>
+              <p className="text-xs text-gray-400 italic">尚未上传简历</p>
             )}
           </div>
         </CardBody>
@@ -529,22 +511,21 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
 
       <ResumeHighlightsPanel
         highlights={candidate.resumeHighlights}
-        title="Candidate Snapshot"
-        emptyText="No extracted highlights yet."
+        title="候选人快照"
+        emptyText="暂无提取亮点。"
         collapsible
         defaultExpanded={false}
         compact
       />
 
-      {/* Quick Notes */}
       <Card>
         <CardHeader>
-          <h3 className="text-sm font-medium text-gray-700">Quick Notes</h3>
-          <p className="text-xs text-gray-500">Free-form notes during the interview (included in summary)</p>
+          <h3 className="text-sm font-medium text-gray-700">快速记录</h3>
+          <p className="text-xs text-gray-500">面试过程中的自由记录（会纳入总结）</p>
         </CardHeader>
         <CardBody>
           <Textarea
-            placeholder="Jot down quick observations, impressions, or reminders during the interview..."
+            placeholder="记录面试观察、印象或待跟进点..."
             value={quickNotesDraft}
             onChange={(e) => handleQuickNotesChange(e.target.value)}
             autoResize
@@ -555,7 +536,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
 
       {renderMeetingNotesImporter()}
 
-      {/* Question Generation */}
       <div className="space-y-2">
         <div className="flex gap-2">
           <Button
@@ -568,7 +548,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            Generate Questions from AI
+            AI 生成问题
           </Button>
           <AddQuestionForm positionId={position.id} candidateId={candidate.id} />
         </div>
@@ -577,7 +557,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         )}
       </div>
 
-      {/* Questions List */}
       <QuestionList
         positionId={position.id}
         candidateId={candidate.id}

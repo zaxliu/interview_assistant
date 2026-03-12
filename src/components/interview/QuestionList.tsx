@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Question, QuestionSource } from '@/types';
 import { QuestionCard } from './QuestionCard';
 import { usePositionStore } from '@/store/positionStore';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface QuestionListProps {
   positionId: string;
@@ -13,10 +14,10 @@ interface QuestionListProps {
 
 // Source display configuration
 const sourceConfig: Record<QuestionSource, { label: string; icon: string; color: string }> = {
-  resume: { label: 'From Resume', icon: '📄', color: 'text-blue-600' },
-  jd: { label: 'From Job Description', icon: '📋', color: 'text-purple-600' },
-  common: { label: 'Common / Behavioral', icon: '💡', color: 'text-amber-600' },
-  coding: { label: 'Coding / Technical', icon: '💻', color: 'text-green-600' },
+  resume: { label: t.questionSource.resume, icon: '📄', color: 'text-blue-600' },
+  jd: { label: t.questionSource.jd, icon: '📋', color: 'text-purple-600' },
+  common: { label: t.questionSource.common, icon: '💡', color: 'text-amber-600' },
+  coding: { label: t.questionSource.coding, icon: '💻', color: 'text-green-600' },
 };
 
 // Order for displaying sources
@@ -49,7 +50,7 @@ export const QuestionList: React.FC<QuestionListProps> = ({
   if (questions.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500 text-sm">
-        No questions yet. Generate from AI or add custom questions.
+        暂无问题。可先用 AI 生成，或手动添加问题。
       </div>
     );
   }
@@ -79,7 +80,7 @@ export const QuestionList: React.FC<QuestionListProps> = ({
     <button
       className="w-full flex items-center justify-center py-1 opacity-0 hover:opacity-100 focus:opacity-100 transition-opacity group"
       onClick={() => handleInsertQuestion(index)}
-      title="Add question here"
+      title="在此插入问题"
     >
       <span className="flex items-center gap-1 text-xs text-gray-400 group-hover:text-blue-500 group-focus:text-blue-500">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,7 +107,7 @@ export const QuestionList: React.FC<QuestionListProps> = ({
           <div key={source}>
             <h4 className={`text-xs font-medium tracking-wide mb-2 flex items-center gap-1 ${config.color}`}>
               <span>{config.icon}</span>
-              <span className="uppercase">{config.label}</span>
+              <span>{config.label}</span>
               <span className="text-gray-400">({sourceQuestions.length})</span>
             </h4>
             <div className="space-y-0">

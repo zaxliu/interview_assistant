@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { Question, EvaluationDimensionName } from '@/types';
 import { usePositionStore } from '@/store/positionStore';
 import { Card, CardBody, Textarea, Button } from '@/components/ui';
+import { zhCN as t } from '@/i18n/zhCN';
 
 interface QuestionCardProps {
   positionId: string;
@@ -128,15 +129,15 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('Delete this question?')) {
+    if (confirm('确认删除这个问题吗？')) {
       deleteQuestion(positionId, candidateId, question.id);
     }
   };
 
   const statusConfig = {
-    asked: { bg: 'bg-green-100 text-green-700 hover:bg-green-200', icon: '✓', label: 'Asked' },
-    skipped: { bg: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200', icon: '○', label: 'Skipped' },
-    not_reached: { bg: 'bg-gray-100 text-gray-500 hover:bg-gray-200', icon: '—', label: 'Pending' },
+    asked: { bg: 'bg-green-100 text-green-700 hover:bg-green-200', icon: '✓', label: t.questionStatus.asked },
+    skipped: { bg: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200', icon: '○', label: t.questionStatus.skipped },
+    not_reached: { bg: 'bg-gray-100 text-gray-500 hover:bg-gray-200', icon: '—', label: t.questionStatus.not_reached },
   };
 
   const currentStatus = statusConfig[question.status || 'not_reached'];
@@ -170,7 +171,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleStatusToggle}
               className={`text-xs px-1.5 py-0.5 rounded transition-colors ${currentStatus.bg}`}
-              title={`${currentStatus.label} - click to change`}
+              title={`${currentStatus.label}（点击切换）`}
             >
               {currentStatus.icon}
             </button>
@@ -184,7 +185,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                 size="sm"
                 className="text-gray-400 hover:text-blue-500"
                 onClick={handleStartEdit}
-                title="Edit question"
+                title="编辑问题"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -196,7 +197,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               size="sm"
               className="text-gray-400 hover:text-red-500"
               onClick={handleDelete}
-              title="Delete question"
+              title="删除问题"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -227,7 +228,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                   handleSaveEdit();
                 }}
               >
-                Save
+                {t.common.save}
               </Button>
               <Button
                 size="sm"
@@ -238,7 +239,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                   handleCancelEdit();
                 }}
               >
-                Cancel
+                {t.common.cancel}
               </Button>
             </div>
           </div>
@@ -268,7 +269,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
         )}
 
         <Textarea
-          placeholder={question.status === 'skipped' ? 'Skipped' : 'Take notes here during the interview...'}
+          placeholder={question.status === 'skipped' ? '已跳过' : '在这里记录面试过程中的回答与观察...'}
           value={notesDraft}
           onChange={(e) => handleNotesChange(e.target.value)}
           autoResize

@@ -122,12 +122,12 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
           />
         </svg>
-        Sync Calendar
+        同步日历
       </Button>
 
       {lastSyncTime && (
         <span className="text-xs text-gray-500">
-          Last sync: {lastSyncTime.toLocaleTimeString()}
+          上次同步：{lastSyncTime.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
         </span>
       )}
 
