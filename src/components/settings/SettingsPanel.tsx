@@ -5,6 +5,7 @@ import { Input, Card, CardHeader, CardBody, Button } from '@/components/ui';
 import { testAIApiKey } from '@/api/ai';
 import { testFeishuCredentials } from '@/api/feishu';
 import { zhCN as t } from '@/i18n/zhCN';
+import { getFeishuOAuthRedirectUri } from '@/utils/feishuOAuth';
 
 interface SettingsPanelProps {
   onClose?: () => void;
@@ -167,7 +168,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
               <p className="text-gray-600 mb-1">请在飞书后台配置以下精确回调地址（安全设置 → 重定向 URL）：</p>
               <code className="text-blue-600 font-mono break-all">
-                {window.location.origin}{window.location.pathname}
+                {getFeishuOAuthRedirectUri()}
               </code>
             </div>
             <div className="mt-2 p-2 bg-amber-50 rounded text-xs text-amber-800">

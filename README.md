@@ -90,6 +90,16 @@ Check the following in Feishu Open Platform:
 3. If using test mode, the user is added to the tester list.
 4. After changing scope or permissions, publish a new app version and retry login.
 
+If a user sees:
+
+`redirect_uri 请求不合法` (for example code `20029`)
+
+Make sure Feishu app redirect URL includes the fixed callback URL of this app root:
+
+- `http(s)://<your-domain>/`
+
+This app now always uses the site root as OAuth `redirect_uri` and restores the original page through OAuth `state`.
+
 ## Usage
 
 1. **Configure Settings**: Click the gear icon to set up API keys and your interviewer name

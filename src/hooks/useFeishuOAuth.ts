@@ -6,6 +6,12 @@ import {
   refreshAccessToken,
   getUserInfo,
 } from '@/api/feishu';
+import {
+  buildFeishuOAuthState,
+  getFeishuOAuthRedirectUri,
+  normalizeFeishuOAuthReturnTo,
+  parseFeishuOAuthReturnTo,
+} from '@/utils/feishuOAuth';
 
 // Track processed OAuth codes to prevent duplicate processing
 const processedCodes = new Set<string>();
@@ -30,9 +36,10 @@ export const useFeishuOAuth = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const state = urlParams.get('state');
+    const returnTo = parseFeishuOAuthReturnTo(state);
 
     // Skip if no code, not our OAuth flow, already processing, or code already used
-    if (!code || !state?.startsWith('feishu_oauth') || isProcessingRef.current || processedCodes.has(code)) {
+    if (!code || !returnTo || isProcessingRef.current || processedCodes.has(code)) {
       return;
     }
 
@@ -44,11 +51,8 @@ export const useFeishuOAuth = () => {
     isProcessingRef.current = true;
     processedCodes.add(code);
 
-    // Parse return view from state (format: feishu_oauth:settings)
-    const returnView = state.includes(':') ? state.split(':')[1] : null;
-
     // Exchange code for token
-    const redirectUri = window.location.origin + window.location.pathname;
+    const redirectUri = getFeishuOAuthRedirectUri();
     console.log('Exchanging OAuth code for token...');
     exchangeCodeForToken(code, feishuAppId, feishuAppSecret, redirectUri)
       .then(async (tokens) => {
@@ -65,11 +69,12 @@ export const useFeishuOAuth = () => {
           // Don't fail the whole login if user info fetch fails
         }
 
-        // Clear the code from URL, keep hash for return view
-        const newUrl = returnView
-          ? `${window.location.pathname}#${returnView}`
-          : window.location.pathname;
-        window.history.replaceState({}, '', newUrl);
+        // Clear callback params and return to where login was initiated.
+        if (returnTo === window.location.pathname) {
+          window.history.replaceState({}, '', returnTo);
+        } else {
+          window.location.assign(returnTo);
+        }
         console.log('OAuth login successful!');
       })
       .catch((error) => {
@@ -79,10 +84,11 @@ export const useFeishuOAuth = () => {
           message = '网络错误：无法连接飞书 API，请检查网络连接。';
         }
         alert(`飞书 OAuth 失败：${message}`);
-        const newUrl = returnView
-          ? `${window.location.pathname}#${returnView}`
-          : window.location.pathname;
-        window.history.replaceState({}, '', newUrl);
+        if (returnTo === window.location.pathname) {
+          window.history.replaceState({}, '', returnTo);
+        } else {
+          window.location.assign(returnTo);
+        }
       })
       .finally(() => {
         isProcessingRef.current = false;
@@ -96,12 +102,14 @@ export const useFeishuOAuth = () => {
       return;
     }
 
-    const redirectUri = window.location.origin + window.location.pathname;
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const normalizedReturnTo = normalizeFeishuOAuthReturnTo(returnTo || currentPath);
+    const redirectUri = getFeishuOAuthRedirectUri();
     console.log('Starting OAuth with redirect_uri:', redirectUri);
     console.log('Make sure this exact URL is configured in Feishu app settings');
 
-    // Include return view in state
-    const state = returnTo ? `feishu_oauth:${returnTo}` : 'feishu_oauth';
+    // Include return path in state
+    const state = buildFeishuOAuthState(normalizedReturnTo);
     const authUrl = getOAuthAuthorizationUrl(feishuAppId, redirectUri, state);
     console.log('Authorization URL:', authUrl);
 
