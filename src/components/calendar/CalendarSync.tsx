@@ -12,11 +12,17 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
   const { isLoading, error, syncCalendar } = useFeishuCalendar();
   const { addPosition, addCandidate, updateCandidate, positions } = usePositionStore();
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const syncWindow = { pastDays: 30, futureDays: 30 } as const;
 
   const handleSync = async () => {
-    const result = await syncCalendar(30);
+    const result = await syncCalendar(syncWindow);
     if (result) {
       const { events, positions: positionMap } = result;
+      const now = new Date();
+      const windowStart = new Date(now);
+      const windowEnd = new Date(now);
+      windowStart.setDate(windowStart.getDate() - syncWindow.pastDays);
+      windowEnd.setDate(windowEnd.getDate() + syncWindow.futureDays);
 
       // Collect all calendar event IDs from this sync
       const syncedEventIds = new Set(events.map(e => e.eventId));
@@ -85,8 +91,17 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
         // Mark candidates as cancelled if their calendar event was deleted
         const pos = usePositionStore.getState().getPosition(positionId);
         pos?.candidates.forEach((candidate) => {
+          const interviewDate = candidate.interviewTime ? new Date(candidate.interviewTime) : null;
+          const isInSyncWindow = Boolean(
+            interviewDate &&
+            !Number.isNaN(interviewDate.getTime()) &&
+            interviewDate >= windowStart &&
+            interviewDate <= windowEnd
+          );
+
           if (
             candidate.calendarEventId &&
+            isInSyncWindow &&
             !syncedEventIds.has(candidate.calendarEventId) &&
             candidate.status !== 'completed' &&
             candidate.status !== 'cancelled'

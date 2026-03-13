@@ -2,6 +2,7 @@ import React from 'react';
 import { usePositionStore } from '@/store/positionStore';
 import { Card, CardBody, Button } from '@/components/ui';
 import { zhCN as t } from '@/i18n/zhCN';
+import type { Candidate } from '@/types';
 
 interface UpcomingInterviewsProps {
   onStartInterview: (positionId: string, candidateId: string) => void;
@@ -11,6 +12,14 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
   onStartInterview,
 }) => {
   const { positions } = usePositionStore();
+  const dashboardStatuses: Candidate['status'][] = ['scheduled', 'in_progress', 'cancelled'];
+  const statusColors: Record<Candidate['status'], string> = {
+    pending: 'bg-gray-100 text-gray-600',
+    scheduled: 'bg-blue-100 text-blue-700',
+    in_progress: 'bg-amber-100 text-amber-700',
+    completed: 'bg-green-100 text-green-700',
+    cancelled: 'bg-red-100 text-red-700',
+  };
 
   // Get today's interviews
   const today = new Date();
@@ -18,35 +27,45 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  const todayInterviews = positions.flatMap((position) =>
-    position.candidates
-      .filter((candidate) => {
-        if (!candidate.interviewTime) return false;
-        const interviewDate = new Date(candidate.interviewTime);
-        return interviewDate >= today && interviewDate < tomorrow;
-      })
-      .map((candidate) => ({
-        position,
-        candidate,
-      }))
-  );
+  const todayInterviews = positions
+    .flatMap((position) =>
+      position.candidates
+        .filter((candidate) => {
+          if (!candidate.interviewTime || !dashboardStatuses.includes(candidate.status)) return false;
+          const interviewDate = new Date(candidate.interviewTime);
+          return interviewDate >= today && interviewDate < tomorrow;
+        })
+        .map((candidate) => ({
+          position,
+          candidate,
+        }))
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.candidate.interviewTime!).getTime() - new Date(b.candidate.interviewTime!).getTime()
+    );
 
   // Get upcoming interviews (next 7 days)
   const nextWeek = new Date(today);
   nextWeek.setDate(nextWeek.getDate() + 7);
 
-  const upcomingInterviews = positions.flatMap((position) =>
-    position.candidates
-      .filter((candidate) => {
-        if (!candidate.interviewTime) return false;
-        const interviewDate = new Date(candidate.interviewTime);
-        return interviewDate >= tomorrow && interviewDate < nextWeek;
-      })
-      .map((candidate) => ({
-        position,
-        candidate,
-      }))
-  );
+  const upcomingInterviews = positions
+    .flatMap((position) =>
+      position.candidates
+        .filter((candidate) => {
+          if (!candidate.interviewTime || !dashboardStatuses.includes(candidate.status)) return false;
+          const interviewDate = new Date(candidate.interviewTime);
+          return interviewDate >= tomorrow && interviewDate < nextWeek;
+        })
+        .map((candidate) => ({
+          position,
+          candidate,
+        }))
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.candidate.interviewTime!).getTime() - new Date(b.candidate.interviewTime!).getTime()
+    );
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -92,12 +111,16 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
                         | {position.title}
                       </span>
                     </div>
+                    <span className={`text-xs px-2 py-0.5 rounded ${statusColors[candidate.status]}`}>
+                      {t.candidateStatus[candidate.status]}
+                    </span>
                   </div>
                   <Button
                     size="sm"
+                    variant={candidate.status === 'cancelled' ? 'secondary' : 'primary'}
                     onClick={() => onStartInterview(position.id, candidate.id)}
                   >
-                    {t.common.start}
+                    {candidate.status === 'cancelled' ? t.common.view : t.common.start}
                   </Button>
                 </CardBody>
               </Card>
@@ -111,7 +134,7 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
         <div>
           <h3 className="text-sm font-medium text-gray-700 mb-2">未来 7 天面试</h3>
           <div className="space-y-2">
-            {upcomingInterviews.slice(0, 5).map(({ position, candidate }) => (
+            {upcomingInterviews.map(({ position, candidate }) => (
               <Card key={candidate.id}>
                 <CardBody className="flex items-center justify-between py-2">
                   <div className="flex items-center gap-3">
@@ -129,6 +152,9 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
                         | {position.title}
                       </span>
                     </div>
+                    <span className={`text-xs px-2 py-0.5 rounded ${statusColors[candidate.status]}`}>
+                      {t.candidateStatus[candidate.status]}
+                    </span>
                   </div>
                   <Button
                     size="sm"

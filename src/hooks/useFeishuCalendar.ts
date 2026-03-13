@@ -3,6 +3,7 @@ import {
   syncInterviewsFromCalendar,
   createFeishuDoc,
   extractLinksFromDescription,
+  type SyncCalendarWindow,
 } from '@/api/feishu';
 import { useSettingsStore } from '@/store/settingsStore';
 import type { CalendarEvent, InterviewResult } from '@/types';
@@ -14,7 +15,7 @@ export const useFeishuCalendar = () => {
   const { feishuAppId, feishuAppSecret, feishuUserAccessToken } = useSettingsStore();
 
   const syncCalendar = useCallback(
-    async (days: number = 30): Promise<{
+    async (syncWindow: number | SyncCalendarWindow = 30): Promise<{
       events: CalendarEvent[];
       positions: Map<string, { title: string; team: string }>;
     } | null> => {
@@ -29,7 +30,7 @@ export const useFeishuCalendar = () => {
 
       try {
         const result = await syncInterviewsFromCalendar(
-          days,
+          syncWindow,
           feishuUserAccessToken || undefined,
           feishuAppId || undefined,
           feishuAppSecret || undefined

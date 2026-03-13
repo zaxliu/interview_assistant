@@ -8,6 +8,7 @@ interface CandidateListProps {
   position: Position;
   onSelectCandidate: (candidateId: string) => void;
   onEditCandidate: (candidateId: string) => void;
+  onCompleteCandidate: (candidateId: string) => void;
   onAddCandidate: () => void;
 }
 
@@ -54,6 +55,7 @@ export const CandidateList: React.FC<CandidateListProps> = ({
   position,
   onSelectCandidate,
   onEditCandidate,
+  onCompleteCandidate,
   onAddCandidate,
 }) => {
   const sortedCandidates = useMemo(
@@ -89,6 +91,7 @@ export const CandidateList: React.FC<CandidateListProps> = ({
               candidate={candidate}
               onClick={() => onSelectCandidate(candidate.id)}
               onEdit={() => onEditCandidate(candidate.id)}
+              onComplete={() => onCompleteCandidate(candidate.id)}
             />
           ))}
         </div>

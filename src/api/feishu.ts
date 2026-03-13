@@ -447,8 +447,29 @@ export const getCalendarEvents = async (
  * Sync interviews from Feishu Calendar
  * Returns events that match the interview pattern
  */
+export interface SyncCalendarWindow {
+  pastDays?: number;
+  futureDays?: number;
+}
+
+const normalizeSyncWindow = (
+  syncWindow: number | SyncCalendarWindow | undefined
+): Required<SyncCalendarWindow> => {
+  if (typeof syncWindow === 'number') {
+    return {
+      pastDays: 0,
+      futureDays: Math.max(0, Math.floor(syncWindow)),
+    };
+  }
+
+  return {
+    pastDays: Math.max(0, Math.floor(syncWindow?.pastDays ?? 0)),
+    futureDays: Math.max(0, Math.floor(syncWindow?.futureDays ?? 30)),
+  };
+};
+
 export const syncInterviewsFromCalendar = async (
-  days: number = 30,
+  syncWindow: number | SyncCalendarWindow = 30,
   userAccessToken?: string,
   appId?: string,
   appSecret?: string
@@ -456,9 +477,12 @@ export const syncInterviewsFromCalendar = async (
   events: CalendarEvent[];
   positions: Map<string, { title: string; team: string }>;
 }> => {
-  const startDate = new Date();
-  const endDate = new Date();
-  endDate.setDate(endDate.getDate() + days);
+  const { pastDays, futureDays } = normalizeSyncWindow(syncWindow);
+  const now = new Date();
+  const startDate = new Date(now);
+  const endDate = new Date(now);
+  startDate.setDate(startDate.getDate() - pastDays);
+  endDate.setDate(endDate.getDate() + futureDays);
 
   const events = await getCalendarEvents(startDate, endDate, userAccessToken, appId, appSecret);
 

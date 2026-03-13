@@ -8,6 +8,7 @@ export default function PositionDetailPage() {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const navigate = useNavigate();
   const { positionId } = useParams();
+  const updateCandidate = usePositionStore((state) => state.updateCandidate);
   const position = usePositionStore((state) =>
     positionId ? state.positions.find((item) => item.id === positionId) : undefined
   );
@@ -71,6 +72,9 @@ export default function PositionDetailPage() {
         }
         onEditCandidate={(candidateId) =>
           navigate(`/positions/${position.id}/candidates/${candidateId}/edit`)
+        }
+        onCompleteCandidate={(candidateId) =>
+          updateCandidate(position.id, candidateId, { status: 'completed' })
         }
         onAddCandidate={() => navigate(`/positions/${position.id}/candidates/new`)}
       />

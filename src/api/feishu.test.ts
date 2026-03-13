@@ -196,3 +196,100 @@ describe('createFeishuDoc', () => {
     expect(response.message).toContain('tenant write failed');
   });
 });
+
+describe('syncInterviewsFromCalendar', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-13T08:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('uses past and future window when syncing events', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          code: 0,
+          data: {
+            calendar_list: [
+              { calendar_id: 'cal-1', summary: '主日历', type: 'primary' },
+            ],
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          code: 0,
+          data: {
+            items: [
+              {
+                event_id: 'evt-1',
+                summary: '面试安排：李雷(【平台】前端工程师)',
+                status: 'confirmed',
+                start_time: { timestamp: `${Math.floor(Date.parse('2026-03-14T08:00:00.000Z') / 1000)}` },
+                end_time: { timestamp: `${Math.floor(Date.parse('2026-03-14T09:00:00.000Z') / 1000)}` },
+              },
+            ],
+          },
+        })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { syncInterviewsFromCalendar } = await import('./feishu');
+    const result = await syncInterviewsFromCalendar(
+      { pastDays: 7, futureDays: 30 },
+      'user-token'
+    );
+
+    const eventsCallUrl = new URL(String(fetchMock.mock.calls[1][0]), 'https://example.com');
+    const startTime = Number(eventsCallUrl.searchParams.get('start_time'));
+    const endTime = Number(eventsCallUrl.searchParams.get('end_time'));
+
+    const expectedStart = Math.floor(Date.parse('2026-03-06T08:00:00.000Z') / 1000);
+    const expectedEnd = Math.floor(Date.parse('2026-04-12T08:00:00.000Z') / 1000);
+
+    expect(startTime).toBe(expectedStart);
+    expect(endTime).toBe(expectedEnd);
+    expect(result.events).toHaveLength(1);
+    expect(result.positions.size).toBe(1);
+  });
+
+  it('keeps numeric argument backward compatible', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          code: 0,
+          data: {
+            calendar_list: [
+              { calendar_id: 'cal-1', summary: '主日历', type: 'primary' },
+            ],
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          code: 0,
+          data: { items: [] },
+        })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { syncInterviewsFromCalendar } = await import('./feishu');
+    await syncInterviewsFromCalendar(30, 'user-token');
+
+    const eventsCallUrl = new URL(String(fetchMock.mock.calls[1][0]), 'https://example.com');
+    const startTime = Number(eventsCallUrl.searchParams.get('start_time'));
+    const endTime = Number(eventsCallUrl.searchParams.get('end_time'));
+
+    const expectedStart = Math.floor(Date.parse('2026-03-13T08:00:00.000Z') / 1000);
+    const expectedEnd = Math.floor(Date.parse('2026-04-12T08:00:00.000Z') / 1000);
+
+    expect(startTime).toBe(expectedStart);
+    expect(endTime).toBe(expectedEnd);
+  });
+});

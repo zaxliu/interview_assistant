@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Candidate } from '@/types';
 import { Card, CardBody } from '@/components/ui';
 import { getPreferredResumeText } from '@/utils/resume';
@@ -8,6 +8,7 @@ interface CandidateCardProps {
   candidate: Candidate;
   onClick: () => void;
   onEdit: () => void;
+  onComplete?: () => void;
 }
 
 const statusColors: Record<Candidate['status'], string> = {
@@ -24,8 +25,29 @@ export const CandidateCard: React.FC<CandidateCardProps> = ({
   candidate,
   onClick,
   onEdit,
+  onComplete,
 }) => {
   const hasResume = Boolean(getPreferredResumeText(candidate));
+  const [nowTimestamp, setNowTimestamp] = useState<number | null>(null);
+
+  useEffect(() => {
+    const updateNow = () => setNowTimestamp(Date.now());
+    updateNow();
+    const timer = window.setInterval(updateNow, 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const interviewTimestamp = candidate.interviewTime ? new Date(candidate.interviewTime).getTime() : NaN;
+  const isOverdue = Boolean(
+    nowTimestamp !== null &&
+    Number.isFinite(interviewTimestamp) &&
+    interviewTimestamp < nowTimestamp
+  );
+  const canQuickComplete = Boolean(
+    onComplete &&
+    isOverdue &&
+    (candidate.status === 'scheduled' || candidate.status === 'in_progress')
+  );
   const formatInterviewTime = (time?: string) => {
     if (!time) return null;
     const date = new Date(time);
@@ -64,6 +86,18 @@ export const CandidateCard: React.FC<CandidateCardProps> = ({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </span>
+            )}
+            {canQuickComplete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onComplete?.();
+                }}
+                className="text-xs text-green-700 hover:text-green-800 px-1.5 py-0.5 rounded hover:bg-green-50"
+                title="将过期面试标记为已完成"
+              >
+                直接完成
+              </button>
             )}
             <button
               onClick={(e) => {
