@@ -354,7 +354,9 @@ function getErrorStatus(error) {
 
   if (message.includes('interviewUrl is required') || message.includes('Invalid JSON body')) return 400;
   if (message.includes('showResume') || message.includes('链接可能已失效')) return 400;
+  if (message.includes('未拿到 postId/recruitType')) return 422;
   if (message.includes('未拿到 resumeOriginalInfoUrl') || message.includes('无原始简历权限')) return 403;
+  if (message.includes('无职位JD权限')) return 403;
   if (message.includes('未拿到 createTokenUrl') || message.includes('createTokenUrl 无效')) return 401;
   if (lower.includes('http 401') || lower.includes('unauthorized')) return 401;
   if (lower.includes('http 403') || lower.includes('forbidden')) return 403;
@@ -422,9 +424,13 @@ async function resolvePdfFlow(interviewUrl, lanType = 1) {
   );
 
   const resumeTab0 = currentResumeInfo?.resumeTab?.[0];
+  const detailHeadPersInfo = currentResumeInfo?.detailHeadPersInfo || {};
   const applyId = String(resumeTab0?.applyId || p.currentApplyId || '');
   const resumeId = String(resumeTab0?.resumeId || '');
   const postId = String(resumeTab0?.postId || '');
+  const recruitType = String(
+    detailHeadPersInfo?.recruitType || resumeTab0?.recruitType || currentResumeInfo?.applyInfo?.recruitType || ''
+  );
   const detailUrlRaw = currentResumeInfo?.getResumeDetailTypeUrl;
 
   if (!detailUrlRaw || !applyId || !resumeId || !postId) {
@@ -479,10 +485,46 @@ async function resolvePdfFlow(interviewUrl, lanType = 1) {
       applyId,
       resumeId,
       postId,
+      recruitType: recruitType || null,
+      positionName: detailHeadPersInfo?.positionName || null,
       originalFileId: detailType.originalFileId || null,
       originalFileName: detailType.originalFileName || null,
       encryptId: detailType.encryptId || null,
     },
+  };
+}
+
+async function resolveJdFromFlow(flow) {
+  const postId = String(flow?.metadata?.postId || '');
+  const recruitType = String(flow?.metadata?.recruitType || '');
+  if (!postId || !recruitType) {
+    throw new Error('未拿到 postId/recruitType，无法获取 JD');
+  }
+
+  const tokenizedShowPostJdUrl = await createTokenizedUrl(
+    flow.jar,
+    flow.createTokenUrl,
+    '/common/data/showPostJD',
+    flow.showResumeUrl
+  );
+
+  const jd = await postFormJson(
+    flow.jar,
+    tokenizedShowPostJdUrl,
+    {
+      postId,
+      recruitType,
+    },
+    flow.showResumeUrl
+  );
+
+  if (jd?.moPermissions) {
+    throw new Error('无职位JD权限');
+  }
+
+  return {
+    jd,
+    tokenizedShowPostJdUrl,
   };
 }
 
@@ -600,6 +642,35 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && path === '/api/wintalent/jd') {
+    try {
+      const body = await readJsonBody(req);
+      const interviewUrl = String(body.interviewUrl || '');
+      const lanType = Number(body.lanType || 1);
+      if (!interviewUrl.startsWith('http')) {
+        sendJson(res, 400, { error: 'interviewUrl is required' });
+        return;
+      }
+
+      const flow = await resolvePdfFlow(interviewUrl, lanType);
+      const jdResult = await resolveJdFromFlow(flow);
+
+      sendJson(res, 200, {
+        ok: true,
+        jd: jdResult.jd,
+        metadata: flow.metadata,
+        debug: {
+          showResumeUrl: flow.showResumeUrl,
+          currentResumeInfoUrl: flow.currentResumeInfoUrl,
+          tokenizedShowPostJdUrl: jdResult.tokenizedShowPostJdUrl,
+        },
+      });
+    } catch (error) {
+      sendJson(res, getErrorStatus(error), { ok: false, error: String(error?.message || error) });
+    }
+    return;
+  }
+
   sendJson(res, 404, { error: 'Not found' });
 });
 
@@ -609,4 +680,5 @@ server.listen(PORT, HOST, () => {
   console.log('  GET  /healthz');
   console.log('  POST /api/wintalent/resolve');
   console.log('  POST /api/wintalent/download');
+  console.log('  POST /api/wintalent/jd');
 });

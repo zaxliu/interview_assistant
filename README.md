@@ -154,6 +154,7 @@ Default address:
 - `http://127.0.0.1:8787`
 - `POST /api/wintalent/resolve` (resolve tokenized PDF URL)
 - `POST /api/wintalent/download` (download PDF stream directly)
+- `POST /api/wintalent/jd` (fetch position JD from interview link)
 
 ## Architecture
 

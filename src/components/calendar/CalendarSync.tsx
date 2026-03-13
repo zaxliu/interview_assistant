@@ -4,6 +4,11 @@ import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { Button } from '@/components/ui';
 import { extractLinksFromDescription } from '@/api/feishu';
+import {
+  buildPositionDescriptionFromWintalentJD,
+  fetchWintalentPositionJD,
+  isWintalentInterviewLink,
+} from '@/api/wintalent';
 import type { Candidate, CalendarEvent, Position } from '@/types';
 
 interface CalendarSyncProps {
@@ -250,7 +255,7 @@ const toLocalDateKey = (date: Date): string => {
 
 export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) => {
   const { isLoading, error, syncCalendar } = useFeishuCalendar();
-  const { addPosition, addCandidate, updateCandidate } = usePositionStore();
+  const { addPosition, addCandidate, updateCandidate, updatePosition } = usePositionStore();
   const feishuUser = useSettingsStore((state) => state.feishuUser);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const autoSyncAttempted = useRef(new Set<string>());
@@ -264,6 +269,36 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
     usePositionStore.setState({ positions: merged.positions });
     usePositionStore.getState().saveToStorage();
   }, []);
+
+  const autoFillPositionDescriptionsFromWintalent = useCallback(async () => {
+    const currentPositions = usePositionStore.getState().positions;
+    const descriptionCache = new Map<string, string>();
+
+    for (const position of currentPositions) {
+      if (position.source !== 'calendar') continue;
+      if ((position.description || '').trim()) continue;
+
+      const candidateLink = position.candidates
+        .map((candidate) => candidate.candidateLink?.trim() || '')
+        .find((link) => isWintalentInterviewLink(link));
+
+      if (!candidateLink) continue;
+
+      try {
+        let nextDescription = descriptionCache.get(candidateLink);
+        if (!nextDescription) {
+          const jd = await fetchWintalentPositionJD(candidateLink);
+          nextDescription = buildPositionDescriptionFromWintalentJD(jd);
+          if (!nextDescription) continue;
+          descriptionCache.set(candidateLink, nextDescription);
+        }
+
+        updatePosition(position.id, { description: nextDescription });
+      } catch (err) {
+        console.warn('[CalendarSync] Auto-fill position JD failed:', position.id, err);
+      }
+    }
+  }, [updatePosition]);
 
   const runSync = useCallback(async (): Promise<boolean> => {
     mergeAndPersistDuplicates();
@@ -402,10 +437,19 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
     });
 
     mergeAndPersistDuplicates();
+    await autoFillPositionDescriptionsFromWintalent();
     setLastSyncTime(new Date());
     onSyncComplete?.();
     return true;
-  }, [syncCalendar, addPosition, addCandidate, updateCandidate, onSyncComplete, mergeAndPersistDuplicates]);
+  }, [
+    syncCalendar,
+    addPosition,
+    addCandidate,
+    updateCandidate,
+    onSyncComplete,
+    mergeAndPersistDuplicates,
+    autoFillPositionDescriptionsFromWintalent,
+  ]);
 
   const handleSync = useCallback(async () => {
     await runSync();

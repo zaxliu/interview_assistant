@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import type { Position } from '@/types';
 import { usePositionStore } from '@/store/positionStore';
+import {
+  buildPositionDescriptionFromWintalentJD,
+  fetchWintalentPositionJD,
+  isWintalentInterviewLink,
+} from '@/api/wintalent';
 import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea } from '@/components/ui';
 import { zhCN as t } from '@/i18n/zhCN';
 
@@ -23,6 +28,45 @@ export const PositionForm: React.FC<PositionFormProps> = ({
   const [criteriaText, setCriteriaText] = useState(
     position?.criteria.join('\n') || ''
   );
+  const [jdLoading, setJdLoading] = useState(false);
+  const [jdStatus, setJdStatus] = useState<string | null>(null);
+
+  const getWintalentLinkFromPosition = (): string | null => {
+    if (!position) return null;
+    const link = position.candidates
+      .map((candidate) => candidate.candidateLink?.trim() || '')
+      .find((value) => isWintalentInterviewLink(value));
+    return link || null;
+  };
+
+  const handleRefreshJD = async () => {
+    if (!position) {
+      setJdStatus('请先创建岗位，再从候选人链接拉取 JD。');
+      return;
+    }
+
+    const candidateLink = getWintalentLinkFromPosition();
+    if (!candidateLink) {
+      setJdStatus('当前岗位下未找到 Wintalent 候选人链接。');
+      return;
+    }
+
+    setJdLoading(true);
+    setJdStatus(null);
+    try {
+      const jd = await fetchWintalentPositionJD(candidateLink);
+      const nextDescription = buildPositionDescriptionFromWintalentJD(jd);
+      if (!nextDescription) {
+        throw new Error('已获取 JD，但内容为空。');
+      }
+      setDescription(nextDescription);
+      setJdStatus('已获取最新 JD，请点击“保存修改”生效。');
+    } catch (error) {
+      setJdStatus(error instanceof Error ? error.message : '获取 JD 失败');
+    } finally {
+      setJdLoading(false);
+    }
+  };
 
   const handleSubmit = () => {
     const criteria = criteriaText
@@ -70,14 +114,34 @@ export const PositionForm: React.FC<PositionFormProps> = ({
           onChange={(e) => setTeam(e.target.value)}
           placeholder="例如：平台研发团队"
         />
-        <Textarea
-          label="岗位描述"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="请输入岗位职责与要求..."
-          autoResize
-          rows={4}
-        />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="block text-sm font-medium text-gray-700">岗位描述</span>
+            {position && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleRefreshJD}
+                isLoading={jdLoading}
+              >
+                重新获取JD
+              </Button>
+            )}
+          </div>
+          <Textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="请输入岗位职责与要求..."
+            autoResize
+            rows={4}
+          />
+          {jdStatus && (
+            <p className={`text-xs ${jdStatus.includes('失败') || jdStatus.includes('未找到') || jdStatus.includes('请先') ? 'text-red-600' : 'text-green-600'}`}>
+              {jdStatus}
+            </p>
+          )}
+        </div>
         <Textarea
           label="增量职位要求（每行一条）"
           value={criteriaText}
