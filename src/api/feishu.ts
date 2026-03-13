@@ -637,7 +637,8 @@ const createFeishuDocWithToken = async (
   accessToken: string,
   result: InterviewResult,
   candidateName: string,
-  positionTitle: string
+  positionTitle: string,
+  shouldEnableTenantReadableLinkShare = false
 ): Promise<{ documentId: string; permissionWarning?: string }> => {
   const createResponse = await fetch('/api/feishu/docx/v1/documents', {
     method: 'POST',
@@ -709,12 +710,14 @@ const createFeishuDocWithToken = async (
     );
   }
 
-  const permissionWarning = await enableTenantReadableLinkShare(accessToken, documentId);
-  if (permissionWarning) {
-    return {
-      documentId,
-      permissionWarning,
-    };
+  if (shouldEnableTenantReadableLinkShare) {
+    const permissionWarning = await enableTenantReadableLinkShare(accessToken, documentId);
+    if (permissionWarning) {
+      return {
+        documentId,
+        permissionWarning,
+      };
+    }
   }
 
   return {
@@ -722,16 +725,21 @@ const createFeishuDocWithToken = async (
   };
 };
 
+interface CreateFeishuDocOptions {
+  allowTenantFallback?: boolean;
+}
+
 export const createFeishuDoc = async (
   result: InterviewResult,
   candidateName: string,
   positionTitle: string,
   userAccessToken?: string,
   appId?: string,
-  appSecret?: string
+  appSecret?: string,
+  options: CreateFeishuDocOptions = {}
 ): Promise<{ success: boolean; message: string; docUrl?: string }> => {
   const normalizedUserToken = userAccessToken?.trim();
-  const canFallbackToTenantToken = Boolean(appId && appSecret);
+  const canFallbackToTenantToken = Boolean(options.allowTenantFallback && appId && appSecret);
   let userPermissionError: FeishuApiError | null = null;
 
   try {
@@ -741,13 +749,14 @@ export const createFeishuDoc = async (
           normalizedUserToken,
           result,
           candidateName,
-          positionTitle
+          positionTitle,
+          false
         );
         return {
           success: true,
           message: permissionWarning
             ? `已成功创建飞书文档，但自动设置“企业内获链可读”失败：${permissionWarning}`
-            : '已成功创建飞书文档，并设置为企业内获链可读',
+            : '已成功创建飞书文档（当前登录用户可读）',
           docUrl: `https://feishu.cn/docx/${documentId}`,
         };
       } catch (error) {
@@ -757,7 +766,7 @@ export const createFeishuDoc = async (
         }
         if (!canFallbackToTenantToken) {
           throw createFeishuApiError(
-            `${tokenError.message}。请在设置中补全 App ID 与 App Secret，或重新登录飞书刷新授权范围。`,
+            `${tokenError.message}。为保证“当前用户可读”，已禁用应用凭证回退。请退出并重新登录飞书，刷新用户授权范围后重试。`,
             tokenError.status,
             tokenError.code
           );
@@ -775,7 +784,8 @@ export const createFeishuDoc = async (
       tenantToken,
       result,
       candidateName,
-      positionTitle
+      positionTitle,
+      true
     );
 
     return {

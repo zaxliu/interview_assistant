@@ -92,10 +92,9 @@ describe('createFeishuDoc', () => {
     vi.unstubAllGlobals();
   });
 
-  it('creates, writes, and sets tenant-readable permission with user token', async () => {
+  it('creates and writes document with user token only', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ code: 0, data: { document: { document_id: 'doc-user' } } }))
-      .mockResolvedValueOnce(jsonResponse({ code: 0 }))
       .mockResolvedValueOnce(jsonResponse({ code: 0 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -104,15 +103,13 @@ describe('createFeishuDoc', () => {
 
     expect(response.success).toBe(true);
     expect(response.docUrl).toBe('https://feishu.cn/docx/doc-user');
-    expect(response.message).toContain('企业内获链可读');
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(response.message).toContain('当前登录用户可读');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0][0]).toBe('/api/feishu/docx/v1/documents');
     expect(fetchMock.mock.calls[1][0]).toBe('/api/feishu/docx/v1/documents/doc-user/blocks/doc-user/children');
-    expect(fetchMock.mock.calls[2][0]).toBe('/api/feishu/drive/v1/permissions/doc-user/public?type=docx');
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({
       Authorization: 'Bearer user-token',
     });
-    expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: 'PATCH' });
     const writeBody = JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body));
     expect(writeBody.children[0].block_type).toBe(4); // heading2
     expect(
@@ -120,8 +117,6 @@ describe('createFeishuDoc', () => {
         (block: { block_type: number; heading3?: unknown }) => block.block_type === 5 && Boolean(block.heading3)
       )
     ).toBe(true);
-    const permissionBody = JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body));
-    expect(permissionBody).toEqual({ link_share_entity: 'tenant_readable' });
   });
 
   it('falls back to tenant token when user token lacks permission', async () => {
@@ -140,7 +135,8 @@ describe('createFeishuDoc', () => {
       'Frontend',
       'user-token',
       'cli_xxx',
-      'secret_xxx'
+      'secret_xxx',
+      { allowTenantFallback: true }
     );
 
     expect(response.success).toBe(true);
@@ -171,7 +167,8 @@ describe('createFeishuDoc', () => {
       'Frontend',
       'user-token',
       'cli_xxx',
-      'secret_xxx'
+      'secret_xxx',
+      { allowTenantFallback: true }
     );
 
     expect(response.success).toBe(false);
@@ -193,7 +190,7 @@ describe('createFeishuDoc', () => {
     expect(response.message).toContain('invalid block payload');
   });
 
-  it('returns combined error message when both user and tenant export fail', async () => {
+  it('returns combined error message when both user and tenant export fail in fallback mode', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ code: 99991663, msg: 'permission denied' }))
       .mockResolvedValueOnce(jsonResponse({ code: 0, tenant_access_token: 'tenant-token', expire: 7200 }))
@@ -207,7 +204,8 @@ describe('createFeishuDoc', () => {
       'Frontend',
       'user-token',
       'cli_xxx',
-      'secret_xxx'
+      'secret_xxx',
+      { allowTenantFallback: true }
     );
 
     expect(response.success).toBe(false);
@@ -216,20 +214,50 @@ describe('createFeishuDoc', () => {
     expect(response.message).toContain('tenant write failed');
   });
 
-  it('returns success with warning when permission update fails', async () => {
+  it('returns success with warning when tenant fallback permission update fails', async () => {
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ code: 99991663, msg: 'permission denied' }))
+      .mockResolvedValueOnce(jsonResponse({ code: 0, tenant_access_token: 'tenant-token', expire: 7200 }))
       .mockResolvedValueOnce(jsonResponse({ code: 0, data: { document: { document_id: 'doc-user' } } }))
       .mockResolvedValueOnce(jsonResponse({ code: 0 }))
       .mockResolvedValueOnce(jsonResponse({ code: 1770001, msg: 'invalid param' }, { ok: false, status: 400 }));
     vi.stubGlobal('fetch', fetchMock);
 
     const { createFeishuDoc } = await import('./feishu');
-    const response = await createFeishuDoc(sampleResult, 'Alice', 'Frontend', 'user-token');
+    const response = await createFeishuDoc(
+      sampleResult,
+      'Alice',
+      'Frontend',
+      'user-token',
+      'cli_xxx',
+      'secret_xxx',
+      { allowTenantFallback: true }
+    );
 
     expect(response.success).toBe(true);
     expect(response.docUrl).toBe('https://feishu.cn/docx/doc-user');
     expect(response.message).toContain('自动设置“企业内获链可读”失败');
     expect(response.message).toContain('invalid param');
+  });
+
+  it('does not fallback to tenant token by default when user token lacks permission', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ code: 99991663, msg: 'permission denied' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { createFeishuDoc } = await import('./feishu');
+    const response = await createFeishuDoc(
+      sampleResult,
+      'Alice',
+      'Frontend',
+      'user-token',
+      'cli_xxx',
+      'secret_xxx'
+    );
+
+    expect(response.success).toBe(false);
+    expect(response.message).toContain('已禁用应用凭证回退');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
