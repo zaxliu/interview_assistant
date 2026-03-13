@@ -55,6 +55,22 @@ describe('downloadWintalentResumePDF', () => {
       downloadWintalentResumePDF('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
     ).rejects.toThrow('token expired');
   });
+
+  it('shows clear hint when local wintalent proxy is unavailable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('Error: connect ECONNREFUSED 127.0.0.1:8787', {
+          status: 500,
+          headers: { 'content-type': 'text/plain; charset=utf-8' },
+        })
+      )
+    );
+
+    await expect(
+      downloadWintalentResumePDF('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
+    ).rejects.toThrow('Wintalent 代理服务不可用');
+  });
 });
 
 describe('fetchWintalentPositionJD', () => {
@@ -106,6 +122,14 @@ describe('fetchWintalentPositionJD', () => {
     await expect(
       fetchWintalentPositionJD('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
     ).rejects.toThrow('无职位JD权限');
+  });
+
+  it('converts fetch network error to actionable proxy hint', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    await expect(
+      fetchWintalentPositionJD('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
+    ).rejects.toThrow('Wintalent 代理服务不可用');
   });
 });
 

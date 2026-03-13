@@ -1,5 +1,7 @@
 const WINTALENT_DOWNLOAD_API = '/api/wintalent/download';
 const WINTALENT_JD_API = '/api/wintalent/jd';
+const WINTALENT_PROXY_OFFLINE_MESSAGE =
+  'Wintalent 代理服务不可用，请先运行 `npm run proxy:wintalent`（或直接使用 `npm run dev` / `npm start`）。';
 
 const decodeRfc5987 = (value: string): string => {
   const cleaned = value.trim().replace(/^UTF-8''/i, '');
@@ -33,11 +35,38 @@ const parseErrorMessage = async (response: Response): Promise<string> => {
   if (!text) return `请求失败：HTTP ${response.status}`;
   try {
     const json = JSON.parse(text) as { error?: string };
-    if (json.error) return json.error;
+    if (json.error) {
+      if (isWintalentProxyUnavailableMessage(json.error)) {
+        return WINTALENT_PROXY_OFFLINE_MESSAGE;
+      }
+      return json.error;
+    }
   } catch {
     // noop
   }
+  if (isWintalentProxyUnavailableMessage(text)) {
+    return WINTALENT_PROXY_OFFLINE_MESSAGE;
+  }
   return text.slice(0, 300);
+};
+
+const isWintalentProxyUnavailableMessage = (text: string): boolean => {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('econnrefused') ||
+    normalized.includes('connect refused') ||
+    normalized.includes('failed to proxy') ||
+    normalized.includes('127.0.0.1:8787') ||
+    normalized.includes('::1:8787')
+  );
+};
+
+const toNetworkErrorMessage = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  if (isWintalentProxyUnavailableMessage(message) || message.toLowerCase().includes('failed to fetch')) {
+    return WINTALENT_PROXY_OFFLINE_MESSAGE;
+  }
+  return message || '请求失败，请稍后重试';
 };
 
 export interface WintalentDownloadResult {
@@ -103,13 +132,18 @@ export const downloadWintalentResumePDF = async (interviewUrl: string): Promise<
     throw new Error('请输入 Wintalent 面试链接');
   }
 
-  const response = await fetch(WINTALENT_DOWNLOAD_API, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ interviewUrl: normalized }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(WINTALENT_DOWNLOAD_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ interviewUrl: normalized }),
+    });
+  } catch (error) {
+    throw new Error(toNetworkErrorMessage(error));
+  }
 
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));
@@ -138,13 +172,18 @@ export const fetchWintalentPositionJD = async (interviewUrl: string): Promise<Wi
     throw new Error('请输入 Wintalent 面试链接');
   }
 
-  const response = await fetch(WINTALENT_JD_API, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ interviewUrl: normalized }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(WINTALENT_JD_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ interviewUrl: normalized }),
+    });
+  } catch (error) {
+    throw new Error(toNetworkErrorMessage(error));
+  }
 
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));

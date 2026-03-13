@@ -128,7 +128,10 @@ All data is stored in the browser's localStorage. No backend required.
 # Development server
 npm run dev
 
-# Optional: start Wintalent resume proxy (for interview link -> PDF)
+# Start only Vite frontend (without Wintalent proxy)
+npm run dev:vite
+
+# Start only Wintalent resume proxy (for interview link -> PDF)
 npm run proxy:wintalent
 
 # Build for production
@@ -141,9 +144,11 @@ npm run preview
 npm run lint
 ```
 
-### Optional: Wintalent Proxy (Interview Link -> PDF)
+### Wintalent Proxy (Interview Link -> PDF)
 
-If you need to parse resumes directly from Wintalent interview links, run:
+`npm run dev` / `npm start` already starts this proxy automatically.
+
+If you only need the proxy process, run:
 
 ```bash
 npm run proxy:wintalent
