@@ -109,6 +109,13 @@ describe('createFeishuDoc', () => {
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({
       Authorization: 'Bearer user-token',
     });
+    const writeBody = JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body));
+    expect(writeBody.children[0].block_type).toBe(4); // heading2
+    expect(
+      writeBody.children.some(
+        (block: { block_type: number; heading3?: unknown }) => block.block_type === 5 && Boolean(block.heading3)
+      )
+    ).toBe(true);
   });
 
   it('falls back to tenant token when user token lacks permission', async () => {

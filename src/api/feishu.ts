@@ -892,7 +892,7 @@ const formatResultAsBlocks = (result: InterviewResult): object[] => {
 
   // Interview info section
   blocks.push({
-    block_type: 3, // heading2
+    block_type: 4, // heading2
     heading2: {
       elements: [{ text_run: { content: '面试信息' } }],
     },
@@ -924,7 +924,7 @@ const formatResultAsBlocks = (result: InterviewResult): object[] => {
 
   // Evaluation dimensions section
   blocks.push({
-    block_type: 3,
+    block_type: 4,
     heading2: {
       elements: [{ text_run: { content: '评估维度' } }],
     },
@@ -932,7 +932,7 @@ const formatResultAsBlocks = (result: InterviewResult): object[] => {
 
   result.evaluation_dimensions.forEach((dim) => {
     blocks.push({
-      block_type: 3,
+      block_type: 5, // heading3
       heading3: {
         elements: [{ text_run: { content: `${dim.dimension} (${dim.score}/5)` } }],
       },
@@ -949,7 +949,7 @@ const formatResultAsBlocks = (result: InterviewResult): object[] => {
 
   // Summary section
   blocks.push({
-    block_type: 3,
+    block_type: 4,
     heading2: {
       elements: [{ text_run: { content: '综合评价' } }],
     },
@@ -998,7 +998,7 @@ const formatResultAsBlocks = (result: InterviewResult): object[] => {
   // Additional info
   if (result.additional_info) {
     blocks.push({
-      block_type: 3,
+      block_type: 4,
       heading2: {
         elements: [{ text_run: { content: '附加信息' } }],
       },
