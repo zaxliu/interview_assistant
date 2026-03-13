@@ -4,6 +4,9 @@ import { URL } from 'node:url';
 const PORT = Number(process.env.WINTALENT_PROXY_PORT || 8787);
 const HOST = process.env.WINTALENT_PROXY_HOST || '127.0.0.1';
 const ORIGIN = 'https://www.wintalent.cn';
+const WINTALENT_RESUME_UNAVAILABLE_MESSAGE =
+  '当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!';
+const WINTALENT_RESUME_UNAVAILABLE_KEYWORD = '当前简历已流转到其他环节或已被删除';
 
 const JSON_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -11,6 +14,18 @@ const JSON_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
+
+function extractResumeUnavailableMessage(rawText) {
+  if (!rawText) return null;
+  const text = String(rawText);
+  if (text.includes(WINTALENT_RESUME_UNAVAILABLE_MESSAGE)) {
+    return WINTALENT_RESUME_UNAVAILABLE_MESSAGE;
+  }
+  if (text.includes(WINTALENT_RESUME_UNAVAILABLE_KEYWORD)) {
+    return WINTALENT_RESUME_UNAVAILABLE_MESSAGE;
+  }
+  return null;
+}
 
 class CookieJar {
   constructor() {
@@ -251,12 +266,19 @@ async function postFormJson(jar, url, formObj, referer) {
     referer,
   });
   const text = await res.text();
+  const resumeUnavailableMessage = extractResumeUnavailableMessage(text);
   if (!res.ok) {
+    if (resumeUnavailableMessage) {
+      throw new Error(resumeUnavailableMessage);
+    }
     throw new Error(`HTTP ${res.status} calling ${url}: ${text.slice(0, 200)}`);
   }
   try {
     return JSON.parse(text);
   } catch {
+    if (resumeUnavailableMessage) {
+      throw new Error(resumeUnavailableMessage);
+    }
     throw new Error(`Expected JSON from ${url}, got: ${text.slice(0, 200)}`);
   }
 }
@@ -353,6 +375,7 @@ function getErrorStatus(error) {
   const lower = message.toLowerCase();
 
   if (message.includes('interviewUrl is required') || message.includes('Invalid JSON body')) return 400;
+  if (message.includes(WINTALENT_RESUME_UNAVAILABLE_KEYWORD)) return 400;
   if (message.includes('showResume') || message.includes('链接可能已失效')) return 400;
   if (message.includes('未拿到 postId/recruitType')) return 422;
   if (message.includes('未拿到 resumeOriginalInfoUrl') || message.includes('无原始简历权限')) return 403;
@@ -380,8 +403,13 @@ async function resolvePdfFlow(interviewUrl, lanType = 1) {
 
   const entry = await requestWithJar(jar, interviewUrl, { followRedirects: 8 });
   const showResumeUrl = extractShowResumeUrl(entry.history, entry.url);
+  const entryText = await entry.res.clone().text().catch(() => '');
+  const resumeUnavailableMessage = extractResumeUnavailableMessage(entryText);
 
   if (!showResumeUrl.includes('/showResume.html')) {
+    if (resumeUnavailableMessage) {
+      throw new Error(resumeUnavailableMessage);
+    }
     throw new Error('无法定位 showResume 页面，链接可能已失效');
   }
 
@@ -533,14 +561,29 @@ async function streamPdfFromFlow(flow) {
     method: 'GET',
     referer: flow.showResumeUrl,
   });
+  const contentType = res.headers.get('content-type') || '';
   if (!res.ok) {
     const text = await res.text();
+    const resumeUnavailableMessage = extractResumeUnavailableMessage(text);
+    if (resumeUnavailableMessage) {
+      throw new Error(resumeUnavailableMessage);
+    }
     throw new Error(`拉取 PDF 失败: HTTP ${res.status}, ${text.slice(0, 200)}`);
   }
+
+  if (!contentType.toLowerCase().includes('pdf')) {
+    const text = await res.text();
+    const resumeUnavailableMessage = extractResumeUnavailableMessage(text);
+    if (resumeUnavailableMessage) {
+      throw new Error(resumeUnavailableMessage);
+    }
+    throw new Error(`拉取 PDF 失败: 返回内容类型异常 ${contentType || '未知'}，${text.slice(0, 200)}`);
+  }
+
   const buffer = Buffer.from(await res.arrayBuffer());
   return {
     buffer,
-    contentType: res.headers.get('content-type') || 'application/pdf',
+    contentType: contentType || 'application/pdf',
     contentDisposition: res.headers.get('content-disposition') || 'inline; filename="resume.pdf"',
   };
 }

@@ -71,6 +71,38 @@ describe('downloadWintalentResumePDF', () => {
       downloadWintalentResumePDF('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
     ).rejects.toThrow('Wintalent 代理服务不可用');
   });
+
+  it('extracts resume-unavailable hint from failed text response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!', {
+          status: 400,
+          headers: { 'content-type': 'text/plain; charset=utf-8' },
+        })
+      )
+    );
+
+    await expect(
+      downloadWintalentResumePDF('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
+    ).rejects.toThrow('当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!');
+  });
+
+  it('extracts resume-unavailable hint from non-pdf success payload', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('<html><body>当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!</body></html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        })
+      )
+    );
+
+    await expect(
+      downloadWintalentResumePDF('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
+    ).rejects.toThrow('当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!');
+  });
 });
 
 describe('fetchWintalentPositionJD', () => {

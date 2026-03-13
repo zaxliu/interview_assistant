@@ -2,6 +2,21 @@ const WINTALENT_DOWNLOAD_API = '/api/wintalent/download';
 const WINTALENT_JD_API = '/api/wintalent/jd';
 const WINTALENT_PROXY_OFFLINE_MESSAGE =
   'Wintalent 代理服务不可用，请先运行 `npm run proxy:wintalent`（或直接使用 `npm run dev` / `npm start`）。';
+const WINTALENT_RESUME_UNAVAILABLE_MESSAGE =
+  '当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!';
+const WINTALENT_RESUME_UNAVAILABLE_KEYWORD = '当前简历已流转到其他环节或已被删除';
+
+const extractResumeUnavailableMessage = (text: string): string | null => {
+  if (!text) return null;
+  const normalized = text.replace(/\s+/g, '');
+  if (normalized.includes(WINTALENT_RESUME_UNAVAILABLE_MESSAGE.replace(/\s+/g, ''))) {
+    return WINTALENT_RESUME_UNAVAILABLE_MESSAGE;
+  }
+  if (normalized.includes(WINTALENT_RESUME_UNAVAILABLE_KEYWORD.replace(/\s+/g, ''))) {
+    return WINTALENT_RESUME_UNAVAILABLE_MESSAGE;
+  }
+  return null;
+};
 
 const decodeRfc5987 = (value: string): string => {
   const cleaned = value.trim().replace(/^UTF-8''/i, '');
@@ -33,9 +48,17 @@ const parseFilenameFromContentDisposition = (contentDisposition: string | null):
 const parseErrorMessage = async (response: Response): Promise<string> => {
   const text = await response.text();
   if (!text) return `请求失败：HTTP ${response.status}`;
+  const resumeUnavailableMessage = extractResumeUnavailableMessage(text);
+  if (resumeUnavailableMessage) {
+    return resumeUnavailableMessage;
+  }
   try {
     const json = JSON.parse(text) as { error?: string };
     if (json.error) {
+      const nestedResumeUnavailableMessage = extractResumeUnavailableMessage(json.error);
+      if (nestedResumeUnavailableMessage) {
+        return nestedResumeUnavailableMessage;
+      }
       if (isWintalentProxyUnavailableMessage(json.error)) {
         return WINTALENT_PROXY_OFFLINE_MESSAGE;
       }
@@ -63,6 +86,10 @@ const isWintalentProxyUnavailableMessage = (text: string): boolean => {
 
 const toNetworkErrorMessage = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error ?? '');
+  const resumeUnavailableMessage = extractResumeUnavailableMessage(message);
+  if (resumeUnavailableMessage) {
+    return resumeUnavailableMessage;
+  }
   if (isWintalentProxyUnavailableMessage(message) || message.toLowerCase().includes('failed to fetch')) {
     return WINTALENT_PROXY_OFFLINE_MESSAGE;
   }
@@ -152,6 +179,11 @@ export const downloadWintalentResumePDF = async (interviewUrl: string): Promise<
   const blob = await response.blob();
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.toLowerCase().includes('pdf')) {
+    const nonPdfText = await blob.text().catch(() => '');
+    const resumeUnavailableMessage = extractResumeUnavailableMessage(nonPdfText);
+    if (resumeUnavailableMessage) {
+      throw new Error(resumeUnavailableMessage);
+    }
     throw new Error(`返回内容类型异常：${contentType || '未知'}`);
   }
 

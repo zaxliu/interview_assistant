@@ -141,6 +141,25 @@ describe('CandidateForm', () => {
     expect(screen.getByRole('link', { name: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc' })).toBeInTheDocument();
   });
 
+  it('shows resume-unavailable hint when Wintalent link is expired', async () => {
+    downloadWintalentResumePDF.mockRejectedValue(
+      new Error('当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!')
+    );
+
+    render(<CandidateForm positionId="position-1" onSave={() => undefined} onCancel={() => undefined} />);
+
+    fireEvent.change(screen.getByPlaceholderText('粘贴 Wintalent 面试链接，一键导入'), {
+      target: { value: 'https://www.wintalent.cn/wt/Horizon/kurl?k=expired' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '导入' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!')
+      ).toBeInTheDocument();
+    });
+  });
+
   it('imports Wintalent resume and parses as PDF file', async () => {
     downloadWintalentResumePDF.mockResolvedValue({
       blob: new Blob(['%PDF-1.7 fake'], { type: 'application/pdf' }),
