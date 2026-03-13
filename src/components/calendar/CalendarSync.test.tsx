@@ -171,6 +171,114 @@ describe('CalendarSync', () => {
     expect(addedPast?.status).toBe('scheduled');
   });
 
+  it('merges historical duplicated calendar positions and candidates on sync', async () => {
+    const duplicatedInterviewTime = isoFromNow(2);
+    usePositionStore.setState({
+      positions: [
+        {
+          id: 'position-old',
+          title: 'AI Agent应用工程师',
+          team: undefined,
+          description: '',
+          criteria: [],
+          createdAt: '2026-03-01T08:00:00.000Z',
+          source: 'calendar',
+          candidates: [
+            {
+              id: 'candidate-1',
+              name: 'Alex',
+              status: 'scheduled',
+              calendarEventId: 'evt-old-1',
+              interviewTime: duplicatedInterviewTime,
+              questions: [],
+            },
+          ],
+        },
+        {
+          id: 'position-dup',
+          title: ' AI Agent应用工程师 ',
+          team: '',
+          description: '这是历史手工补充的JD内容',
+          criteria: ['分布式系统设计'],
+          createdAt: '2026-03-02T08:00:00.000Z',
+          source: 'manual',
+          candidates: [
+            {
+              id: 'candidate-2',
+              name: 'Alex',
+              status: 'scheduled',
+              calendarEventId: 'evt-old-2',
+              interviewTime: duplicatedInterviewTime,
+              questions: [],
+              quickNotes: '重复候选人',
+            },
+          ],
+        },
+      ],
+      currentUserId: 'user-1',
+    });
+
+    syncCalendarMock.mockResolvedValue(emptySyncResult);
+
+    render(<CalendarSync />);
+    fireEvent.click(screen.getByRole('button', { name: '同步日历' }));
+
+    await waitFor(() => {
+      expect(syncCalendarMock).toHaveBeenCalledTimes(1);
+    });
+
+    const mergedPositions = usePositionStore
+      .getState()
+      .positions.filter((position) => position.title.includes('AI Agent应用工程师'));
+
+    expect(mergedPositions).toHaveLength(1);
+    expect(mergedPositions[0].candidates).toHaveLength(1);
+    expect(mergedPositions[0].candidates[0].name).toBe('Alex');
+    expect(mergedPositions[0].description).toContain('JD内容');
+    expect(mergedPositions[0].criteria).toContain('分布式系统设计');
+  });
+
+  it('dedupes mirrored calendar events and does not create duplicated candidates', async () => {
+    const sharedTime = isoFromNow(1);
+    syncCalendarMock.mockResolvedValue({
+      events: [
+        {
+          eventId: 'evt-primary',
+          title: '面试安排：李雷(AI Agent应用工程师)',
+          startTime: sharedTime,
+          endTime: sharedTime,
+          parsedTitle: {
+            candidateName: '李雷',
+            team: '',
+            position: 'AI Agent应用工程师',
+          },
+        },
+        {
+          eventId: 'evt-shared',
+          title: '面试安排：李雷(AI Agent应用工程师)',
+          startTime: sharedTime,
+          endTime: sharedTime,
+          parsedTitle: {
+            candidateName: '李雷',
+            team: '',
+            position: 'AI Agent应用工程师',
+          },
+        },
+      ],
+      positions: new Map([['-AI Agent应用工程师', { title: 'AI Agent应用工程师', team: '' }]]),
+    });
+
+    render(<CalendarSync />);
+    fireEvent.click(screen.getByRole('button', { name: '同步日历' }));
+
+    await waitFor(() => {
+      const position = usePositionStore
+        .getState()
+        .positions.find((item) => item.title === 'AI Agent应用工程师');
+      expect(position?.candidates.length).toBe(1);
+    });
+  });
+
   it('auto syncs once on first home mount after login', async () => {
     const loginTime = '2026-03-13T01:00:00.000Z';
     setLoggedInUser(loginTime);

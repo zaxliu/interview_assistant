@@ -92,4 +92,70 @@ describe('UpcomingInterviews', () => {
     expect(screen.getByText('候选人1')).toBeInTheDocument();
     expect(screen.getByText('候选人6')).toBeInTheDocument();
   });
+
+  it('dedupes duplicated entries in today and upcoming lists', () => {
+    const duplicatedTodayTime = '2026-03-12T03:00:00.000Z';
+    const duplicatedFutureTime = '2026-03-13T03:00:00.000Z';
+
+    const positions: Position[] = [
+      {
+        id: 'position-calendar',
+        title: 'AI Agent应用工程师',
+        team: '',
+        description: '',
+        criteria: [],
+        createdAt: '2026-03-10T00:00:00.000Z',
+        source: 'calendar',
+        candidates: [
+          {
+            id: 'c-calendar-today',
+            name: '重复今日候选人',
+            status: 'scheduled',
+            interviewTime: duplicatedTodayTime,
+            questions: [],
+            calendarEventId: 'event-1',
+          },
+          {
+            id: 'c-calendar-upcoming',
+            name: '重复未来候选人',
+            status: 'scheduled',
+            interviewTime: duplicatedFutureTime,
+            questions: [],
+            calendarEventId: 'event-2',
+          },
+        ],
+      },
+      {
+        id: 'position-duplicate',
+        title: ' AI Agent应用工程师 ',
+        team: undefined,
+        description: '',
+        criteria: [],
+        createdAt: '2026-03-11T00:00:00.000Z',
+        source: 'manual',
+        candidates: [
+          {
+            id: 'c-manual-today',
+            name: '重复今日候选人',
+            status: 'scheduled',
+            interviewTime: duplicatedTodayTime,
+            questions: [],
+          },
+          {
+            id: 'c-manual-upcoming',
+            name: '重复未来候选人',
+            status: 'scheduled',
+            interviewTime: duplicatedFutureTime,
+            questions: [],
+          },
+        ],
+      },
+    ];
+
+    usePositionStore.setState({ positions });
+    render(<UpcomingInterviews onStartInterview={() => undefined} />);
+
+    expect(screen.getAllByText('重复今日候选人')).toHaveLength(1);
+    expect(screen.getAllByText('重复未来候选人')).toHaveLength(1);
+  });
 });
