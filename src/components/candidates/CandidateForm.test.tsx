@@ -95,6 +95,30 @@ describe('CandidateForm', () => {
     });
   });
 
+  it('alerts user and skips resume processing when resume URL content fetch fails', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    parseFromUrl.mockResolvedValue('');
+
+    render(<CandidateForm positionId="position-1" onSave={() => undefined} onCancel={() => undefined} />);
+
+    fireEvent.change(screen.getByPlaceholderText('或粘贴 PDF 直链（非 Wintalent 页面）'), {
+      target: { value: 'https://example.com/broken.pdf' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '解析' }));
+
+    await waitFor(() => {
+      expect(parseFromUrl).toHaveBeenCalledWith(
+        'https://example.com/broken.pdf',
+        true,
+        { maxPages: 5 }
+      );
+      expect(alertSpy).toHaveBeenCalledWith('简历链接内容获取失败，请检查链接是否可访问且为 PDF 直链。');
+      expect(processResume).not.toHaveBeenCalled();
+    });
+
+    alertSpy.mockRestore();
+  });
+
   it('shows calendar links when they exist on the candidate', () => {
     render(
       <CandidateForm

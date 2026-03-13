@@ -94,9 +94,11 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     if (resumeUrl) {
       // Use AI parsing if enabled and available, otherwise standard
       const text = await parseFromUrl(resumeUrl, useAIParsing && canUseAI, { maxPages: 5 });
-      if (text) {
-        await applyProcessedResume(text);
+      if (!text.trim()) {
+        alert('简历链接内容获取失败，请检查链接是否可访问且为 PDF 直链。');
+        return;
       }
+      await applyProcessedResume(text);
     }
   };
 
