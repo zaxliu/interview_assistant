@@ -124,10 +124,15 @@ const AppHeader = () => {
               {t.app.back}
             </Button>
           )}
-          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-gray-100"
+            title="返回主页"
+          >
             <Logo size={28} />
             <h1 className="text-lg font-semibold text-gray-900">{t.app.name}</h1>
-          </div>
+          </button>
         </div>
 
         <div className="flex items-center gap-3">
