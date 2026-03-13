@@ -92,9 +92,10 @@ describe('createFeishuDoc', () => {
     vi.unstubAllGlobals();
   });
 
-  it('creates and writes document with user token', async () => {
+  it('creates, writes, and sets tenant-readable permission with user token', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ code: 0, data: { document: { document_id: 'doc-user' } } }))
+      .mockResolvedValueOnce(jsonResponse({ code: 0 }))
       .mockResolvedValueOnce(jsonResponse({ code: 0 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -103,12 +104,15 @@ describe('createFeishuDoc', () => {
 
     expect(response.success).toBe(true);
     expect(response.docUrl).toBe('https://feishu.cn/docx/doc-user');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(response.message).toContain('企业内获链可读');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[0][0]).toBe('/api/feishu/docx/v1/documents');
     expect(fetchMock.mock.calls[1][0]).toBe('/api/feishu/docx/v1/documents/doc-user/blocks/doc-user/children');
+    expect(fetchMock.mock.calls[2][0]).toBe('/api/feishu/drive/v1/permissions/doc-user/public?type=docx');
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({
       Authorization: 'Bearer user-token',
     });
+    expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: 'PATCH' });
     const writeBody = JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body));
     expect(writeBody.children[0].block_type).toBe(4); // heading2
     expect(
@@ -116,6 +120,8 @@ describe('createFeishuDoc', () => {
         (block: { block_type: number; heading3?: unknown }) => block.block_type === 5 && Boolean(block.heading3)
       )
     ).toBe(true);
+    const permissionBody = JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body));
+    expect(permissionBody).toEqual({ link_share_entity: 'tenant_readable' });
   });
 
   it('falls back to tenant token when user token lacks permission', async () => {
@@ -123,6 +129,7 @@ describe('createFeishuDoc', () => {
       .mockResolvedValueOnce(jsonResponse({ code: 99991663, msg: 'permission denied' }))
       .mockResolvedValueOnce(jsonResponse({ code: 0, tenant_access_token: 'tenant-token', expire: 7200 }))
       .mockResolvedValueOnce(jsonResponse({ code: 0, data: { document: { document_id: 'doc-tenant' } } }))
+      .mockResolvedValueOnce(jsonResponse({ code: 0 }))
       .mockResolvedValueOnce(jsonResponse({ code: 0 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -143,7 +150,11 @@ describe('createFeishuDoc', () => {
     expect(fetchMock.mock.calls[1][0]).toBe('/api/feishu/auth/v3/tenant_access_token/internal');
     expect(fetchMock.mock.calls[2][0]).toBe('/api/feishu/docx/v1/documents');
     expect(fetchMock.mock.calls[3][0]).toBe('/api/feishu/docx/v1/documents/doc-tenant/blocks/doc-tenant/children');
+    expect(fetchMock.mock.calls[4][0]).toBe('/api/feishu/drive/v1/permissions/doc-tenant/public?type=docx');
     expect((fetchMock.mock.calls[2][1] as RequestInit).headers).toMatchObject({
+      Authorization: 'Bearer tenant-token',
+    });
+    expect((fetchMock.mock.calls[4][1] as RequestInit).headers).toMatchObject({
       Authorization: 'Bearer tenant-token',
     });
   });
@@ -203,6 +214,22 @@ describe('createFeishuDoc', () => {
     expect(response.message).toContain('用户 token 导出失败');
     expect(response.message).toContain('回退租户 token 失败');
     expect(response.message).toContain('tenant write failed');
+  });
+
+  it('returns success with warning when permission update fails', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ code: 0, data: { document: { document_id: 'doc-user' } } }))
+      .mockResolvedValueOnce(jsonResponse({ code: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ code: 1770001, msg: 'invalid param' }, { ok: false, status: 400 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { createFeishuDoc } = await import('./feishu');
+    const response = await createFeishuDoc(sampleResult, 'Alice', 'Frontend', 'user-token');
+
+    expect(response.success).toBe(true);
+    expect(response.docUrl).toBe('https://feishu.cn/docx/doc-user');
+    expect(response.message).toContain('自动设置“企业内获链可读”失败');
+    expect(response.message).toContain('invalid param');
   });
 });
 

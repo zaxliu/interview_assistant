@@ -72,6 +72,7 @@ describe('ExportButtons', () => {
       'href',
       'https://feishu.cn/docx/doc-1'
     );
+    expect(screen.getByText('ok')).toBeInTheDocument();
   });
 
   it('copies exported doc link', async () => {

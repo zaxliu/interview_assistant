@@ -605,12 +605,40 @@ const isPermissionRelatedError = (error: FeishuApiError): boolean => {
   return permissionKeywords.some((keyword) => scope.includes(keyword));
 };
 
+const enableTenantReadableLinkShare = async (
+  accessToken: string,
+  documentId: string
+): Promise<string | null> => {
+  const response = await fetch(`/api/feishu/drive/v1/permissions/${documentId}/public?type=docx`, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      link_share_entity: 'tenant_readable',
+    }),
+  });
+  const payload = toObjectRecord(await response.json().catch(() => null));
+
+  if (!response.ok) {
+    return `设置共享权限失败：${formatFeishuMessageWithCode(payload, `HTTP ${response.status}`)} (HTTP ${response.status})`;
+  }
+
+  const code = extractFeishuCode(payload);
+  if (code !== 0) {
+    return `设置共享权限失败：${formatFeishuMessageWithCode(payload, '未知飞书 API 错误')}`;
+  }
+
+  return null;
+};
+
 const createFeishuDocWithToken = async (
   accessToken: string,
   result: InterviewResult,
   candidateName: string,
   positionTitle: string
-): Promise<string> => {
+): Promise<{ documentId: string; permissionWarning?: string }> => {
   const createResponse = await fetch('/api/feishu/docx/v1/documents', {
     method: 'POST',
     headers: {
@@ -681,7 +709,17 @@ const createFeishuDocWithToken = async (
     );
   }
 
-  return documentId;
+  const permissionWarning = await enableTenantReadableLinkShare(accessToken, documentId);
+  if (permissionWarning) {
+    return {
+      documentId,
+      permissionWarning,
+    };
+  }
+
+  return {
+    documentId,
+  };
 };
 
 export const createFeishuDoc = async (
@@ -699,10 +737,17 @@ export const createFeishuDoc = async (
   try {
     if (normalizedUserToken) {
       try {
-        const documentId = await createFeishuDocWithToken(normalizedUserToken, result, candidateName, positionTitle);
+        const { documentId, permissionWarning } = await createFeishuDocWithToken(
+          normalizedUserToken,
+          result,
+          candidateName,
+          positionTitle
+        );
         return {
           success: true,
-          message: '已成功创建飞书文档',
+          message: permissionWarning
+            ? `已成功创建飞书文档，但自动设置“企业内获链可读”失败：${permissionWarning}`
+            : '已成功创建飞书文档，并设置为企业内获链可读',
           docUrl: `https://feishu.cn/docx/${documentId}`,
         };
       } catch (error) {
@@ -726,13 +771,22 @@ export const createFeishuDoc = async (
     }
 
     const tenantToken = await getAccessToken(undefined, appId, appSecret);
-    const documentId = await createFeishuDocWithToken(tenantToken, result, candidateName, positionTitle);
+    const { documentId, permissionWarning } = await createFeishuDocWithToken(
+      tenantToken,
+      result,
+      candidateName,
+      positionTitle
+    );
 
     return {
       success: true,
       message: userPermissionError
-        ? '用户 token 缺少导出权限，已自动回退到应用凭证完成导出。'
-        : '已成功创建飞书文档',
+        ? permissionWarning
+          ? `用户 token 缺少导出权限，已自动回退到应用凭证完成导出，但自动设置“企业内获链可读”失败：${permissionWarning}`
+          : '用户 token 缺少导出权限，已自动回退到应用凭证完成导出，并设置为企业内获链可读'
+        : permissionWarning
+          ? `已成功创建飞书文档，但自动设置“企业内获链可读”失败：${permissionWarning}`
+          : '已成功创建飞书文档，并设置为企业内获链可读',
       docUrl: `https://feishu.cn/docx/${documentId}`,
     };
   } catch (error) {

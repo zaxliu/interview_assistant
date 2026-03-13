@@ -73,12 +73,14 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [latestDocUrl, setLatestDocUrl] = useState<string | null>(null);
+  const [latestExportMessage, setLatestExportMessage] = useState<string | null>(null);
   const [copyDocUrlSuccess, setCopyDocUrlSuccess] = useState(false);
 
   const handleFeishuExport = async () => {
     const response = await createDoc(result, candidateName, positionTitle);
     if (response.success && response.docUrl) {
       setLatestDocUrl(response.docUrl);
+      setLatestExportMessage(response.message);
       setCopyDocUrlSuccess(false);
       window.open(response.docUrl, '_blank');
     } else if (!response.success) {
@@ -148,6 +150,11 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
             >
               {copyDocUrlSuccess ? '已复制' : '复制链接'}
             </Button>
+            {latestExportMessage && (
+              <div className="w-full text-[11px] text-green-700">
+                {latestExportMessage}
+              </div>
+            )}
           </div>
         )}
       </div>
