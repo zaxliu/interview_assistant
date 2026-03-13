@@ -650,7 +650,7 @@ const createFeishuDocWithToken = async (
   const documentId = documentIdRaw.trim();
 
   const blocks = formatResultAsBlocks(result);
-  const batchResponse = await fetch(`/api/feishu/docx/v1/documents/${documentId}/blocks/${documentId}/children/batch_create`, {
+  const batchResponse = await fetch(`/api/feishu/docx/v1/documents/${documentId}/blocks/${documentId}/children`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,

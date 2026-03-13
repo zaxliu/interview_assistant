@@ -105,6 +105,7 @@ describe('createFeishuDoc', () => {
     expect(response.docUrl).toBe('https://feishu.cn/docx/doc-user');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0][0]).toBe('/api/feishu/docx/v1/documents');
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/feishu/docx/v1/documents/doc-user/blocks/doc-user/children');
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({
       Authorization: 'Bearer user-token',
     });
@@ -134,6 +135,7 @@ describe('createFeishuDoc', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/feishu/docx/v1/documents');
     expect(fetchMock.mock.calls[1][0]).toBe('/api/feishu/auth/v3/tenant_access_token/internal');
     expect(fetchMock.mock.calls[2][0]).toBe('/api/feishu/docx/v1/documents');
+    expect(fetchMock.mock.calls[3][0]).toBe('/api/feishu/docx/v1/documents/doc-tenant/blocks/doc-tenant/children');
     expect((fetchMock.mock.calls[2][1] as RequestInit).headers).toMatchObject({
       Authorization: 'Bearer tenant-token',
     });
@@ -159,7 +161,7 @@ describe('createFeishuDoc', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('fails when batch_create returns business error', async () => {
+  it('fails when writing doc blocks returns business error', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ code: 0, data: { document: { document_id: 'doc-user' } } }))
       .mockResolvedValueOnce(jsonResponse({ code: 1234, msg: 'invalid block payload' }));
