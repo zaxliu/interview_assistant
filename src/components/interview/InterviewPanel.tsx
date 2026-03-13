@@ -21,6 +21,24 @@ interface InterviewPanelProps {
   showPdfViewer?: boolean;
 }
 
+const isFeishuPermissionError = (message: string | null): boolean => {
+  if (!message) {
+    return false;
+  }
+
+  const normalized = message.toLowerCase();
+  return [
+    'forbidden',
+    'access denied',
+    'permission',
+    '无权限',
+    '权限不足',
+    '没有权限',
+    '403',
+    '1770032',
+  ].some((keyword) => normalized.includes(keyword.toLowerCase()));
+};
+
 export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   position,
   candidate,
@@ -290,6 +308,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     ? `请先补充${missingRequirements.join('和')}，再使用 AI 生成问题。`
     : null;
   const isMeetingImportBusy = isImportingMeetingNotes || aiLoading;
+  const shouldShowMeetingPermissionHint = isFeishuPermissionError(meetingImportError);
 
   const renderMeetingNotesImporter = () => (
     <Card>
@@ -317,6 +336,14 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         </div>
         {meetingImportStatus && <p className="text-xs text-green-700">{meetingImportStatus}</p>}
         {meetingImportError && <p className="text-xs text-red-600">{meetingImportError}</p>}
+        {shouldShowMeetingPermissionHint && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+            <p className="font-medium">当前纪要权限不足，可按以下方式处理：</p>
+            <p>1. 在飞书文档中点击“创建副本”（这样你可以调整副本的分享权限）。</p>
+            <p>2. 在“分享”按钮下，将“链接分享”从“未分享”改为“你的企业”。</p>
+            <p>3. 将副本链接粘贴回面试页面后，再次点击“从纪要提取问答”。</p>
+          </div>
+        )}
       </CardBody>
     </Card>
   );
