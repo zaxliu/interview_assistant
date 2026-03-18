@@ -29,11 +29,15 @@ export const sanitizeResumeHighlights = (
   keywords: (highlights?.keywords || []).map((item) => item.trim()).filter(Boolean),
 });
 
+const hasOwnField = <K extends keyof Candidate>(candidate: Candidate, field: K): boolean =>
+  Object.prototype.hasOwnProperty.call(candidate, field);
+
 export const getPreferredResumeText = (candidate: Candidate): string =>
-  candidate.resumeMarkdown?.trim() ||
-  candidate.resumeText?.trim() ||
-  candidate.resumeRawText?.trim() ||
-  '';
+  hasOwnField(candidate, 'resumeMarkdown')
+    ? candidate.resumeMarkdown?.trim() || ''
+    : hasOwnField(candidate, 'resumeText')
+      ? candidate.resumeText?.trim() || ''
+      : candidate.resumeRawText?.trim() || '';
 
 export const getRawResumeText = (candidate: Candidate): string =>
   candidate.resumeRawText?.trim() || candidate.resumeText?.trim() || '';

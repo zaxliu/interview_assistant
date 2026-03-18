@@ -79,9 +79,29 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const isHydratingRef = useRef(true);
   const isResumeBusy = pdfLoading || resumeProcessing || wintalentLoading;
 
+  const previewDebugText = (content: string, limit: number = 300): string => (
+    content.length > limit ? `${content.slice(0, limit)}...` : content
+  );
+
   const applyProcessedResume = async (rawText: string) => {
+    console.log('[CandidateForm] applyProcessedResume start', {
+      rawTextLength: rawText.length,
+      rawTextPreview: previewDebugText(rawText),
+    });
     setResumeRawText(rawText);
     const processed = await processResume(rawText);
+    console.log('[CandidateForm] applyProcessedResume result', {
+      markdownLength: processed.markdown.length,
+      markdownPreview: previewDebugText(processed.markdown),
+      highlights: {
+        summary: processed.highlights.summary,
+        strengthsCount: processed.highlights.strengths.length,
+        risksCount: processed.highlights.risks.length,
+        experienceCount: processed.highlights.experience.length,
+        keywordsCount: processed.highlights.keywords.length,
+      },
+      usage: processed.usage,
+    });
     setResumeText(processed.markdown);
     setResumeHighlights(processed.highlights);
     setResumeProcessingUsage(processed.usage);
@@ -125,9 +145,9 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const buildCandidateData = useCallback(() => ({
     name,
     resumeUrl,
-    resumeText: resumeText || resumeRawText,
+    resumeText,
     resumeRawText: resumeRawText || resumeText,
-    resumeMarkdown: resumeText || resumeRawText,
+    resumeMarkdown: resumeText,
     resumeHighlights,
     historicalInterviewReviews,
     aiUsage: {

@@ -186,6 +186,56 @@ describe('CandidateForm', () => {
     });
   });
 
+  it('keeps an explicitly cleared normalized resume instead of restoring raw OCR text', async () => {
+    usePositionStore.setState({
+      currentUserId: 'user-1',
+      positions: [
+        {
+          id: 'position-1',
+          title: 'Backend Engineer',
+          criteria: [],
+          createdAt: '2026-03-18T00:00:00.000Z',
+          source: 'manual',
+          userId: 'user-1',
+          candidates: [
+            {
+              id: 'candidate-1',
+              name: 'Alice',
+              status: 'pending',
+              questions: [],
+              resumeMarkdown: 'Normalized resume',
+              resumeText: 'Normalized resume',
+              resumeRawText: 'raw OCR text',
+            },
+          ],
+        },
+      ],
+    });
+
+    const candidate = usePositionStore.getState().positions[0].candidates[0];
+    render(
+      <CandidateForm
+        positionId="position-1"
+        candidate={candidate}
+        onSave={() => undefined}
+        onCancel={() => undefined}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('上传 PDF 后将在此显示简历内容，也可手动粘贴...'), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '进入面试' }));
+
+    await waitFor(() => {
+      expect(usePositionStore.getState().getCandidate('position-1', 'candidate-1')).toMatchObject({
+        resumeMarkdown: '',
+        resumeText: '',
+        resumeRawText: 'raw OCR text',
+      });
+    });
+  });
+
   it('imports Wintalent resume and parses as PDF file', async () => {
     downloadWintalentResumePDF.mockResolvedValue({
       blob: new Blob(['%PDF-1.7 fake'], { type: 'application/pdf' }),

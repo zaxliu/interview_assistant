@@ -15,6 +15,20 @@ describe('resume utils', () => {
     ).toBe('normalized');
   });
 
+  it('preserves an explicitly cleared markdown field instead of falling back to raw text', () => {
+    expect(
+      getPreferredResumeText({
+        id: 'c1',
+        name: 'Alice',
+        status: 'pending',
+        questions: [],
+        resumeMarkdown: '',
+        resumeText: '',
+        resumeRawText: 'raw OCR text',
+      })
+    ).toBe('');
+  });
+
   it('normalizes excessive blank lines', () => {
     expect(normalizeMarkdownText('A\n\n\n\nB')).toBe('A\n\nB');
   });

@@ -21,6 +21,16 @@ interface ResumeProcessingResult {
   highlights: ResumeHighlights;
 }
 
+class ResumeProcessingError extends Error {
+  shouldFallbackToRawText: boolean;
+
+  constructor(message: string, shouldFallbackToRawText: boolean = false) {
+    super(message);
+    this.name = 'ResumeProcessingError';
+    this.shouldFallbackToRawText = shouldFallbackToRawText;
+  }
+}
+
 export interface AIResultWithUsage<T> {
   data: T;
   usage?: AIUsage;
@@ -58,12 +68,135 @@ const normalizeEvaluationDimension = (dimension?: string): EvaluationDimensionNa
   return '专业能力';
 };
 
+const extractTextFromMessageContent = (content: unknown): string => {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return '';
+  }
+
+  return content
+    .map((item) => {
+      if (typeof item === 'string') {
+        return item;
+      }
+      if (!item || typeof item !== 'object') {
+        return '';
+      }
+
+      const part = item as {
+        text?: unknown;
+        type?: unknown;
+      };
+
+      return typeof part.text === 'string' ? part.text : '';
+    })
+    .filter(Boolean)
+    .join('\n');
+};
+
+const extractBalancedJsonSnippet = (content: string): string | null => {
+  const startIndex = [...content].findIndex((char) => char === '{' || char === '[');
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const openingChar = content[startIndex];
+  const closingChar = openingChar === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let isEscaped = false;
+
+  for (let index = startIndex; index < content.length; index += 1) {
+    const char = content[index];
+
+    if (isEscaped) {
+      isEscaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      isEscaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (char === openingChar) {
+      depth += 1;
+    } else if (char === closingChar) {
+      depth -= 1;
+      if (depth === 0) {
+        return content.slice(startIndex, index + 1);
+      }
+    }
+  }
+
+  return null;
+};
+
 const extractJsonFromModelContent = (content: string): string => {
   const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (jsonMatch) {
     return jsonMatch[1];
   }
-  return content;
+
+  return extractBalancedJsonSnippet(content) || content;
+};
+
+const extractCompletionContent = (payload: unknown, fallback: string): string => {
+  if (!payload || typeof payload !== 'object') {
+    return fallback;
+  }
+
+  const choices = (payload as {
+    choices?: Array<{
+      message?: {
+        content?: unknown;
+      };
+    }>;
+  }).choices;
+  const firstChoice = Array.isArray(choices) ? choices[0] : undefined;
+  const content = extractTextFromMessageContent(firstChoice?.message?.content);
+
+  return content || fallback;
+};
+
+const previewDebugText = (content: string, limit: number = 500): string => (
+  content.length > limit ? `${content.slice(0, limit)}...` : content
+);
+
+const getResumeProcessingErrorMessage = (response: Response, responseText?: string): string => {
+  if (response.status === 504) {
+    return 'AI 简历整理超时，请重试或更换更快的模型。';
+  }
+
+  if (response.status === 408) {
+    return 'AI 简历整理请求超时，请重试。';
+  }
+
+  const trimmedBody = responseText?.trim();
+  if (trimmedBody) {
+    try {
+      const parsed = JSON.parse(trimmedBody) as { error?: { message?: string } };
+      if (parsed.error?.message) {
+        return `AI 简历整理失败：${parsed.error.message}`;
+      }
+    } catch {
+      return `AI 简历整理失败：${trimmedBody}`;
+    }
+  }
+
+  return `AI 简历整理失败：HTTP ${response.status} ${response.statusText}`.trim();
 };
 
 interface GeneratedQuestionPayloadItem {
@@ -231,7 +364,7 @@ const requestAICompletionContent = async (
 
   const data = await response.json();
   return {
-    data: data.choices?.[0]?.message?.content || '[]',
+    data: extractCompletionContent(data, '[]'),
     usage: extractAIUsage(data),
   };
 };
@@ -426,7 +559,18 @@ export const processResumeText = async (
   config: AIServiceConfig,
   rawText: string
 ): Promise<AIResultWithUsage<ResumeProcessingResult>> => {
-  const prompt = `你是一位专业招聘助手。请基于下面的简历原始提取文本，完成两件事：
+  console.log('[ResumeProcessing] Start', {
+    model: config.model,
+    rawTextLength: rawText.length,
+    rawTextPreview: previewDebugText(rawText, 300),
+  });
+
+  const prompts = [
+    {
+      label: 'full',
+      systemPrompt:
+        '你擅长把 OCR 提取的简历文本整理成高保真 Markdown。保留原文有效信息，只删除指定干扰语并做格式规范化。务必返回有效 JSON。',
+      userPrompt: `你是一位专业招聘助手。请基于下面的简历原始提取文本，完成两件事：
 
 1. 输出规范化后的 Markdown 简历
 2. 提取结构化简历要点
@@ -457,61 +601,138 @@ export const processResumeText = async (
 只返回 JSON，不要附加解释。
 
 原始简历文本：
-${rawText}`;
-
-  const response = await fetch('/api/ai/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
+${rawText}`,
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        {
-          role: 'system',
-          content:
-            '你擅长把 OCR 提取的简历文本整理成高保真 Markdown。保留原文有效信息，只删除指定干扰语并做格式规范化。务必返回有效 JSON。',
+    {
+      label: 'retry-light',
+      systemPrompt:
+        '你是简历整理助手。请只做必要的 Markdown 结构化和要点提取，必须返回有效 JSON，不要输出解释。',
+      userPrompt: `请根据下面的 OCR 简历文本输出 JSON，包含 markdown 和 highlights 两个字段。
+
+要求：
+- markdown 只做轻量结构化：标题、列表、空行
+- 不要补充原文没有的事实
+- highlights 尽量简短：summary 1 句，strengths/risks/experience/keywords 各最多 4 条
+- 如果某项没有把握就返回空数组或空字符串
+- 只返回 JSON
+
+JSON 格式：
+{
+  "markdown": "整理后的 Markdown",
+  "highlights": {
+    "summary": "",
+    "strengths": [],
+    "risks": [],
+    "experience": [],
+    "keywords": []
+  }
+}
+
+OCR 简历文本：
+${rawText}`,
+    },
+  ] as const;
+
+  let lastError: Error | null = null;
+
+  for (let index = 0; index < prompts.length; index += 1) {
+    const attempt = prompts[index];
+
+    try {
+      console.log('[ResumeProcessing] Request attempt', {
+        model: config.model,
+        attempt: attempt.label,
+      });
+
+      const response = await fetch('/api/ai/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`,
         },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.2,
-    }),
-  });
+        body: JSON.stringify({
+          model: config.model,
+          messages: [
+            {
+              role: 'system',
+              content: attempt.systemPrompt,
+            },
+            { role: 'user', content: attempt.userPrompt },
+          ],
+          temperature: 0.2,
+        }),
+      });
 
-  if (!response.ok) {
-    throw new Error(`AI API 错误：${response.statusText}`);
-  }
+      if (!response.ok) {
+        const responseText = await response.text().catch(() => '');
+        const message = getResumeProcessingErrorMessage(response, responseText);
+        const error = new ResumeProcessingError(message, index === prompts.length - 1);
+        console.warn('[ResumeProcessing] Request failed', {
+          model: config.model,
+          attempt: attempt.label,
+          status: response.status,
+          message,
+        });
+        throw error;
+      }
 
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '{}';
-  const usage = extractAIUsage(data);
+      const data = await response.json();
+      const content = extractCompletionContent(data, '{}');
+      const usage = extractAIUsage(data);
 
-  try {
-    let jsonContent = content;
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      jsonContent = jsonMatch[1];
+      console.log('[ResumeProcessing] Model response', {
+        model: config.model,
+        attempt: attempt.label,
+        usage,
+        contentLength: content.length,
+        contentPreview: previewDebugText(content),
+      });
+
+      const parsed = JSON.parse(extractJsonFromModelContent(content)) as Partial<ResumeProcessingResult>;
+      const normalizedMarkdown = normalizeMarkdownText(parsed.markdown || rawText);
+      const sanitizedHighlights = sanitizeResumeHighlights(parsed.highlights) || emptyResumeHighlights();
+
+      console.log('[ResumeProcessing] Parsed result', {
+        attempt: attempt.label,
+        markdownLength: normalizedMarkdown.length,
+        markdownPreview: previewDebugText(normalizedMarkdown, 300),
+        highlights: {
+          summary: sanitizedHighlights.summary,
+          strengthsCount: sanitizedHighlights.strengths.length,
+          risksCount: sanitizedHighlights.risks.length,
+          experienceCount: sanitizedHighlights.experience.length,
+          keywordsCount: sanitizedHighlights.keywords.length,
+        },
+      });
+
+      return {
+        data: {
+          markdown: normalizedMarkdown,
+          highlights: sanitizedHighlights,
+        },
+        usage,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('简历处理失败');
+      const isLastAttempt = index === prompts.length - 1;
+
+      if (!isLastAttempt) {
+        console.warn('[ResumeProcessing] Retrying with lighter prompt', {
+          model: config.model,
+          failedAttempt: attempt.label,
+          nextAttempt: prompts[index + 1].label,
+          message: lastError.message,
+        });
+        continue;
+      }
     }
-
-    const parsed = JSON.parse(jsonContent) as Partial<ResumeProcessingResult>;
-    return {
-      data: {
-        markdown: normalizeMarkdownText(parsed.markdown || rawText),
-        highlights: sanitizeResumeHighlights(parsed.highlights) || emptyResumeHighlights(),
-      },
-      usage,
-    };
-  } catch (error) {
-    console.error('Failed to parse resume processing response:', content, error);
-    return {
-      data: {
-        markdown: normalizeMarkdownText(rawText),
-        highlights: emptyResumeHighlights(),
-      },
-      usage,
-    };
   }
+
+  if (lastError instanceof ResumeProcessingError) {
+    throw lastError;
+  }
+
+  throw new ResumeProcessingError(lastError?.message || '简历处理失败');
 };
 
 /**
@@ -600,7 +821,7 @@ ${noteContentForPrompt}
   }
 
   const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '{}';
+  const content = extractCompletionContent(data, '{}');
   const usage = extractAIUsage(data);
 
   try {
@@ -842,17 +1063,10 @@ ${quickNotesSection}${meetingNotesSection}${codingChallengesSection}${skippedTop
   }
 
   const data = await response.json();
-  const content = data.choices[0]?.message?.content || '{}';
+  const content = extractCompletionContent(data, '{}');
 
   try {
-    // Extract JSON from code block if present
-    let jsonContent = content;
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      jsonContent = jsonMatch[1];
-    }
-
-    const result = JSON.parse(jsonContent);
+    const result = JSON.parse(extractJsonFromModelContent(content));
     return {
       data: result as InterviewResult,
       usage: extractAIUsage(data),

@@ -132,6 +132,97 @@ describe('ai api parsing', () => {
     });
   });
 
+  it('processes resume text when the model wraps JSON in prose and content blocks', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: [
+                  { type: 'text', text: '下面是整理结果：\n' },
+                  {
+                    type: 'text',
+                    text:
+                      '{"markdown":"# Bob\\n\\n## Experience\\n- Built search","highlights":{"summary":"Search engineer","strengths":["Search relevance"],"risks":[],"experience":["Built ranking pipeline"],"keywords":["Java","Elasticsearch"]}}',
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      })
+    );
+
+    await expect(processResumeText({ apiKey: 'key', model: 'model' }, 'raw text')).resolves.toEqual({
+      data: {
+        markdown: '# Bob\n\n## Experience\n- Built search',
+        highlights: {
+          summary: 'Search engineer',
+          strengths: ['Search relevance'],
+          risks: [],
+          experience: ['Built ranking pipeline'],
+          keywords: ['Java', 'Elasticsearch'],
+        },
+      },
+    });
+  });
+
+  it('retries resume processing with a lighter prompt after a gateway timeout', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 504,
+        statusText: 'Gateway Time-out',
+        text: async () => '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '{"markdown":"# Retry\\n\\n- item","highlights":{"summary":"Recovered","strengths":["Fast retry"],"risks":[],"experience":[],"keywords":["retry"]}}',
+              },
+            },
+          ],
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(processResumeText({ apiKey: 'key', model: 'model' }, 'raw text')).resolves.toEqual({
+      data: {
+        markdown: '# Retry\n\n- item',
+        highlights: {
+          summary: 'Recovered',
+          strengths: ['Fast retry'],
+          risks: [],
+          experience: [],
+          keywords: ['retry'],
+        },
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws a clear error when resume processing times out on all attempts', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 504,
+        statusText: 'Gateway Time-out',
+        text: async () => '',
+      })
+    );
+
+    await expect(processResumeText({ apiKey: 'key', model: 'model' }, 'raw text'))
+      .rejects.toThrow('AI 简历整理超时，请重试或更换更快的模型。');
+  });
+
   it('extracts matched answers and new qa from meeting notes', async () => {
     vi.stubGlobal(
       'fetch',
@@ -171,6 +262,40 @@ describe('ai api parsing', () => {
         evaluationDimension: '专业能力',
       },
     ]);
+  });
+
+  it('parses generated questions when JSON is surrounded by extra text', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '我已按要求生成。\n[{"text":"介绍一下搜索排序项目","source":"resume","evaluationDimension":"专业能力","context":"搜索排序项目"}]\n请查收。',
+              },
+            },
+          ],
+        }),
+      })
+    );
+
+    const result = await generateQuestions(
+      { apiKey: 'key', model: 'model' },
+      'JD',
+      'Resume',
+      []
+    );
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toMatchObject({
+      text: '介绍一下搜索排序项目',
+      source: 'resume',
+      evaluationDimension: '专业能力',
+      context: '搜索排序项目',
+    });
   });
 
   it('drops extracted matched answers that do not map to existing question ids', async () => {
