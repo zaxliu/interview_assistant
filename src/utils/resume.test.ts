@@ -19,6 +19,14 @@ describe('resume utils', () => {
     expect(normalizeMarkdownText('A\n\n\n\nB')).toBe('A\n\nB');
   });
 
+  it('removes the known resume noise text but preserves surrounding content', () => {
+    expect(
+      normalizeMarkdownText(
+        '姓名：张三\n当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!\n工作经历：XX 公司'
+      )
+    ).toBe('姓名：张三\n工作经历：XX 公司');
+  });
+
   it('sanitizes highlight lists', () => {
     expect(
       sanitizeResumeHighlights({

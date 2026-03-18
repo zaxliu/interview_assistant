@@ -1,5 +1,7 @@
 import type { Candidate, ResumeHighlights } from '@/types';
 
+const RESUME_NOISE_TEXT = '当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!';
+
 export const emptyResumeHighlights = (): ResumeHighlights => ({
   summary: '',
   strengths: [],
@@ -11,6 +13,7 @@ export const emptyResumeHighlights = (): ResumeHighlights => ({
 export const normalizeMarkdownText = (text: string): string =>
   text
     .replace(/\r\n/g, '\n')
+    .replace(new RegExp(`\\n*${RESUME_NOISE_TEXT}\\n*`, 'g'), '\n')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n([*-])\s*\n/g, '\n')
