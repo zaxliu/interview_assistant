@@ -93,6 +93,38 @@ describe('UpcomingInterviews', () => {
     expect(screen.getByText('候选人6')).toBeInTheDocument();
   });
 
+  it('uses Shanghai calendar day for today vs upcoming grouping', () => {
+    vi.setSystemTime(new Date('2026-03-12T00:30:00.000Z'));
+
+    const positions: Position[] = [
+      {
+        id: 'position-3',
+        title: '测试工程师',
+        team: '质量',
+        description: '',
+        criteria: [],
+        createdAt: '2026-03-10T00:00:00.000Z',
+        source: 'manual',
+        candidates: [
+          {
+            id: 'c-shanghai-tomorrow',
+            name: '明天面试的候选人',
+            status: 'scheduled',
+            interviewTime: '2026-03-12T23:30:00.000Z',
+            questions: [],
+          },
+        ],
+      },
+    ];
+
+    usePositionStore.setState({ positions });
+    render(<UpcomingInterviews onStartInterview={() => undefined} />);
+
+    expect(screen.getByText('未来 7 天面试')).toBeInTheDocument();
+    expect(screen.queryByText('今日面试')).not.toBeInTheDocument();
+    expect(screen.getByText('明天面试的候选人')).toBeInTheDocument();
+  });
+
   it('dedupes duplicated entries in today and upcoming lists', () => {
     const duplicatedTodayTime = '2026-03-12T03:00:00.000Z';
     const duplicatedFutureTime = '2026-03-13T03:00:00.000Z';

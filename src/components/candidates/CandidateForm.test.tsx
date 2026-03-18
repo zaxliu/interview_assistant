@@ -148,6 +148,25 @@ describe('CandidateForm', () => {
     expect(screen.getByRole('link', { name: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc' })).toBeInTheDocument();
   });
 
+  it('renders stored ISO interview time without UTC shift in the datetime input', () => {
+    render(
+      <CandidateForm
+        positionId="position-1"
+        candidate={{
+          id: 'candidate-1',
+          name: 'Alice',
+          status: 'scheduled',
+          questions: [],
+          interviewTime: '2026-03-12T02:00:00.000Z',
+        }}
+        onSave={() => undefined}
+        onCancel={() => undefined}
+      />
+    );
+
+    expect(screen.getByLabelText('面试时间')).toHaveValue('2026-03-12T10:00');
+  });
+
   it('shows resume-unavailable hint when Wintalent link is expired', async () => {
     downloadWintalentResumePDF.mockRejectedValue(
       new Error('当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!')

@@ -3,6 +3,11 @@ import { usePositionStore } from '@/store/positionStore';
 import { Card, CardBody, Button } from '@/components/ui';
 import { zhCN as t } from '@/i18n/zhCN';
 import type { Candidate } from '@/types';
+import {
+  formatInterviewDateInShanghai,
+  formatInterviewTimeInShanghai,
+  getShanghaiDateKey,
+} from '@/utils/dateTime';
 
 interface UpcomingInterviewsProps {
   onStartInterview: (positionId: string, candidateId: string) => void;
@@ -82,19 +87,20 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
     cancelled: 'bg-red-100 text-red-700',
   };
 
-  // Get today's interviews
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  const todayKey = getShanghaiDateKey(new Date().toISOString());
+  const nextSevenDayKeys = new Set<string>();
+  for (let offset = 1; offset <= 7; offset += 1) {
+    const date = new Date();
+    date.setDate(date.getDate() + offset);
+    nextSevenDayKeys.add(getShanghaiDateKey(date.toISOString()));
+  }
 
   const todayInterviews = dedupeInterviewEntries(
     positions.flatMap((position) =>
       position.candidates
         .filter((candidate) => {
           if (!candidate.interviewTime || !dashboardStatuses.includes(candidate.status)) return false;
-          const interviewDate = new Date(candidate.interviewTime);
-          return interviewDate >= today && interviewDate < tomorrow;
+          return getShanghaiDateKey(candidate.interviewTime) === todayKey;
         })
         .map((candidate): InterviewEntry => ({
           position: {
@@ -110,18 +116,14 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
       (a, b) =>
         new Date(a.candidate.interviewTime!).getTime() - new Date(b.candidate.interviewTime!).getTime()
     );
-
-  // Get upcoming interviews (next 7 days)
-  const nextWeek = new Date(today);
-  nextWeek.setDate(nextWeek.getDate() + 7);
 
   const upcomingInterviews = dedupeInterviewEntries(
     positions.flatMap((position) =>
       position.candidates
         .filter((candidate) => {
           if (!candidate.interviewTime || !dashboardStatuses.includes(candidate.status)) return false;
-          const interviewDate = new Date(candidate.interviewTime);
-          return interviewDate >= tomorrow && interviewDate < nextWeek;
+          const interviewDateKey = getShanghaiDateKey(candidate.interviewTime);
+          return interviewDateKey !== todayKey && nextSevenDayKeys.has(interviewDateKey);
         })
         .map((candidate): InterviewEntry => ({
           position: {
@@ -137,24 +139,6 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
       (a, b) =>
         new Date(a.candidate.interviewTime!).getTime() - new Date(b.candidate.interviewTime!).getTime()
     );
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
 
   if (todayInterviews.length === 0 && upcomingInterviews.length === 0) {
     return null;
@@ -172,7 +156,7 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
                 <CardBody className="flex items-center justify-between py-2">
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-medium text-blue-600">
-                      {formatTime(candidate.interviewTime!)}
+                      {formatInterviewTimeInShanghai(candidate.interviewTime!)}
                     </span>
                     <div>
                       <span className="text-sm font-medium text-gray-900">
@@ -210,10 +194,10 @@ export const UpcomingInterviews: React.FC<UpcomingInterviewsProps> = ({
                 <CardBody className="flex items-center justify-between py-2">
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-gray-500">
-                      {formatDate(candidate.interviewTime!)}
+                      {formatInterviewDateInShanghai(candidate.interviewTime!)}
                     </span>
                     <span className="text-sm font-medium text-blue-600">
-                      {formatTime(candidate.interviewTime!)}
+                      {formatInterviewTimeInShanghai(candidate.interviewTime!)}
                     </span>
                     <div>
                       <span className="text-sm font-medium text-gray-900">

@@ -10,6 +10,7 @@ import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea } from 
 import { ResumeHighlightsPanel } from './ResumeHighlightsPanel';
 import { HistoricalInterviewReviewsPanel } from './HistoricalInterviewReviewsPanel';
 import { emptyResumeHighlights, getPreferredResumeText, getRawResumeText } from '@/utils/resume';
+import { formatInterviewTimeForInput, normalizeInterviewTimeForSave } from '@/utils/dateTime';
 import { zhCN as t } from '@/i18n/zhCN';
 
 const AUTO_SAVE_DELAY = 800;
@@ -64,12 +65,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     candidate?.aiUsage?.resumeOCR
   );
   const [resumeFilename, setResumeFilename] = useState(candidate?.resumeFilename || '');
-  const [interviewTime, setInterviewTime] = useState(() => {
-    if (!candidate?.interviewTime) return '';
-    const date = new Date(candidate.interviewTime);
-    if (isNaN(date.getTime())) return '';
-    return date.toISOString().slice(0, 16);
-  });
+  const [interviewTime, setInterviewTime] = useState(() => formatInterviewTimeForInput(candidate?.interviewTime));
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
   const [needsPdfPersist, setNeedsPdfPersist] = useState(false);
   const [useAIParsing, setUseAIParsing] = useState(true);
@@ -120,12 +116,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     setPendingPdfFile(null);
     setNeedsPdfPersist(false);
     setSaveStatus(candidate ? 'saved' : 'idle');
-    setInterviewTime(() => {
-      if (!candidate?.interviewTime) return '';
-      const date = new Date(candidate.interviewTime);
-      if (isNaN(date.getTime())) return '';
-      return date.toISOString().slice(0, 16);
-    });
+    setInterviewTime(formatInterviewTimeForInput(candidate?.interviewTime));
     queueMicrotask(() => {
       isHydratingRef.current = false;
     });
@@ -147,7 +138,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     resumeFilename,
     candidateLink: wintalentLink.trim() || candidate?.candidateLink,
     status: candidate?.status || 'pending',
-    interviewTime: interviewTime || undefined,
+    interviewTime: normalizeInterviewTimeForSave(interviewTime),
   }), [
     candidate?.aiUsage,
     candidate?.candidateLink,
