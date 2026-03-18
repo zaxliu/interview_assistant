@@ -14,7 +14,12 @@ export const PositionCard: React.FC<PositionCardProps> = ({ position, onClick, o
   const completedCount = candidates.filter((c) => c.status === 'completed').length;
   const cancelledCount = candidates.filter((c) => c.status === 'cancelled').length;
   const activeCount = candidates.length - completedCount - cancelledCount;
-  const totalActive = completedCount + activeCount;
+  const totalCount = candidates.length;
+  const progressSegments = [
+    { key: 'completed', count: completedCount, className: 'bg-emerald-500' },
+    { key: 'active', count: activeCount, className: 'bg-sky-400' },
+    { key: 'cancelled', count: cancelledCount, className: 'bg-slate-300' },
+  ].filter((segment) => segment.count > 0);
 
   return (
     <Card onClick={onClick}>
@@ -36,34 +41,33 @@ export const PositionCard: React.FC<PositionCardProps> = ({ position, onClick, o
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            {/* Candidate progress indicator */}
-            <div className="flex items-center gap-2">
-              {/* Progress bar */}
-              {totalActive > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <div className="flex h-2 w-16 rounded overflow-hidden bg-gray-200">
-                    {Array.from({ length: totalActive }).map((_, i) => (
+            <div className="min-w-[188px]">
+              {totalCount > 0 ? (
+                <div className="space-y-1.5">
+                  <div
+                    aria-label="岗位面试进度"
+                    className="flex h-2.5 overflow-hidden rounded-full bg-gray-100 shadow-inner"
+                  >
+                    {progressSegments.map((segment) => (
                       <div
-                        key={i}
-                        className={`flex-1 ${i < completedCount ? 'bg-green-500' : 'bg-gray-300'} ${i > 0 ? 'ml-0.5' : ''}`}
+                        key={segment.key}
+                        className={segment.className}
+                        style={{ width: `${(segment.count / totalCount) * 100}%` }}
                       />
                     ))}
                   </div>
-                  <span className="text-xs text-gray-600">
-                    {completedCount}/{totalActive}
-                  </span>
+                  <div className="flex items-center justify-between gap-3 text-[11px] text-gray-500">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="font-medium text-gray-700">
+                        {completedCount}/{Math.max(totalCount - cancelledCount, 0)} 完成
+                      </span>
+                      {activeCount > 0 && <span>{activeCount} 进行中</span>}
+                      {cancelledCount > 0 && <span>{cancelledCount} 已取消</span>}
+                    </div>
+                    <span>{totalCount} 位候选人</span>
+                  </div>
                 </div>
-              )}
-
-              {/* Cancelled indicator */}
-              {cancelledCount > 0 && (
-                <span className="text-xs text-gray-400 line-through">
-                  {cancelledCount} 已取消
-                </span>
-              )}
-
-              {/* No candidates */}
-              {candidates.length === 0 && (
+              ) : (
                 <span className="text-xs text-gray-400">暂无候选人</span>
               )}
             </div>

@@ -64,6 +64,8 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const [meetingImportStatus, setMeetingImportStatus] = useState<string | null>(null);
   const [meetingImportError, setMeetingImportError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const snapshotButtonRef = useRef<HTMLButtonElement>(null);
+  const snapshotPanelRef = useRef<HTMLDivElement>(null);
   const quickNotesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
@@ -101,6 +103,30 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   useEffect(() => {
     setIsSnapshotOpen(false);
   }, [candidate.id]);
+
+  useEffect(() => {
+    if (!isSnapshotOpen) {
+      return;
+    }
+
+    const handlePointerDownOutside = (event: MouseEvent) => {
+      const targetNode = event.target as Node | null;
+      if (!targetNode) {
+        return;
+      }
+
+      if (snapshotButtonRef.current?.contains(targetNode) || snapshotPanelRef.current?.contains(targetNode)) {
+        return;
+      }
+
+      setIsSnapshotOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDownOutside);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDownOutside);
+    };
+  }, [isSnapshotOpen]);
 
   useEffect(() => {
     setMeetingNotesUrl(candidate.interviewLink || '');
@@ -374,6 +400,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               )}
               <button
                 type="button"
+                ref={snapshotButtonRef}
                 onClick={() => setIsSnapshotOpen((open) => !open)}
                 className="flex flex-1 items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-sm text-gray-700 shadow-sm hover:bg-gray-50"
               >
@@ -402,7 +429,10 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               }`}
             >
               {isSnapshotOpen && (
-                <div className="w-[320px] max-w-full rounded-xl border border-gray-200 bg-white/95 p-1 shadow-lg backdrop-blur">
+                <div
+                  ref={snapshotPanelRef}
+                  className="w-[320px] max-w-full rounded-xl border border-gray-200 bg-white/95 p-1 shadow-lg backdrop-blur"
+                >
                   <ResumeHighlightsPanel
                     highlights={candidate.resumeHighlights}
                     title="候选人快照"
