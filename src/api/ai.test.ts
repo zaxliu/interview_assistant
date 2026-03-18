@@ -203,4 +203,43 @@ describe('ai api parsing', () => {
       },
     ]);
   });
+
+  it('asks the model to create new questions for uncovered angles and worthwhile follow-up variants in meeting notes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: '{"matched_answers":[],"new_qa":[]}',
+            },
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await extractMeetingNotesInsights(
+      { apiKey: 'key', model: 'model' },
+      [
+        {
+          id: 'q-1',
+          text: '你如何做线上故障排查？',
+          source: 'common',
+          isAIGenerated: true,
+          status: 'not_reached',
+        },
+      ],
+      'meeting notes'
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = fetchMock.mock.calls[0]?.[1];
+    const body = JSON.parse(String(request?.body || '{}'));
+    const prompt = body.messages?.[1]?.content || '';
+
+    expect(prompt).toContain('现有问题没有覆盖到的新考察角度');
+    expect(prompt).toContain('补充追问、同义改写或换一种问法');
+    expect(prompt).toContain('可以同时出现在 matched_answers 和 new_qa');
+  });
 });

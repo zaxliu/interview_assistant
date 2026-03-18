@@ -61,6 +61,7 @@ export interface Candidate {
   interviewTime?: string;
   questions: Question[];
   quickNotes?: string;
+  meetingNotesContext?: string;
   codingChallenges?: CodingChallenge[];
   interviewResult?: InterviewResult;
   userId?: string; // Owner of this candidate

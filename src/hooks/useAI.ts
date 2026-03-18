@@ -46,6 +46,7 @@ export const useAI = () => {
       candidateName: string,
       positionTitle: string,
       quickNotes?: string,
+      meetingNotesContext?: string,
       codingChallenges?: CodingChallenge[]
     ): Promise<InterviewResult | null> => {
       if (!aiApiKey) {
@@ -65,6 +66,7 @@ export const useAI = () => {
           candidateName,
           positionTitle,
           quickNotes,
+          meetingNotesContext,
           codingChallenges
         );
         return result;

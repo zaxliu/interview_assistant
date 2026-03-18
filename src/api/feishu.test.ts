@@ -80,6 +80,63 @@ describe('feishu api helpers', () => {
     expect(scopes).toContain('docx:document:readonly');
     expect(scopes).toContain('docx:document');
   });
+
+  it('includes transcript content when meeting notes mention a transcript doc title and link', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          code: 0,
+          data: {
+            content:
+              '文字记录\n- 【面试】张晏梓-AI Agent应用工程师 2026年3月18日\nhttps://example.feishu.cn/docx/transcript123',
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          code: 0,
+          data: {
+            document: {
+              title: '面试纪要',
+            },
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          code: 0,
+          data: {
+            content: '这是原始 transcript 正文',
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          code: 0,
+          data: {
+            document: {
+              title: '【面试】张晏梓-AI Agent应用工程师 2026年3月18日',
+            },
+          },
+        })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { getFeishuDocRawContentFromLink } = await import('./feishu');
+    const response = await getFeishuDocRawContentFromLink(
+      'https://example.feishu.cn/docx/meeting123',
+      'user-token'
+    );
+
+    expect(response.documentId).toBe('meeting123');
+    expect(response.title).toBe('面试纪要');
+    expect(response.transcriptDocumentId).toBe('transcript123');
+    expect(response.transcriptTitle).toBe('【面试】张晏梓-AI Agent应用工程师 2026年3月18日');
+    expect(response.transcriptContent).toBe('这是原始 transcript 正文');
+    expect(response.content).toContain('文字记录');
+    expect(response.content).toContain('【原始面试 Transcript：【面试】张晏梓-AI Agent应用工程师 2026年3月18日】');
+    expect(response.content).toContain('这是原始 transcript 正文');
+  });
 });
 
 describe('createFeishuDoc', () => {

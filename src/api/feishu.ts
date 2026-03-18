@@ -816,6 +816,9 @@ export interface FeishuDocRawContent {
   documentId: string;
   title: string;
   content: string;
+  transcriptDocumentId?: string;
+  transcriptTitle?: string;
+  transcriptContent?: string;
 }
 
 const parseFeishuError = async (response: Response): Promise<string> => {
@@ -876,6 +879,50 @@ const fetchDocRawContentWithToken = async (
   return { content, title };
 };
 
+const FEISHU_DOC_LINK_PATTERN = /https?:\/\/[^\s)\]]+\/(?:docx|wiki)\/[A-Za-z0-9]+[^\s)\]]*/gi;
+const FEISHU_TRANSCRIPT_TITLE_PATTERN = /【面试】.+\d{4}年\d{1,2}月\d{1,2}日/;
+
+const extractTranscriptLinkCandidates = (
+  content: string,
+  currentDocToken: string
+): string[] => {
+  const lines = content.split(/\r?\n/);
+  const matches = new Set<string>();
+
+  const collectLinks = (text: string) => {
+    const urls = text.match(FEISHU_DOC_LINK_PATTERN) || [];
+    urls.forEach((url) => {
+      const token = extractFeishuDocTokenFromUrl(url);
+      if (token && token !== currentDocToken) {
+        matches.add(url);
+      }
+    });
+  };
+
+  lines.forEach((line, index) => {
+    const normalized = line.toLowerCase();
+    const looksLikeTranscriptSection =
+      normalized.includes('文字记录') ||
+      normalized.includes('transcript') ||
+      normalized.includes('逐字稿') ||
+      FEISHU_TRANSCRIPT_TITLE_PATTERN.test(line);
+
+    if (!looksLikeTranscriptSection) {
+      return;
+    }
+
+    for (let offset = 0; offset <= 6; offset += 1) {
+      const nextLine = lines[index + offset];
+      if (!nextLine) {
+        break;
+      }
+      collectLinks(nextLine);
+    }
+  });
+
+  return [...matches];
+};
+
 export const extractFeishuDocTokenFromUrl = (docUrl: string): string | null => {
   if (!docUrl) {
     return null;
@@ -932,10 +979,39 @@ export const getFeishuDocRawContentFromLink = async (
   for (const token of tokensToTry) {
     try {
       const doc = await fetchDocRawContentWithToken(docToken, token);
+      const transcriptLinks = extractTranscriptLinkCandidates(doc.content, docToken);
+      let transcriptContent: string | undefined;
+      let transcriptTitle: string | undefined;
+      let transcriptDocumentId: string | undefined;
+
+      for (const transcriptLink of transcriptLinks) {
+        const transcriptToken = extractFeishuDocTokenFromUrl(transcriptLink);
+        if (!transcriptToken) {
+          continue;
+        }
+
+        try {
+          const transcriptDoc = await fetchDocRawContentWithToken(transcriptToken, token);
+          transcriptContent = transcriptDoc.content;
+          transcriptTitle = transcriptDoc.title;
+          transcriptDocumentId = transcriptToken;
+          break;
+        } catch {
+          // Ignore transcript fetch failure and fall back to summary doc content only.
+        }
+      }
+
+      const combinedContent = transcriptContent
+        ? `${doc.content}\n\n---\n【原始面试 Transcript：${transcriptTitle || transcriptDocumentId}】\n${transcriptContent}`
+        : doc.content;
+
       return {
         documentId: docToken,
         title: doc.title,
-        content: doc.content,
+        content: combinedContent,
+        transcriptDocumentId,
+        transcriptTitle,
+        transcriptContent,
       };
     } catch (error) {
       errors.push(error instanceof Error ? error.message : '未知错误');

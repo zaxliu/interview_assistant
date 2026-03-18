@@ -436,12 +436,15 @@ export const extractMeetingNotesInsights = async (
 
 请完成两件事：
 1. 从纪要中提取对“已有问题”的回答，输出到 matched_answers
-2. 发现“纪要里出现但不在已有问题中的新问答”，输出到 new_qa
+2. 如果纪要里出现了值得保留的新增提问，输出到 new_qa。这些新增提问既可以是“现有问题没有覆盖到的新考察角度”，也可以是“对已有问题的补充追问、同义改写或换一种问法”，只要适合作为后续独立提问保留下来
 
 规则：
 - matched_answers 里必须引用已有的 question_id
 - answer 必须基于纪要原文，不要编造
 - evidence 用 1 句短句引用依据（可概述，不要求逐字拷贝）
+- 先对比已有问题覆盖的主题、考察点和提问角度；如果纪要里出现了适合沉淀为独立问题的补充追问、同义改写、换一种问法，或明确属于未覆盖的新角度，都可以输出到 new_qa
+- 如果某段内容更适合作为已有问题的回答补充，同时又明显形成了一个值得保留的独立提问，可以同时出现在 matched_answers 和 new_qa
+- new_qa 里的 question 要写成适合后续继续面试追问的完整问题，而不是纪要原句摘抄
 - new_qa 的 source 只能是 resume/jd/common/coding
 - new_qa 的 evaluation_dimension 只能是 专业能力/通用素质/适配度/管理能力
 - 如果没有内容，对应数组返回空数组
@@ -556,6 +559,7 @@ export const generateSummary = async (
   candidateName: string,
   positionTitle: string,
   quickNotes?: string,
+  meetingNotesContext?: string,
   codingChallenges?: CodingChallenge[]
 ): Promise<InterviewResult> => {
   // Only include questions that were actually asked
@@ -574,6 +578,15 @@ export const generateSummary = async (
 
   const quickNotesSection = quickNotes?.trim()
     ? `\n面试官快速笔记：\n${quickNotes}\n`
+    : '';
+
+  const normalizedMeetingNotesContext = meetingNotesContext?.trim();
+  const meetingNotesSection = normalizedMeetingNotesContext
+    ? `\n会议纪要与原始 Transcript：\n${
+        normalizedMeetingNotesContext.length > 20000
+          ? `${normalizedMeetingNotesContext.slice(0, 20000)}\n\n[内容过长，以上为截断后的纪要/Transcript片段]`
+          : normalizedMeetingNotesContext
+      }\n`
     : '';
 
   // Format coding challenges
@@ -602,7 +615,7 @@ ${resumeText}
 
 ## 面试问答记录
 ${questionsWithNotes || '（暂无面试记录）'}
-${quickNotesSection}${codingChallengesSection}${skippedTopics.length > 0 ? `\n未覆盖的问题/话题：\n${skippedTopics.map(t => `- ${t}`).join('\n')}` : ''}
+${quickNotesSection}${meetingNotesSection}${codingChallengesSection}${skippedTopics.length > 0 ? `\n未覆盖的问题/话题：\n${skippedTopics.map(t => `- ${t}`).join('\n')}` : ''}
 
 ---
 

@@ -89,6 +89,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       candidate.name,
       position.title,
       candidate.quickNotes,
+      candidate.meetingNotesContext,
       candidate.codingChallenges
     );
 
@@ -117,6 +118,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     candidate.name,
     candidate.questions,
     candidate.quickNotes,
+    candidate.meetingNotesContext,
     preferredResumeText,
     generateInterviewSummary,
     position.description,

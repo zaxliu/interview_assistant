@@ -232,6 +232,9 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         feishuAppId || undefined,
         feishuAppSecret || undefined
       );
+      updateCandidate(position.id, candidate.id, {
+        meetingNotesContext: doc.content,
+      });
       const extracted = await extractInterviewNotesInsights(candidate.questions, doc.content);
       if (!extracted) {
         throw new Error('从会议纪要提取问答失败。');
@@ -300,7 +303,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       if (!updatedExistingCount && !addedNewCount) {
         setMeetingImportStatus(`未在“${doc.title}”中识别到可导入的问答。`);
       } else {
-        setMeetingImportStatus(`已从“${doc.title}”导入：更新${updatedExistingCount}个已有问题，新增${addedNewCount}个问答。`);
+        setMeetingImportStatus(`已从“${doc.title}”导入：更新${updatedExistingCount}个已有问题，新增${addedNewCount}个问题。`);
       }
     } catch (error) {
       setMeetingImportError(error instanceof Error ? error.message : '导入会议纪要失败。');
@@ -341,7 +344,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       <CardHeader>
         <h3 className="text-sm font-medium text-gray-700">会议纪要导入</h3>
         <p className="text-xs text-gray-500">
-          粘贴飞书会议纪要链接，可补全已有问题回答并新增问答，再生成面试总结。
+          粘贴飞书会议纪要链接，可补全已有问题回答，并把纪要里出现的新角度或补充追问沉淀为新问题，再生成面试总结。
         </p>
       </CardHeader>
       <CardBody className="space-y-2">

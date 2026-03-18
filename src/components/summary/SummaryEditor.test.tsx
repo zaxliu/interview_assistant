@@ -33,6 +33,7 @@ const candidate = {
   interviewTime: '2026-03-11T10:00:00.000Z',
   questions: [],
   resumeText: 'Resume',
+  meetingNotesContext: '纪要小结\n\n【原始面试 Transcript：doc-2】\n完整逐字稿',
   userId: 'user-1',
 };
 
@@ -98,5 +99,16 @@ describe('SummaryEditor', () => {
       expect(generateInterviewSummary).toHaveBeenCalled();
       expect(screen.getByDisplayValue('P7')).toBeInTheDocument();
     });
+
+    expect(generateInterviewSummary).toHaveBeenCalledWith(
+      candidate.questions,
+      position.description,
+      candidate.resumeText,
+      candidate.name,
+      position.title,
+      undefined,
+      candidate.meetingNotesContext,
+      undefined
+    );
   });
 });
