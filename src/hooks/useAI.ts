@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import { extractMeetingNotesInsights, generateQuestions, generateSummary } from '@/api/ai';
 import { useSettingsStore } from '@/store/settingsStore';
-import type { Question, InterviewResult, CodingChallenge } from '@/types';
-import type { MeetingNotesExtractionResult } from '@/api/ai';
+import type { Question, InterviewResult, CodingChallenge, HistoricalInterviewReview } from '@/types';
+import type { AIResultWithUsage, MeetingNotesExtractionResult } from '@/api/ai';
 
 export const useAI = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -11,26 +11,31 @@ export const useAI = () => {
   const { aiApiKey, aiModel } = useSettingsStore();
 
   const generateInterviewQuestions = useCallback(
-    async (jobDescription: string, resumeText: string, criteria: string[]): Promise<Question[]> => {
+    async (
+      jobDescription: string,
+      resumeText: string,
+      criteria: string[],
+      historicalInterviewReviews?: HistoricalInterviewReview[]
+    ): Promise<AIResultWithUsage<Question[]>> => {
       if (!aiApiKey) {
         setError('未配置 AI API Key');
-        return [];
+        return { data: [] };
       }
 
       setIsLoading(true);
       setError(null);
 
       try {
-        const questions = await generateQuestions(
+        return await generateQuestions(
           { apiKey: aiApiKey, model: aiModel },
           jobDescription,
           resumeText,
-          criteria
+          criteria,
+          historicalInterviewReviews
         );
-        return questions;
       } catch (err) {
         setError(err instanceof Error ? err.message : '生成面试问题失败');
-        return [];
+        return { data: [] };
       } finally {
         setIsLoading(false);
       }
@@ -48,7 +53,7 @@ export const useAI = () => {
       quickNotes?: string,
       meetingNotesContext?: string,
       codingChallenges?: CodingChallenge[]
-    ): Promise<InterviewResult | null> => {
+    ): Promise<AIResultWithUsage<InterviewResult> | null> => {
       if (!aiApiKey) {
         setError('未配置 AI API Key');
         return null;
@@ -58,7 +63,7 @@ export const useAI = () => {
       setError(null);
 
       try {
-        const result = await generateSummary(
+        return await generateSummary(
           { apiKey: aiApiKey, model: aiModel },
           questions,
           jobDescription,
@@ -69,7 +74,6 @@ export const useAI = () => {
           meetingNotesContext,
           codingChallenges
         );
-        return result;
       } catch (err) {
         setError(err instanceof Error ? err.message : '生成面试总结失败');
         return null;
@@ -84,7 +88,7 @@ export const useAI = () => {
     async (
       existingQuestions: Question[],
       meetingNotesContent: string
-    ): Promise<MeetingNotesExtractionResult | null> => {
+    ): Promise<AIResultWithUsage<MeetingNotesExtractionResult> | null> => {
       if (!aiApiKey) {
         setError('未配置 AI API Key');
         return null;
@@ -101,7 +105,7 @@ export const useAI = () => {
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : '提取会议纪要洞察失败');
-        return null;
+        return { data: { matchedAnswers: [], newQAs: [] } };
       } finally {
         setIsLoading(false);
       }

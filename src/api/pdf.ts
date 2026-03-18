@@ -1,4 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
+import type { AIUsage } from '@/types';
 
 // Set up worker - version must match the installed pdfjs-dist version
 const pdfjsVersion = pdfjsLib.version;
@@ -16,6 +17,59 @@ interface AIParseConfig {
   apiKey: string;
   model: string;
 }
+
+interface AITextParseResult {
+  text: string;
+  usage?: AIUsage;
+}
+
+const normalizeUsageValue = (value: unknown): number => (
+  typeof value === 'number' && Number.isFinite(value) ? value : 0
+);
+
+const extractAIUsage = (payload: unknown): AIUsage | undefined => {
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  const usage = (payload as { usage?: unknown }).usage;
+  if (!usage || typeof usage !== 'object') {
+    return undefined;
+  }
+
+  const normalizedUsage = usage as {
+    prompt_tokens?: unknown;
+    completion_tokens?: unknown;
+    input_tokens?: unknown;
+    output_tokens?: unknown;
+    cached_tokens?: unknown;
+    prompt_tokens_details?: { cached_tokens?: unknown };
+    input_tokens_details?: { cached_tokens?: unknown };
+  };
+
+  const input = normalizeUsageValue(normalizedUsage.input_tokens ?? normalizedUsage.prompt_tokens);
+  const cached = normalizeUsageValue(
+    normalizedUsage.cached_tokens ??
+      normalizedUsage.input_tokens_details?.cached_tokens ??
+      normalizedUsage.prompt_tokens_details?.cached_tokens
+  );
+  const output = normalizeUsageValue(normalizedUsage.output_tokens ?? normalizedUsage.completion_tokens);
+
+  if (!input && !cached && !output) {
+    return undefined;
+  }
+
+  return { input, cached, output };
+};
+
+const mergeAIUsage = (base?: AIUsage, extra?: AIUsage): AIUsage | undefined => {
+  if (!base && !extra) return undefined;
+  return {
+    input: (base?.input || 0) + (extra?.input || 0),
+    cached: (base?.cached || 0) + (extra?.cached || 0),
+    output: (base?.output || 0) + (extra?.output || 0),
+  };
+};
 
 /**
  * Parse PDF from file upload (standard text extraction)
@@ -181,7 +235,7 @@ export const parsePDFWithAI = async (
     extractStructured?: boolean;
     onProgress?: (current: number, total: number) => void;
   }
-): Promise<string> => {
+): Promise<AITextParseResult> => {
   const { maxPages = 10, scale = 2, extractStructured = true, onProgress } = options || {};
 
   const pdf = await pdfjsLib.getDocument({
@@ -199,6 +253,7 @@ export const parsePDFWithAI = async (
 
   // Process each page individually for better results
   const pageTexts: string[] = [];
+  let totalUsage: AIUsage | undefined;
 
   for (let i = 1; i <= pagesToProcess; i++) {
     const page = await pdf.getPage(i);
@@ -269,6 +324,7 @@ export const parsePDFWithAI = async (
       const data = await response.json();
       const pageText = data.choices[0]?.message?.content || '';
       const finishReason = data.choices[0]?.finish_reason;
+      totalUsage = mergeAIUsage(totalUsage, extractAIUsage(data));
 
       // Check if content was truncated
       if (finishReason === 'length') {
@@ -296,7 +352,10 @@ export const parsePDFWithAI = async (
   const fullText = pageTexts.join('\n\n');
   console.log(`[AI PDF Parse] Total extracted: ${fullText.length} characters from ${pageTexts.length} pages`);
 
-  return fullText;
+  return {
+    text: fullText,
+    usage: totalUsage,
+  };
 };
 
 /**
@@ -311,7 +370,7 @@ export const parsePDFFromFileWithAI = async (
     extractStructured?: boolean;
     onProgress?: (current: number, total: number) => void;
   }
-): Promise<string> => {
+): Promise<AITextParseResult> => {
   console.log(`[AI PDF Parse] Using image-based extraction for model: ${config.model}`);
   const arrayBuffer = await file.arrayBuffer();
   return parsePDFWithAI(arrayBuffer, config, options);
@@ -329,7 +388,7 @@ export const parsePDFFromUrlWithAI = async (
     extractStructured?: boolean;
     onProgress?: (current: number, total: number) => void;
   }
-): Promise<string> => {
+): Promise<AITextParseResult> => {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`获取 PDF 失败：${response.statusText}`);
@@ -364,8 +423,8 @@ export const parsePDFSmart = async (
   if (config) {
     console.log(`[Smart PDF Parse] Standard extraction poor (${standardText.length} chars), trying AI...`);
     try {
-      const aiText = await parsePDFWithAI(arrayBuffer, config, options);
-      return { text: aiText, method: 'ai' };
+      const aiResult = await parsePDFWithAI(arrayBuffer, config, options);
+      return { text: aiResult.text, method: 'ai' };
     } catch (error) {
       console.error('[Smart PDF Parse] AI extraction failed:', error);
       // Return whatever we got from standard extraction

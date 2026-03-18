@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Position, Candidate, InterviewResult, EvaluationDimension } from '@/types';
+import type { AIUsage, Position, Candidate, InterviewResult, EvaluationDimension } from '@/types';
 import { EvaluationDimensionCard } from './EvaluationDimensionCard';
 import { ExportButtons } from './ExportButtons';
 import { Card, CardHeader, CardBody, Input, Textarea, Select, Button } from '@/components/ui';
@@ -75,6 +75,9 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
   const [strengths, setStrengths] = useState<string[]>(candidate.interviewResult?.additional_info?.strengths || []);
   const [concerns, setConcerns] = useState<string[]>(candidate.interviewResult?.additional_info?.concerns || []);
   const [followUps, setFollowUps] = useState<string[]>(candidate.interviewResult?.additional_info?.follow_up_questions || []);
+  const [summaryUsage, setSummaryUsage] = useState<AIUsage | undefined>(
+    candidate.interviewResult?.aiUsage?.summaryGeneration
+  );
 
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -94,17 +97,28 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     );
 
     if (generatedResult) {
-      setResult(generatedResult);
-      setStrengths(generatedResult.additional_info?.strengths || []);
-      setConcerns(generatedResult.additional_info?.concerns || []);
-      setFollowUps(generatedResult.additional_info?.follow_up_questions || []);
+      setResult({
+        ...generatedResult.data,
+        aiUsage: {
+          ...candidate.interviewResult?.aiUsage,
+          summaryGeneration: generatedResult.usage,
+        },
+      });
+      setStrengths(generatedResult.data.additional_info?.strengths || []);
+      setConcerns(generatedResult.data.additional_info?.concerns || []);
+      setFollowUps(generatedResult.data.additional_info?.follow_up_questions || []);
+      setSummaryUsage(generatedResult.usage);
 
       const finalResult: InterviewResult = {
-        ...generatedResult,
+        ...generatedResult.data,
         additional_info: {
-          strengths: generatedResult.additional_info?.strengths || [],
-          concerns: generatedResult.additional_info?.concerns || [],
-          follow_up_questions: generatedResult.additional_info?.follow_up_questions || [],
+          strengths: generatedResult.data.additional_info?.strengths || [],
+          concerns: generatedResult.data.additional_info?.concerns || [],
+          follow_up_questions: generatedResult.data.additional_info?.follow_up_questions || [],
+        },
+        aiUsage: {
+          ...candidate.interviewResult?.aiUsage,
+          summaryGeneration: generatedResult.usage,
         },
       };
 
@@ -134,6 +148,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     setStrengths(candidate.interviewResult?.additional_info?.strengths || []);
     setConcerns(candidate.interviewResult?.additional_info?.concerns || []);
     setFollowUps(candidate.interviewResult?.additional_info?.follow_up_questions || []);
+    setSummaryUsage(candidate.interviewResult?.aiUsage?.summaryGeneration);
     setSaveStatus('saved');
   }, [buildInitialResult, candidate.id, candidate.interviewResult]);
 
@@ -253,6 +268,21 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
   const isCompleted = candidate.status === 'completed';
   const hasPageLink = Boolean(candidate.candidateLink);
 
+  const renderUsage = (usage: AIUsage | undefined, label: string) => {
+    if (!usage) {
+      return null;
+    }
+
+    return (
+      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+        <span className="font-medium text-slate-800">{label}</span>
+        <span className="ml-2">input {usage.input}</span>
+        <span className="ml-2">cached {usage.cached}</span>
+        <span className="ml-2">output {usage.output}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -313,6 +343,8 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
           </CardBody>
         </Card>
       )}
+
+      {renderUsage(summaryUsage, 'AI 总结生成 Token')}
 
       {/* Interview Info */}
       <Card>

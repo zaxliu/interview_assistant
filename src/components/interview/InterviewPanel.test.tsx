@@ -134,15 +134,18 @@ describe('InterviewPanel', () => {
       transcriptContent: '这是完整逐字稿。',
     });
     extractInterviewNotesInsightsMock.mockResolvedValue({
-      matchedAnswers: [],
-      newQAs: [
-        {
-          question: '如何做故障节点隔离？',
-          answer: '打污点并迁移任务。',
-          source: 'coding',
-          evaluationDimension: '专业能力',
-        },
-      ],
+      data: {
+        matchedAnswers: [],
+        newQAs: [
+          {
+            question: '如何做故障节点隔离？',
+            answer: '打污点并迁移任务。',
+            source: 'coding',
+            evaluationDimension: '专业能力',
+          },
+        ],
+      },
+      usage: { input: 25, cached: 5, output: 12 },
     });
 
     render(
@@ -174,6 +177,9 @@ describe('InterviewPanel', () => {
       candidate.questions,
       '候选人补充了故障节点隔离和迁移任务的做法。\n\n【原始面试 Transcript：doc-2】\n这是完整逐字稿。'
     );
+    expect(
+      screen.getAllByText((_, element) => element?.textContent?.includes('AI 纪要提取 Token') || false).length
+    ).toBeGreaterThan(0);
     expect(getFeishuDocRawContentFromLinkMock).toHaveBeenCalledWith(
       'https://example.feishu.cn/docx/abc123',
       undefined,

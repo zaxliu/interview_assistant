@@ -5,6 +5,8 @@ import type {
   QuestionSource,
   EvaluationDimensionName,
   ResumeHighlights,
+  AIUsage,
+  HistoricalInterviewReview,
 } from '@/types';
 import { emptyResumeHighlights, normalizeMarkdownText, sanitizeResumeHighlights } from '@/utils/resume';
 
@@ -17,6 +19,11 @@ interface AIServiceConfig {
 interface ResumeProcessingResult {
   markdown: string;
   highlights: ResumeHighlights;
+}
+
+export interface AIResultWithUsage<T> {
+  data: T;
+  usage?: AIUsage;
 }
 
 export interface ExtractedMatchedAnswer {
@@ -65,6 +72,8 @@ interface GeneratedQuestionPayloadItem {
   evaluationDimension?: string;
   evaluation_dimension?: string;
   context?: string;
+  historicalReviewSummary?: string;
+  historical_review_summary?: string;
 }
 
 interface GeneratedQuestionDraft {
@@ -72,6 +81,7 @@ interface GeneratedQuestionDraft {
   source: QuestionSource;
   evaluationDimension: EvaluationDimensionName;
   context: string;
+  historicalReviewSummary: string;
 }
 
 const MIN_GENERATED_QUESTION_COUNT = 8;
@@ -110,6 +120,10 @@ const parseGeneratedQuestionDrafts = (content: string): GeneratedQuestionDraft[]
           source: normalizeQuestionSource(payload.source?.trim()),
           evaluationDimension: normalizeEvaluationDimension(rawDimension?.trim()),
           context: payload.context?.trim() || '',
+          historicalReviewSummary:
+            payload.historicalReviewSummary?.trim() ||
+            payload.historical_review_summary?.trim() ||
+            '',
         } satisfies GeneratedQuestionDraft;
       })
       .filter((item): item is GeneratedQuestionDraft => Boolean(item));
@@ -138,11 +152,62 @@ const dedupeGeneratedQuestionDrafts = (drafts: GeneratedQuestionDraft[]): Genera
   return deduped;
 };
 
+const normalizeUsageValue = (value: unknown): number => (
+  typeof value === 'number' && Number.isFinite(value) ? value : 0
+);
+
+const extractAIUsage = (payload: unknown): AIUsage | undefined => {
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  const usage = (payload as { usage?: unknown }).usage;
+  if (!usage || typeof usage !== 'object') {
+    return undefined;
+  }
+
+  const normalizedUsage = usage as {
+    prompt_tokens?: unknown;
+    completion_tokens?: unknown;
+    input_tokens?: unknown;
+    output_tokens?: unknown;
+    cached_tokens?: unknown;
+    prompt_tokens_details?: { cached_tokens?: unknown };
+    input_tokens_details?: { cached_tokens?: unknown };
+  };
+
+  const input = normalizeUsageValue(normalizedUsage.input_tokens ?? normalizedUsage.prompt_tokens);
+  const cached = normalizeUsageValue(
+    normalizedUsage.cached_tokens ??
+      normalizedUsage.input_tokens_details?.cached_tokens ??
+      normalizedUsage.prompt_tokens_details?.cached_tokens
+  );
+  const output = normalizeUsageValue(normalizedUsage.output_tokens ?? normalizedUsage.completion_tokens);
+
+  if (!input && !cached && !output) {
+    return undefined;
+  }
+
+  return { input, cached, output };
+};
+
+const mergeAIUsage = (base?: AIUsage, extra?: AIUsage): AIUsage | undefined => {
+  if (!base && !extra) {
+    return undefined;
+  }
+
+  return {
+    input: (base?.input || 0) + (extra?.input || 0),
+    cached: (base?.cached || 0) + (extra?.cached || 0),
+    output: (base?.output || 0) + (extra?.output || 0),
+  };
+};
+
 const requestAICompletionContent = async (
   config: AIServiceConfig,
   systemPrompt: string,
   userPrompt: string
-): Promise<string> => {
+): Promise<AIResultWithUsage<string>> => {
   const response = await fetch('/api/ai/chat/completions', {
     method: 'POST',
     headers: {
@@ -165,7 +230,10 @@ const requestAICompletionContent = async (
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '[]';
+  return {
+    data: data.choices?.[0]?.message?.content || '[]',
+    usage: extractAIUsage(data),
+  };
 };
 
 /**
@@ -221,11 +289,25 @@ export const generateQuestions = async (
   config: AIServiceConfig,
   jobDescription: string,
   resumeText: string,
-  criteria: string[]
-): Promise<Question[]> => {
+  criteria: string[],
+  historicalInterviewReviews: HistoricalInterviewReview[] = []
+): Promise<AIResultWithUsage<Question[]>> => {
   const criteriaSection = criteria.length > 0
     ? criteria.map((criterion) => `- ${criterion}`).join('\n')
     : '- 未提供额外考核要点';
+  const historicalReviewSection = historicalInterviewReviews.length > 0
+    ? historicalInterviewReviews
+      .map((review, index) => {
+        const meta = [
+          review.stageName,
+          review.interviewer ? `面试官：${review.interviewer}` : null,
+          review.interviewTime,
+          review.result ? `结果：${review.result}` : null,
+        ].filter(Boolean).join(' | ');
+        return `${index + 1}. ${meta}\n${review.summary}`;
+      })
+      .join('\n\n')
+    : '无历史面评';
 
   const prompt = `你是一位经验丰富的面试官。请根据以下信息生成面试问题。
 
@@ -237,6 +319,9 @@ ${resumeText}
 
 ## 增量职位要求
 ${criteriaSection}
+
+## 历史面评
+${historicalReviewSection}
 
 ## 评估维度与考核要点
 
@@ -270,6 +355,7 @@ ${criteriaSection}
    - **evaluationDimension**: 该问题主要评估哪个维度
      - "专业能力" / "通用素质" / "适配度" / "管理能力"
    - **context**: 如果source是"resume"或"jd"，必须提供简历/JD中与该问题相关的原文片段（用于在PDF中高亮显示），如果是common或coding则留空
+   - **historicalReviewSummary**: 如果历史面评已经考察过该主题，简述“是否考察过 + 结果/结论 + 仍需追问点”；如果没有明确历史记录则留空
 
 3. 问题排序：优先按source排序（resume → jd → common → coding），同source内按evaluationDimension排序
 
@@ -283,15 +369,17 @@ ${criteriaSection}
     "text": "问题内容",
     "source": "resume/jd/common/coding",
     "evaluationDimension": "专业能力/通用素质/适配度/管理能力",
-    "context": "简历或JD中与该问题相关的原文片段（仅resume和jd需要，common和coding留空）"
+    "context": "简历或JD中与该问题相关的原文片段（仅resume和jd需要，common和coding留空）",
+    "historicalReviewSummary": "历史面评是否考察过，结果如何；没有则留空"
   }
 ]
 \`\`\`
 
 只返回JSON数组，不要包含其他文字。`;
   const questionGenerationSystemPrompt = '你是一位专业的面试官，擅长根据职位需求和候选人背景设计面试问题。请确保返回有效的JSON格式。';
-  const firstPassContent = await requestAICompletionContent(config, questionGenerationSystemPrompt, prompt);
-  let drafts = parseGeneratedQuestionDrafts(firstPassContent);
+  const firstPassResult = await requestAICompletionContent(config, questionGenerationSystemPrompt, prompt);
+  let drafts = parseGeneratedQuestionDrafts(firstPassResult.data);
+  let usage = firstPassResult.usage;
 
   if (drafts.length < MIN_GENERATED_QUESTION_COUNT) {
     const existingQuestionList = drafts.length > 0
@@ -309,30 +397,35 @@ ${existingQuestionList}
 
 请给出补齐后的最终 JSON 数组（可重排）。`;
 
-    const topUpContent = await requestAICompletionContent(config, questionGenerationSystemPrompt, topUpPrompt);
-    const topUpDrafts = parseGeneratedQuestionDrafts(topUpContent);
+    const topUpResult = await requestAICompletionContent(config, questionGenerationSystemPrompt, topUpPrompt);
+    const topUpDrafts = parseGeneratedQuestionDrafts(topUpResult.data);
     drafts = dedupeGeneratedQuestionDrafts([...drafts, ...topUpDrafts]);
+    usage = mergeAIUsage(usage, topUpResult.usage);
   } else {
     drafts = dedupeGeneratedQuestionDrafts(drafts);
   }
 
-  return drafts.map((draft, index) => ({
-    id: `ai-q-${Date.now()}-${index}`,
-    text: draft.text,
-    source: draft.source,
-    evaluationDimension: draft.evaluationDimension,
-    context: draft.context,
-    category: draft.source,
-    isAIGenerated: true,
-    notes: '',
-    status: 'not_reached' as const,
-  }));
+  return {
+    data: drafts.map((draft, index) => ({
+      id: `ai-q-${Date.now()}-${index}`,
+      text: draft.text,
+      source: draft.source,
+      evaluationDimension: draft.evaluationDimension,
+      context: draft.context,
+      historicalReviewSummary: draft.historicalReviewSummary,
+      category: draft.source,
+      isAIGenerated: true,
+      notes: '',
+      status: 'not_reached' as const,
+    })),
+    usage,
+  };
 };
 
 export const processResumeText = async (
   config: AIServiceConfig,
   rawText: string
-): Promise<ResumeProcessingResult> => {
+): Promise<AIResultWithUsage<ResumeProcessingResult>> => {
   const prompt = `你是一位专业招聘助手。请基于下面的简历原始提取文本，完成两件事：
 
 1. 输出规范化后的 Markdown 简历
@@ -392,6 +485,7 @@ ${rawText}`;
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content || '{}';
+  const usage = extractAIUsage(data);
 
   try {
     let jsonContent = content;
@@ -402,14 +496,20 @@ ${rawText}`;
 
     const parsed = JSON.parse(jsonContent) as Partial<ResumeProcessingResult>;
     return {
-      markdown: normalizeMarkdownText(parsed.markdown || rawText),
-      highlights: sanitizeResumeHighlights(parsed.highlights) || emptyResumeHighlights(),
+      data: {
+        markdown: normalizeMarkdownText(parsed.markdown || rawText),
+        highlights: sanitizeResumeHighlights(parsed.highlights) || emptyResumeHighlights(),
+      },
+      usage,
     };
   } catch (error) {
     console.error('Failed to parse resume processing response:', content, error);
     return {
-      markdown: normalizeMarkdownText(rawText),
-      highlights: emptyResumeHighlights(),
+      data: {
+        markdown: normalizeMarkdownText(rawText),
+        highlights: emptyResumeHighlights(),
+      },
+      usage,
     };
   }
 };
@@ -421,7 +521,7 @@ export const extractMeetingNotesInsights = async (
   config: AIServiceConfig,
   existingQuestions: Question[],
   meetingNotesContent: string
-): Promise<MeetingNotesExtractionResult> => {
+): Promise<AIResultWithUsage<MeetingNotesExtractionResult>> => {
   const normalizedQuestions = existingQuestions.map((question) => ({
     id: question.id,
     text: question.text.trim(),
@@ -501,6 +601,7 @@ ${noteContentForPrompt}
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content || '{}';
+  const usage = extractAIUsage(data);
 
   try {
     const parsedContent = JSON.parse(extractJsonFromModelContent(content)) as {
@@ -536,14 +637,20 @@ ${noteContentForPrompt}
       .filter((item) => item.question && item.answer);
 
     return {
-      matchedAnswers,
-      newQAs,
+      data: {
+        matchedAnswers,
+        newQAs,
+      },
+      usage,
     };
   } catch (error) {
     console.error('Failed to parse meeting notes extraction response:', content, error);
     return {
-      matchedAnswers: [],
-      newQAs: [],
+      data: {
+        matchedAnswers: [],
+        newQAs: [],
+      },
+      usage,
     };
   }
 };
@@ -561,7 +668,7 @@ export const generateSummary = async (
   quickNotes?: string,
   meetingNotesContext?: string,
   codingChallenges?: CodingChallenge[]
-): Promise<InterviewResult> => {
+): Promise<AIResultWithUsage<InterviewResult>> => {
   // Only include questions that were actually asked
   const askedQuestions = questions.filter(q => q.status === 'asked');
   const skippedTopics = questions
@@ -746,29 +853,35 @@ ${quickNotesSection}${meetingNotesSection}${codingChallengesSection}${skippedTop
     }
 
     const result = JSON.parse(jsonContent);
-    return result as InterviewResult;
+    return {
+      data: result as InterviewResult,
+      usage: extractAIUsage(data),
+    };
   } catch (e) {
     console.error('Failed to parse AI response:', content, e);
     // Return default structure
     return {
-      interview_info: {
-        interviewer: '',
-        overall_result: '待定',
-        interview_time: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      data: {
+        interview_info: {
+          interviewer: '',
+          overall_result: '待定',
+          interview_time: new Date().toISOString().slice(0, 16).replace('T', ' '),
+        },
+        evaluation_dimensions: [
+          { dimension: '专业能力', score: 3, assessment_points: '' },
+          { dimension: '通用素质', score: 3, assessment_points: '' },
+          { dimension: '适配度', score: 3, assessment_points: '' },
+          { dimension: '管理能力', score: 3, assessment_points: '' },
+        ],
+        summary: {
+          suggested_level: '',
+          comprehensive_score: 3,
+          overall_comment: '',
+          interview_conclusion: '待定',
+          is_strongly_recommended: false,
+        },
       },
-      evaluation_dimensions: [
-        { dimension: '专业能力', score: 3, assessment_points: '' },
-        { dimension: '通用素质', score: 3, assessment_points: '' },
-        { dimension: '适配度', score: 3, assessment_points: '' },
-        { dimension: '管理能力', score: 3, assessment_points: '' },
-      ],
-      summary: {
-        suggested_level: '',
-        comprehensive_score: 3,
-        overall_comment: '',
-        interview_conclusion: '待定',
-        is_strongly_recommended: false,
-      },
+      usage: extractAIUsage(data),
     };
   }
 };

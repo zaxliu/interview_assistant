@@ -1,5 +1,6 @@
 const WINTALENT_DOWNLOAD_API = '/api/wintalent/download';
 const WINTALENT_JD_API = '/api/wintalent/jd';
+const WINTALENT_CANDIDATE_API = '/api/wintalent/candidate';
 const WINTALENT_PROXY_OFFLINE_MESSAGE =
   'Wintalent 代理服务不可用，请先运行 `npm run proxy:wintalent`（或直接使用 `npm run dev` / `npm start`）。';
 const WINTALENT_RESUME_UNAVAILABLE_MESSAGE =
@@ -103,6 +104,17 @@ export interface WintalentDownloadResult {
   resumeId: string | null;
 }
 
+export interface WintalentHistoricalInterviewReview {
+  id: string;
+  source?: 'wintalent';
+  stageName?: string;
+  interviewer?: string;
+  interviewTime?: string;
+  result?: string;
+  summary: string;
+  rawText?: string;
+}
+
 export interface WintalentJDData {
   postName?: string;
   workContent?: string;
@@ -111,6 +123,10 @@ export interface WintalentJDData {
   workPlaceName?: string;
   postTypeName?: string;
   recruitNum?: string;
+}
+
+export interface WintalentCandidateData {
+  historicalInterviewReviews: WintalentHistoricalInterviewReview[];
 }
 
 const normalizeJdText = (value: string | undefined): string => {
@@ -226,4 +242,43 @@ export const fetchWintalentPositionJD = async (interviewUrl: string): Promise<Wi
     throw new Error(payload?.error || '获取岗位 JD 失败');
   }
   return payload.jd;
+};
+
+export const fetchWintalentCandidateData = async (interviewUrl: string): Promise<WintalentCandidateData> => {
+  const normalized = interviewUrl.trim();
+  if (!normalized) {
+    throw new Error('请输入 Wintalent 面试链接');
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(WINTALENT_CANDIDATE_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ interviewUrl: normalized }),
+    });
+  } catch (error) {
+    throw new Error(toNetworkErrorMessage(error));
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  const payload = (await response.json()) as {
+    ok?: boolean;
+    error?: string;
+    historicalInterviewReviews?: WintalentHistoricalInterviewReview[];
+  };
+  if (!payload?.ok) {
+    throw new Error(payload?.error || '获取候选人历史面评失败');
+  }
+
+  return {
+    historicalInterviewReviews: Array.isArray(payload.historicalInterviewReviews)
+      ? payload.historicalInterviewReviews
+      : [],
+  };
 };

@@ -44,6 +44,30 @@ export interface ResumeHighlights {
   keywords: string[];
 }
 
+export interface HistoricalInterviewReview {
+  id: string;
+  source?: 'wintalent';
+  stageName?: string;
+  interviewer?: string;
+  interviewTime?: string;
+  result?: string;
+  summary: string;
+  rawText?: string;
+}
+
+export interface AIUsage {
+  input: number;
+  cached: number;
+  output: number;
+}
+
+export interface CandidateAIUsage {
+  resumeOCR?: AIUsage;
+  resumeProcessing?: AIUsage;
+  questionGeneration?: AIUsage;
+  meetingNotesExtraction?: AIUsage;
+}
+
 // Candidate
 export interface Candidate {
   id: string;
@@ -52,6 +76,7 @@ export interface Candidate {
   resumeRawText?: string;
   resumeMarkdown?: string;
   resumeHighlights?: ResumeHighlights;
+  historicalInterviewReviews?: HistoricalInterviewReview[];
   resumeFilename?: string;
   resumeUrl?: string;
   interviewLink?: string;
@@ -64,6 +89,7 @@ export interface Candidate {
   meetingNotesContext?: string;
   codingChallenges?: CodingChallenge[];
   interviewResult?: InterviewResult;
+  aiUsage?: CandidateAIUsage;
   userId?: string; // Owner of this candidate
 }
 
@@ -80,6 +106,7 @@ export interface Question {
   source: QuestionSource;  // Where the question comes from
   evaluationDimension?: EvaluationDimensionName;  // Which evaluation dimension this question assesses
   context?: string;  // The text from resume/JD that this question is based on (for highlighting in PDF)
+  historicalReviewSummary?: string;
   isAIGenerated: boolean;
   notes?: string;
   status: 'asked' | 'skipped' | 'not_reached';
@@ -119,6 +146,9 @@ export interface InterviewResult {
     strengths?: string[];
     concerns?: string[];
     follow_up_questions?: string[];
+  };
+  aiUsage?: {
+    summaryGeneration?: AIUsage;
   };
 }
 

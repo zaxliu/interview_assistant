@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPositionDescriptionFromWintalentJD,
   downloadWintalentResumePDF,
+  fetchWintalentCandidateData,
   fetchWintalentPositionJD,
   isWintalentInterviewLink,
 } from './wintalent';
@@ -162,6 +163,48 @@ describe('fetchWintalentPositionJD', () => {
     await expect(
       fetchWintalentPositionJD('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
     ).rejects.toThrow('Wintalent 代理服务不可用');
+  });
+});
+
+describe('fetchWintalentCandidateData', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns historical interview reviews on success', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            historicalInterviewReviews: [
+              {
+                id: 'review-1',
+                stageName: '一面',
+                result: '通过',
+                summary: '沟通顺畅，项目经验扎实。',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }
+        )
+      )
+    );
+
+    const result = await fetchWintalentCandidateData('https://www.wintalent.cn/wt/Horizon/kurl?k=abc');
+    expect(result.historicalInterviewReviews).toHaveLength(1);
+    expect(result.historicalInterviewReviews[0]).toMatchObject({
+      stageName: '一面',
+      result: '通过',
+    });
   });
 });
 

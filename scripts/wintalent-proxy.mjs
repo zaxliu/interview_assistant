@@ -398,6 +398,223 @@ function appendQueryParam(url, key, value) {
   return u.toString();
 }
 
+function decodeHtmlEntities(value) {
+  return String(value || '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function stripHtml(value) {
+  return decodeHtmlEntities(String(value || ''))
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{2,}/g, '\n')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeWhitespace(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function looksLikeMeaningfulReviewText(value) {
+  const text = normalizeWhitespace(value);
+  if (!text || text.length < 8) return false;
+  if (/^(暂无|无|未填写|--|-|n\/a|null|undefined)$/i.test(text)) return false;
+  return true;
+}
+
+function pickString(obj, keys) {
+  for (const key of keys) {
+    const value = obj?.[key];
+    if (typeof value === 'string' || typeof value === 'number') {
+      const text = normalizeWhitespace(value);
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
+function collectReviewSummary(obj) {
+  const preferredKeys = [
+    'evaluateContent',
+    'evaluationContent',
+    'commentContent',
+    'interviewComment',
+    'comment',
+    'remark',
+    'remarks',
+    'summary',
+    'content',
+    'advantage',
+    'advantages',
+    'disadvantage',
+    'disadvantages',
+    'reason',
+    'suggestion',
+  ];
+
+  const pieces = [];
+  for (const key of preferredKeys) {
+    const value = obj?.[key];
+    if (Array.isArray(value)) {
+      const text = value.map((item) => normalizeWhitespace(item)).filter(looksLikeMeaningfulReviewText).join('\n');
+      if (text) pieces.push(`${key}: ${text}`);
+      continue;
+    }
+    if (typeof value === 'string' || typeof value === 'number') {
+      const text = normalizeWhitespace(value);
+      if (looksLikeMeaningfulReviewText(text)) {
+        pieces.push(text);
+      }
+    }
+  }
+
+  if (pieces.length > 0) {
+    return Array.from(new Set(pieces)).join('\n');
+  }
+
+  const fallback = Object.entries(obj || {})
+    .filter(([key, value]) => {
+      if (value === null || value === undefined) return false;
+      if (Array.isArray(value) || typeof value === 'object') return false;
+      if (/(^id$|Id$|code$|url$|name$|time$|date$|status$|result$|stage$|round$|type$)/i.test(key)) {
+        return false;
+      }
+      return true;
+    })
+    .map(([key, value]) => `${key}: ${normalizeWhitespace(value)}`)
+    .filter((line) => looksLikeMeaningfulReviewText(line));
+
+  return fallback.join('\n');
+}
+
+function isPotentialReviewObject(item, path) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const pathText = path.join('.').toLowerCase();
+  const keys = Object.keys(item).join('|').toLowerCase();
+  const hint = `${pathText}|${keys}`;
+  const hasReviewHint = [
+    'interview',
+    'history',
+    'evaluate',
+    'evaluation',
+    'comment',
+    'remark',
+    'assessment',
+    'review',
+    '面试',
+    '面评',
+    '评语',
+    '评价',
+    '记录',
+  ].some((keyword) => hint.includes(keyword));
+  if (!hasReviewHint) return false;
+
+  return looksLikeMeaningfulReviewText(collectReviewSummary(item));
+}
+
+function extractHistoricalInterviewReviews(data) {
+  const reviews = [];
+  const seen = new Set();
+
+  function visit(node, path = []) {
+    if (Array.isArray(node)) {
+      node.forEach((item, index) => {
+        if (isPotentialReviewObject(item, path)) {
+          const summary = collectReviewSummary(item);
+          const review = {
+            id: pickString(item, ['id', 'interviewId', 'evaluateId', 'recordId']) || `${path.join('.')}:${index}`,
+            source: 'wintalent',
+            stageName: pickString(item, ['stageName', 'roundName', 'interviewRound', 'processName', 'processNodeName']),
+            interviewer: pickString(item, ['interviewer', 'interviewerName', 'userName', 'createUserName', 'employeeName']),
+            interviewTime: pickString(item, ['interviewTime', 'interviewDate', 'createTime', 'gmtCreate', 'operateTime']),
+            result: pickString(item, ['result', 'resultName', 'interviewResult', 'evaluateResult', 'statusName', 'conclusion']),
+            summary,
+            rawText: JSON.stringify(item),
+          };
+          const dedupeKey = `${review.stageName}|${review.interviewer}|${review.interviewTime}|${review.result}|${review.summary}`;
+          if (!seen.has(dedupeKey)) {
+            seen.add(dedupeKey);
+            reviews.push(review);
+          }
+        }
+        visit(item, [...path, String(index)]);
+      });
+      return;
+    }
+
+    if (!node || typeof node !== 'object') {
+      return;
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      visit(value, [...path, key]);
+    }
+  }
+
+  visit(data, []);
+  return reviews;
+}
+
+function parseHistoricalInterviewReviewsFromHtml(evHistoryHtml) {
+  const html = String(evHistoryHtml || '');
+  if (!html.trim()) {
+    return [];
+  }
+
+  const sectionPattern =
+    /<div id="index(\d+)"class="Int-round">([\s\S]*?)<\/div>\s*<div class="hiddenLayer"[^>]*>([\s\S]*?)<\/div>/gi;
+  const reviews = [];
+  let match;
+
+  while ((match = sectionPattern.exec(html)) !== null) {
+    const [, index, headerHtml, bodyHtml] = match;
+    const timeMatch = headerHtml.match(/<font>\s*(?:<i[\s\S]*?<\/i>)?\s*([^<]+)\s*<\/font>/i);
+    const roundMatch = headerHtml.match(/<span[^>]*class="r-c-g"[^>]*>([\s\S]*?)<\/span>/i);
+    const interviewerMatches = [...bodyHtml.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/gi)]
+      .map((item) => stripHtml(item[1]))
+      .filter(Boolean);
+    const summary = stripHtml(bodyHtml);
+
+    if (!summary) {
+      continue;
+    }
+
+    reviews.push({
+      id: `ev-history-${index}`,
+      source: 'wintalent',
+      stageName: stripHtml(roundMatch?.[1] || '') || undefined,
+      interviewer: interviewerMatches.join('；') || undefined,
+      interviewTime: stripHtml(timeMatch?.[1] || '') || undefined,
+      result: undefined,
+      summary,
+      rawText: html.slice(match.index, sectionPattern.lastIndex),
+    });
+  }
+
+  if (reviews.length > 0) {
+    return reviews;
+  }
+
+  const fallback = stripHtml(html);
+  return fallback
+    ? [{
+        id: 'ev-history-raw',
+        source: 'wintalent',
+        summary: fallback,
+        rawText: html,
+      }]
+    : [];
+}
+
 async function resolvePdfFlow(interviewUrl, lanType = 1) {
   const jar = new CookieJar();
 
@@ -506,6 +723,7 @@ async function resolvePdfFlow(interviewUrl, lanType = 1) {
     showResumeUrl,
     createTokenUrl: new URL(createTokenUrl, ORIGIN).toString(),
     currentResumeInfoUrl,
+    currentResumeInfo,
     getResumeDetailTypeUrl,
     tokenizedResumeOriginalUrl,
     pdfUrl,
@@ -553,6 +771,49 @@ async function resolveJdFromFlow(flow) {
   return {
     jd,
     tokenizedShowPostJdUrl,
+  };
+}
+
+async function resolveCandidateDataFromFlow(flow) {
+  const applyId = String(flow?.metadata?.applyId || '');
+  const resumeId = String(flow?.metadata?.resumeId || '');
+  const postId = String(flow?.metadata?.postId || '');
+  let historicalInterviewReviews = [];
+
+  if (applyId && resumeId && postId) {
+    try {
+      const tokenizedEvHistoryUrl = await createTokenizedUrl(
+        flow.jar,
+        flow.createTokenUrl,
+        '/interviewPlatform/evHistoryData',
+        flow.showResumeUrl
+      );
+
+      const evHistoryResult = await postFormJson(
+        flow.jar,
+        tokenizedEvHistoryUrl,
+        {
+          applyId,
+          resumeId,
+          postId,
+        },
+        flow.showResumeUrl
+      );
+
+      if (evHistoryResult?.haveEv && evHistoryResult?.evHistory) {
+        historicalInterviewReviews = parseHistoricalInterviewReviewsFromHtml(evHistoryResult.evHistory);
+      }
+    } catch (error) {
+      historicalInterviewReviews = [];
+    }
+  }
+
+  if (historicalInterviewReviews.length === 0) {
+    historicalInterviewReviews = extractHistoricalInterviewReviews(flow.currentResumeInfo);
+  }
+
+  return {
+    historicalInterviewReviews,
   };
 }
 
@@ -714,6 +975,30 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && path === '/api/wintalent/candidate') {
+    try {
+      const body = await readJsonBody(req);
+      const interviewUrl = String(body.interviewUrl || '');
+      const lanType = Number(body.lanType || 1);
+      if (!interviewUrl.startsWith('http')) {
+        sendJson(res, 400, { error: 'interviewUrl is required' });
+        return;
+      }
+
+      const flow = await resolvePdfFlow(interviewUrl, lanType);
+      const candidateData = resolveCandidateDataFromFlow(flow);
+
+      sendJson(res, 200, {
+        ok: true,
+        historicalInterviewReviews: candidateData.historicalInterviewReviews,
+        metadata: flow.metadata,
+      });
+    } catch (error) {
+      sendJson(res, getErrorStatus(error), { ok: false, error: String(error?.message || error) });
+    }
+    return;
+  }
+
   sendJson(res, 404, { error: 'Not found' });
 });
 
@@ -724,4 +1009,5 @@ server.listen(PORT, HOST, () => {
   console.log('  POST /api/wintalent/resolve');
   console.log('  POST /api/wintalent/download');
   console.log('  POST /api/wintalent/jd');
+  console.log('  POST /api/wintalent/candidate');
 });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Position, Candidate } from '@/types';
+import type { AIUsage, Position, Candidate } from '@/types';
 import { QuestionList } from './QuestionList';
 import { AddQuestionForm } from './AddQuestionForm';
 import { PDFViewer } from '@/components/ui/PDFViewer';
@@ -12,6 +12,7 @@ import { useInterviewUIStore } from '@/store/interviewUIStore';
 import { getPDF } from '@/utils/pdfStorage';
 import { getPreferredResumeText } from '@/utils/resume';
 import { ResumeHighlightsPanel } from '@/components/candidates/ResumeHighlightsPanel';
+import { HistoricalInterviewReviewsPanel } from '@/components/candidates/HistoricalInterviewReviewsPanel';
 import { getFeishuDocRawContentFromLink } from '@/api/feishu';
 import { zhCN as t } from '@/i18n/zhCN';
 
@@ -63,6 +64,12 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const [isImportingMeetingNotes, setIsImportingMeetingNotes] = useState(false);
   const [meetingImportStatus, setMeetingImportStatus] = useState<string | null>(null);
   const [meetingImportError, setMeetingImportError] = useState<string | null>(null);
+  const [questionGenerationUsage, setQuestionGenerationUsage] = useState<AIUsage | undefined>(
+    candidate.aiUsage?.questionGeneration
+  );
+  const [meetingNotesUsage, setMeetingNotesUsage] = useState<AIUsage | undefined>(
+    candidate.aiUsage?.meetingNotesExtraction
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const snapshotButtonRef = useRef<HTMLButtonElement>(null);
   const snapshotPanelRef = useRef<HTMLDivElement>(null);
@@ -76,6 +83,21 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     feishuAppSecret,
   } = useSettingsStore();
   const setHasPdf = useInterviewUIStore((state) => state.setHasPdf);
+
+  const renderUsage = (usage: AIUsage | undefined, label: string) => {
+    if (!usage) {
+      return null;
+    }
+
+    return (
+      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+        <span className="font-medium text-slate-800">{label}</span>
+        <span className="ml-2">input {usage.input}</span>
+        <span className="ml-2">cached {usage.cached}</span>
+        <span className="ml-2">output {usage.output}</span>
+      </div>
+    );
+  };
 
   useEffect(() => {
     const loadPdf = async () => {
@@ -135,6 +157,11 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   }, [candidate.id, candidate.interviewLink]);
 
   useEffect(() => {
+    setQuestionGenerationUsage(candidate.aiUsage?.questionGeneration);
+    setMeetingNotesUsage(candidate.aiUsage?.meetingNotesExtraction);
+  }, [candidate.aiUsage?.meetingNotesExtraction, candidate.aiUsage?.questionGeneration, candidate.id]);
+
+  useEffect(() => {
     if (quickNotesTimerRef.current) {
       clearTimeout(quickNotesTimerRef.current);
     }
@@ -188,14 +215,24 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       return;
     }
 
-    const questions = await generateInterviewQuestions(
+    const generated = await generateInterviewQuestions(
       position.description,
       resumeContent,
-      position.criteria
+      position.criteria,
+      candidate.historicalInterviewReviews
     );
 
-    if (questions.length > 0) {
-      setQuestions(position.id, candidate.id, questions);
+    if (generated.data.length > 0) {
+      setQuestions(position.id, candidate.id, generated.data);
+      if (generated.usage) {
+        setQuestionGenerationUsage(generated.usage);
+        updateCandidate(position.id, candidate.id, {
+          aiUsage: {
+            ...candidate.aiUsage,
+            questionGeneration: generated.usage,
+          },
+        });
+      }
     }
   };
 
@@ -239,6 +276,15 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       if (!extracted) {
         throw new Error('从会议纪要提取问答失败。');
       }
+      if (extracted.usage) {
+        setMeetingNotesUsage(extracted.usage);
+        updateCandidate(position.id, candidate.id, {
+          aiUsage: {
+            ...candidate.aiUsage,
+            meetingNotesExtraction: extracted.usage,
+          },
+        });
+      }
 
       const existingByNormalizedText = new Map<string, string>();
       candidate.questions.forEach((question) => {
@@ -246,12 +292,12 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       });
 
       const notesByQuestionId = new Map<string, string[]>();
-      extracted.matchedAnswers.forEach((answer) => {
+      extracted.data.matchedAnswers.forEach((answer) => {
         const notes = buildImportedNotes(answer.answer, answer.evidence);
         notesByQuestionId.set(answer.questionId, [...(notesByQuestionId.get(answer.questionId) || []), notes]);
       });
 
-      extracted.newQAs.forEach((qa) => {
+      extracted.data.newQAs.forEach((qa) => {
         const normalized = normalizeQuestionText(qa.question);
         const existingQuestionId = existingByNormalizedText.get(normalized);
         if (existingQuestionId) {
@@ -280,7 +326,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
 
       const existingNormalizedSet = new Set(candidate.questions.map((question) => normalizeQuestionText(question.text)));
       let addedNewCount = 0;
-      extracted.newQAs.forEach((qa) => {
+      extracted.data.newQAs.forEach((qa) => {
         const normalized = normalizeQuestionText(qa.question);
         if (existingNormalizedSet.has(normalized)) {
           return;
@@ -434,12 +480,18 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               {isSnapshotOpen && (
                 <div
                   ref={snapshotPanelRef}
-                  className="w-[320px] max-w-full rounded-xl border border-gray-200 bg-white/95 p-1 shadow-lg backdrop-blur"
+                  className="w-[320px] max-w-full space-y-2 rounded-xl border border-gray-200 bg-white/95 p-1 shadow-lg backdrop-blur"
                 >
                   <ResumeHighlightsPanel
                     highlights={candidate.resumeHighlights}
                     title="候选人快照"
                     emptyText="暂无提取亮点。"
+                    compact
+                  />
+                  <HistoricalInterviewReviewsPanel
+                    reviews={candidate.historicalInterviewReviews}
+                    title="历史面评"
+                    emptyText="暂无历史面评。"
                     compact
                   />
                 </div>
@@ -512,6 +564,8 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               {generateQuestionsHint && (
                 <p className="text-xs text-amber-700">{generateQuestionsHint}</p>
               )}
+              {renderUsage(questionGenerationUsage, 'AI 问题生成 Token')}
+              {renderUsage(meetingNotesUsage, 'AI 纪要提取 Token')}
             </div>
 
             <QuestionList
@@ -578,6 +632,15 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         compact
       />
 
+      <HistoricalInterviewReviewsPanel
+        reviews={candidate.historicalInterviewReviews}
+        title="历史面评"
+        emptyText="暂无历史面评。"
+        collapsible
+        defaultExpanded={false}
+        compact
+      />
+
       <Card>
         <CardHeader>
           <h3 className="text-sm font-medium text-gray-700">快速记录</h3>
@@ -615,6 +678,8 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         {generateQuestionsHint && (
           <p className="text-sm text-amber-700">{generateQuestionsHint}</p>
         )}
+        {renderUsage(questionGenerationUsage, 'AI 问题生成 Token')}
+        {renderUsage(meetingNotesUsage, 'AI 纪要提取 Token')}
       </div>
 
       <QuestionList

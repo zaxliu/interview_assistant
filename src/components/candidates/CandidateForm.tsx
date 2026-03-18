@@ -1,15 +1,18 @@
-import React, { useState, useRef } from 'react';
-import type { Candidate } from '@/types';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import type { AIUsage, Candidate } from '@/types';
 import { usePositionStore } from '@/store/positionStore';
 import { usePDFParser } from '@/hooks/usePDFParser';
 import { useResumeProcessor } from '@/hooks/useResumeProcessor';
 import { storePDF } from '@/utils/pdfStorage';
 import { debugDownloadPDFPageAsImage } from '@/api/pdf';
-import { downloadWintalentResumePDF } from '@/api/wintalent';
+import { downloadWintalentResumePDF, fetchWintalentCandidateData } from '@/api/wintalent';
 import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea } from '@/components/ui';
 import { ResumeHighlightsPanel } from './ResumeHighlightsPanel';
+import { HistoricalInterviewReviewsPanel } from './HistoricalInterviewReviewsPanel';
 import { emptyResumeHighlights, getPreferredResumeText, getRawResumeText } from '@/utils/resume';
 import { zhCN as t } from '@/i18n/zhCN';
+
+const AUTO_SAVE_DELAY = 800;
 
 interface CandidateFormProps {
   positionId: string;
@@ -51,6 +54,15 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const [resumeText, setResumeText] = useState(initialResumeText);
   const [resumeRawText, setResumeRawText] = useState(initialResumeRawText);
   const [resumeHighlights, setResumeHighlights] = useState(candidate?.resumeHighlights || emptyResumeHighlights());
+  const [historicalInterviewReviews, setHistoricalInterviewReviews] = useState(
+    candidate?.historicalInterviewReviews || []
+  );
+  const [resumeProcessingUsage, setResumeProcessingUsage] = useState<AIUsage | undefined>(
+    candidate?.aiUsage?.resumeProcessing
+  );
+  const [resumeOCRUsage, setResumeOCRUsage] = useState<AIUsage | undefined>(
+    candidate?.aiUsage?.resumeOCR
+  );
   const [resumeFilename, setResumeFilename] = useState(candidate?.resumeFilename || '');
   const [interviewTime, setInterviewTime] = useState(() => {
     if (!candidate?.interviewTime) return '';
@@ -59,9 +71,16 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     return date.toISOString().slice(0, 16);
   });
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
+  const [needsPdfPersist, setNeedsPdfPersist] = useState(false);
   const [useAIParsing, setUseAIParsing] = useState(true);
   const [wintalentLoading, setWintalentLoading] = useState(false);
   const [wintalentError, setWintalentError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'saving' | 'unsaved'>(
+    candidate ? 'saved' : 'idle'
+  );
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistedCandidateIdRef = useRef<string | null>(candidate?.id || null);
+  const isHydratingRef = useRef(true);
   const isResumeBusy = pdfLoading || resumeProcessing || wintalentLoading;
 
   const applyProcessedResume = async (rawText: string) => {
@@ -69,7 +88,156 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     const processed = await processResume(rawText);
     setResumeText(processed.markdown);
     setResumeHighlights(processed.highlights);
+    setResumeProcessingUsage(processed.usage);
   };
+
+  const renderUsage = (usage: AIUsage | undefined, label: string) => {
+    if (!usage) return null;
+
+    return (
+      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+        <span className="font-medium text-slate-800">{label}</span>
+        <span className="ml-2">input {usage.input}</span>
+        <span className="ml-2">cached {usage.cached}</span>
+        <span className="ml-2">output {usage.output}</span>
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    persistedCandidateIdRef.current = candidate?.id || null;
+    isHydratingRef.current = true;
+    setName(candidate?.name || '');
+    setResumeUrl(candidate?.resumeUrl || '');
+    setWintalentLink(candidate?.candidateLink?.includes('wintalent.cn') ? candidate.candidateLink : '');
+    setResumeText(candidate ? getPreferredResumeText(candidate) : '');
+    setResumeRawText(candidate ? getRawResumeText(candidate) : '');
+    setResumeHighlights(candidate?.resumeHighlights || emptyResumeHighlights());
+    setHistoricalInterviewReviews(candidate?.historicalInterviewReviews || []);
+    setResumeOCRUsage(candidate?.aiUsage?.resumeOCR);
+    setResumeProcessingUsage(candidate?.aiUsage?.resumeProcessing);
+    setResumeFilename(candidate?.resumeFilename || '');
+    setPendingPdfFile(null);
+    setNeedsPdfPersist(false);
+    setSaveStatus(candidate ? 'saved' : 'idle');
+    setInterviewTime(() => {
+      if (!candidate?.interviewTime) return '';
+      const date = new Date(candidate.interviewTime);
+      if (isNaN(date.getTime())) return '';
+      return date.toISOString().slice(0, 16);
+    });
+    queueMicrotask(() => {
+      isHydratingRef.current = false;
+    });
+  }, [candidate]);
+
+  const buildCandidateData = useCallback(() => ({
+    name,
+    resumeUrl,
+    resumeText: resumeText || resumeRawText,
+    resumeRawText: resumeRawText || resumeText,
+    resumeMarkdown: resumeText || resumeRawText,
+    resumeHighlights,
+    historicalInterviewReviews,
+    aiUsage: {
+      ...candidate?.aiUsage,
+      resumeOCR: resumeOCRUsage,
+      resumeProcessing: resumeProcessingUsage,
+    },
+    resumeFilename,
+    candidateLink: wintalentLink.trim() || candidate?.candidateLink,
+    status: candidate?.status || 'pending',
+    interviewTime: interviewTime || undefined,
+  }), [
+    candidate?.aiUsage,
+    candidate?.candidateLink,
+    candidate?.status,
+    historicalInterviewReviews,
+    interviewTime,
+    name,
+    resumeFilename,
+    resumeHighlights,
+    resumeOCRUsage,
+    resumeProcessingUsage,
+    resumeRawText,
+    resumeText,
+    resumeUrl,
+    wintalentLink,
+  ]);
+
+  const persistCandidate = useCallback(async (): Promise<string | null> => {
+    const candidateData = buildCandidateData();
+    const existingCandidateId = persistedCandidateIdRef.current;
+    const shouldCreateDraft = !existingCandidateId && candidateData.name.trim();
+    if (!existingCandidateId && !shouldCreateDraft) {
+      setSaveStatus('idle');
+      return null;
+    }
+
+    setSaveStatus('saving');
+    const savedCandidateId = existingCandidateId || addCandidate(positionId, candidateData).id;
+    if (!existingCandidateId) {
+      persistedCandidateIdRef.current = savedCandidateId;
+    } else {
+      updateCandidate(positionId, savedCandidateId, candidateData);
+    }
+
+    if (pendingPdfFile && needsPdfPersist) {
+      await storePDF(savedCandidateId, pendingPdfFile);
+      setNeedsPdfPersist(false);
+    }
+
+    setSaveStatus('saved');
+    return savedCandidateId;
+  }, [addCandidate, buildCandidateData, needsPdfPersist, pendingPdfFile, positionId, updateCandidate]);
+
+  useEffect(() => {
+    if (isHydratingRef.current) {
+      return;
+    }
+
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+
+    const hasDraftData = Boolean(
+      name.trim() ||
+      resumeText.trim() ||
+      resumeRawText.trim() ||
+      resumeUrl.trim() ||
+      resumeFilename.trim() ||
+      historicalInterviewReviews.length ||
+      interviewTime
+    );
+    if (!hasDraftData) {
+      setSaveStatus(candidate ? 'saved' : 'idle');
+      return;
+    }
+
+    setSaveStatus('unsaved');
+    autosaveTimerRef.current = setTimeout(() => {
+      persistCandidate().catch((error) => {
+        console.error('[CandidateForm] Error autosaving candidate:', error);
+        setSaveStatus('unsaved');
+      });
+    }, AUTO_SAVE_DELAY);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  }, [
+    candidate,
+    historicalInterviewReviews,
+    interviewTime,
+    name,
+    persistCandidate,
+    resumeFilename,
+    resumeRawText,
+    resumeText,
+    resumeUrl,
+  ]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -81,11 +249,13 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
       }
       setResumeFilename(file.name);
       setPendingPdfFile(file); // Store for later IndexedDB save
+      setNeedsPdfPersist(true);
 
       // Use AI parsing if enabled and available, otherwise standard
-      const text = await parseFromFile(file, useAIParsing && canUseAI, { maxPages: 5 });
-      if (text) {
-        await applyProcessedResume(text);
+      const result = await parseFromFile(file, useAIParsing && canUseAI, { maxPages: 5 });
+      setResumeOCRUsage(result.usage);
+      if (result.text) {
+        await applyProcessedResume(result.text);
       }
     }
   };
@@ -93,12 +263,13 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const handleUrlParse = async () => {
     if (resumeUrl) {
       // Use AI parsing if enabled and available, otherwise standard
-      const text = await parseFromUrl(resumeUrl, useAIParsing && canUseAI, { maxPages: 5 });
-      if (!text.trim()) {
+      const result = await parseFromUrl(resumeUrl, useAIParsing && canUseAI, { maxPages: 5 });
+      setResumeOCRUsage(result.usage);
+      if (!result.text.trim()) {
         alert('简历链接内容获取失败，请检查链接是否可访问且为 PDF 直链。');
         return;
       }
-      await applyProcessedResume(text);
+      await applyProcessedResume(result.text);
     }
   };
 
@@ -110,18 +281,24 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     setWintalentLoading(true);
 
     try {
-      const { blob, filename } = await downloadWintalentResumePDF(link);
+      const [{ blob, filename }, candidateData] = await Promise.all([
+        downloadWintalentResumePDF(link),
+        fetchWintalentCandidateData(link).catch(() => ({ historicalInterviewReviews: [] })),
+      ]);
       const pdfFile = new File([blob], filename, {
         type: blob.type || 'application/pdf',
       });
 
       setResumeFilename(pdfFile.name);
       setPendingPdfFile(pdfFile);
+      setNeedsPdfPersist(true);
       setResumeUrl(link);
+      setHistoricalInterviewReviews(candidateData.historicalInterviewReviews || []);
 
-      const text = await parseFromFile(pdfFile, useAIParsing && canUseAI, { maxPages: 5 });
-      if (text) {
-        await applyProcessedResume(text);
+      const result = await parseFromFile(pdfFile, useAIParsing && canUseAI, { maxPages: 5 });
+      setResumeOCRUsage(result.usage);
+      if (result.text) {
+        await applyProcessedResume(result.text);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : '从 Wintalent 导入简历失败';
@@ -136,37 +313,10 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   };
 
   const handleSubmit = async () => {
-    const candidateData = {
-      name,
-      resumeUrl,
-      resumeText: resumeText || resumeRawText,
-      resumeRawText: resumeRawText || resumeText,
-      resumeMarkdown: resumeText || resumeRawText,
-      resumeHighlights,
-      resumeFilename,
-      status: candidate?.status || 'pending',
-      interviewTime: interviewTime || undefined,
-    };
-
     try {
-      if (candidate) {
-        updateCandidate(positionId, candidate.id, candidateData);
-        // Store PDF in IndexedDB if a new file was uploaded
-        if (pendingPdfFile) {
-          console.log('[CandidateForm] Storing PDF for existing candidate:', candidate.id);
-          await storePDF(candidate.id, pendingPdfFile);
-          console.log('[CandidateForm] PDF stored successfully');
-        }
-        onSave(candidate.id);
-      } else {
-        const newCandidate = addCandidate(positionId, candidateData);
-        // Store PDF in IndexedDB if a file was uploaded
-        if (pendingPdfFile) {
-          console.log('[CandidateForm] Storing PDF for new candidate:', newCandidate.id);
-          await storePDF(newCandidate.id, pendingPdfFile);
-          console.log('[CandidateForm] PDF stored successfully');
-        }
-        onSave(newCandidate.id);
+      const savedCandidateId = await persistCandidate();
+      if (savedCandidateId) {
+        onSave(savedCandidateId);
       }
     } catch (error) {
       console.error('[CandidateForm] Error saving candidate:', error);
@@ -180,6 +330,17 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
         <h3 className="text-sm font-medium text-gray-700">
           {candidate ? '编辑候选人' : '新增候选人'}
         </h3>
+        <p className={`mt-1 text-xs ${
+          saveStatus === 'saved' ? 'text-green-600' :
+          saveStatus === 'saving' ? 'text-amber-600' :
+          saveStatus === 'unsaved' ? 'text-gray-500' :
+          'text-gray-400'
+        }`}>
+          {saveStatus === 'saved' && '✓ 已自动保存'}
+          {saveStatus === 'saving' && '正在自动保存...'}
+          {saveStatus === 'unsaved' && '内容已变更，稍后自动保存'}
+          {saveStatus === 'idle' && '输入后会自动保存'}
+        </p>
       </CardHeader>
       <CardBody className="space-y-3">
         <Input
@@ -341,6 +502,9 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
               </div>
             )}
 
+            {renderUsage(resumeOCRUsage, 'AI OCR Token')}
+            {renderUsage(resumeProcessingUsage, 'AI 简历整理 Token')}
+
             {/* Debug button - only show when PDF is loaded and not parsing */}
             {!pdfLoading && pendingPdfFile && (
               <Button
@@ -413,6 +577,13 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
               emptyText="上传或粘贴简历后，可自动生成亮点。"
             />
 
+            <HistoricalInterviewReviewsPanel
+              reviews={historicalInterviewReviews}
+              title="历史面评"
+              emptyText="从 Wintalent 导入后，如存在历史面评会显示在这里。"
+              defaultExpanded={false}
+            />
+
             {(resumeRawText || resumeText) && (
               <details className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
                 <summary className="cursor-pointer text-xs font-medium text-gray-600">
@@ -436,7 +607,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
           {t.common.cancel}
         </Button>
         <Button onClick={handleSubmit} disabled={!name.trim() || isResumeBusy}>
-          {candidate ? t.common.saveChanges : '新增候选人'}
+          {candidate || persistedCandidateIdRef.current ? '进入面试' : '新增候选人并进入面试'}
         </Button>
       </CardFooter>
     </Card>

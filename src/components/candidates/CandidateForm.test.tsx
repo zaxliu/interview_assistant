@@ -6,8 +6,9 @@ import { usePositionStore } from '@/store/positionStore';
 const parseFromFile = vi.fn();
 const parseFromUrl = vi.fn();
 const processResume = vi.fn();
-const { downloadWintalentResumePDF } = vi.hoisted(() => ({
+const { downloadWintalentResumePDF, fetchWintalentCandidateData } = vi.hoisted(() => ({
   downloadWintalentResumePDF: vi.fn(),
+  fetchWintalentCandidateData: vi.fn(),
 }));
 
 vi.mock('@/hooks/usePDFParser', () => ({
@@ -39,11 +40,13 @@ vi.mock('@/api/pdf', () => ({
 
 vi.mock('@/api/wintalent', () => ({
   downloadWintalentResumePDF,
+  fetchWintalentCandidateData,
 }));
 
 describe('CandidateForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fetchWintalentCandidateData.mockResolvedValue({ historicalInterviewReviews: [] });
     processResume.mockResolvedValue({
       markdown: 'Normalized resume',
       highlights: {
@@ -53,11 +56,12 @@ describe('CandidateForm', () => {
         experience: [],
         keywords: [],
       },
+      usage: { input: 11, cached: 3, output: 7 },
     });
     usePositionStore.setState({ positions: [], currentUserId: 'user-1' });
   });
 
-  it('creates a candidate with manual resume text', () => {
+  it('creates a candidate with manual resume text', async () => {
     const onSave = vi.fn();
 
     render(<CandidateForm positionId="position-1" onSave={onSave} onCancel={() => undefined} />);
@@ -68,15 +72,17 @@ describe('CandidateForm', () => {
     fireEvent.change(screen.getByPlaceholderText('上传 PDF 后将在此显示简历内容，也可手动粘贴...'), {
       target: { value: 'Candidate resume summary' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '新增候选人' }));
+    fireEvent.click(screen.getByRole('button', { name: '新增候选人并进入面试' }));
 
-    expect(onSave).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
     const savedCandidateId = onSave.mock.calls[0][0];
     expect(savedCandidateId).toBeTruthy();
   });
 
   it('parses a resume URL when requested', async () => {
-    parseFromUrl.mockResolvedValue('Parsed resume');
+    parseFromUrl.mockResolvedValue({ text: 'Parsed resume', usage: { input: 23, cached: 4, output: 15 } });
 
     render(<CandidateForm positionId="position-1" onSave={() => undefined} onCancel={() => undefined} />);
 
@@ -92,12 +98,13 @@ describe('CandidateForm', () => {
         { maxPages: 5 }
       );
       expect(processResume).toHaveBeenCalledWith('Parsed resume');
+      expect(screen.getByText(/AI OCR Token/)).toBeInTheDocument();
     });
   });
 
   it('alerts user and skips resume processing when resume URL content fetch fails', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
-    parseFromUrl.mockResolvedValue('');
+    parseFromUrl.mockResolvedValue({ text: '' });
 
     render(<CandidateForm positionId="position-1" onSave={() => undefined} onCancel={() => undefined} />);
 
@@ -167,7 +174,20 @@ describe('CandidateForm', () => {
       resolvedPdfUrl: 'https://www.wintalent.cn/interviewer/interviewPlatform/getResumeOriginalInfo?...',
       resumeId: '3293935',
     });
-    parseFromFile.mockResolvedValue('Imported resume text');
+    fetchWintalentCandidateData.mockResolvedValue({
+      historicalInterviewReviews: [
+        {
+          id: 'review-1',
+          stageName: '一面',
+          result: '通过',
+          summary: '有过系统设计考察，结果较好。',
+        },
+      ],
+    });
+    parseFromFile.mockResolvedValue({
+      text: 'Imported resume text',
+      usage: { input: 31, cached: 6, output: 18 },
+    });
 
     render(<CandidateForm positionId="position-1" onSave={() => undefined} onCancel={() => undefined} />);
 
@@ -180,9 +200,15 @@ describe('CandidateForm', () => {
       expect(downloadWintalentResumePDF).toHaveBeenCalledWith(
         'https://www.wintalent.cn/wt/Horizon/kurl?k=abc'
       );
+      expect(fetchWintalentCandidateData).toHaveBeenCalledWith(
+        'https://www.wintalent.cn/wt/Horizon/kurl?k=abc'
+      );
       expect(parseFromFile).toHaveBeenCalledTimes(1);
       expect(processResume).toHaveBeenCalledWith('Imported resume text');
       expect(screen.getByText(/candidate\.pdf/)).toBeInTheDocument();
+      expect(screen.getByText('有过系统设计考察，结果较好。')).toBeInTheDocument();
+      expect(screen.getByText(/AI OCR Token/)).toBeInTheDocument();
+      expect(screen.getByText(/AI 简历整理 Token/)).toBeInTheDocument();
     });
   });
 });

@@ -6,6 +6,7 @@ import {
   parsePDFFromUrlWithAI,
 } from '@/api/pdf';
 import { useSettingsStore } from '@/store/settingsStore';
+import type { AIUsage } from '@/types';
 
 interface AIOptions {
   maxPages?: number;
@@ -18,6 +19,11 @@ export interface ParseProgress {
   total: number;
 }
 
+export interface PDFParseResult {
+  text: string;
+  usage?: AIUsage;
+}
+
 export const usePDFParser = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,17 +32,18 @@ export const usePDFParser = () => {
 
   const { aiApiKey, aiModel } = useSettingsStore();
 
-  const parseFromFile = useCallback(async (file: File, useAI = false, options?: AIOptions): Promise<string> => {
+  const parseFromFile = useCallback(async (file: File, useAI = false, options?: AIOptions): Promise<PDFParseResult> => {
     setIsLoading(true);
     setError(null);
     setProgress(null);
 
     try {
       let extractedText: string;
+      let usage: AIUsage | undefined;
 
       if (useAI && aiApiKey) {
         console.log('[usePDFParser] Using AI parsing for file');
-        extractedText = await parsePDFFromFileWithAI(
+        const result = await parsePDFFromFileWithAI(
           file,
           { apiKey: aiApiKey, model: aiModel },
           {
@@ -46,34 +53,37 @@ export const usePDFParser = () => {
             onProgress: (current, total) => setProgress({ current, total }),
           }
         );
+        extractedText = result.text;
+        usage = result.usage;
       } else {
         console.log('[usePDFParser] Using standard parsing for file');
         extractedText = await parsePDFFromFile(file);
       }
 
       setText(extractedText);
-      return extractedText;
+      return { text: extractedText, usage };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'PDF 解析失败';
       setError(errorMessage);
-      return '';
+      return { text: '' };
     } finally {
       setIsLoading(false);
       setProgress(null);
     }
   }, [aiApiKey, aiModel]);
 
-  const parseFromUrl = useCallback(async (url: string, useAI = false, options?: AIOptions): Promise<string> => {
+  const parseFromUrl = useCallback(async (url: string, useAI = false, options?: AIOptions): Promise<PDFParseResult> => {
     setIsLoading(true);
     setError(null);
     setProgress(null);
 
     try {
       let extractedText: string;
+      let usage: AIUsage | undefined;
 
       if (useAI && aiApiKey) {
         console.log('[usePDFParser] Using AI parsing for URL');
-        extractedText = await parsePDFFromUrlWithAI(
+        const result = await parsePDFFromUrlWithAI(
           url,
           { apiKey: aiApiKey, model: aiModel },
           {
@@ -83,17 +93,19 @@ export const usePDFParser = () => {
             onProgress: (current, total) => setProgress({ current, total }),
           }
         );
+        extractedText = result.text;
+        usage = result.usage;
       } else {
         console.log('[usePDFParser] Using standard parsing for URL');
         extractedText = await parsePDFFromUrl(url);
       }
 
       setText(extractedText);
-      return extractedText;
+      return { text: extractedText, usage };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '从 URL 解析 PDF 失败';
       setError(errorMessage);
-      return '';
+      return { text: '' };
     } finally {
       setIsLoading(false);
       setProgress(null);

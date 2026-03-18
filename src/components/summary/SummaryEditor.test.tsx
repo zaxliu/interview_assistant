@@ -73,24 +73,27 @@ describe('SummaryEditor', () => {
 
   it('auto generates when requested', async () => {
     generateInterviewSummary.mockResolvedValue({
-      interview_info: {
-        interviewer: 'Lewis',
-        overall_result: '通过',
-        interview_time: '2026-03-11 10:00',
+      data: {
+        interview_info: {
+          interviewer: 'Lewis',
+          overall_result: '通过',
+          interview_time: '2026-03-11 10:00',
+        },
+        evaluation_dimensions: [],
+        summary: {
+          suggested_level: 'P7',
+          comprehensive_score: 4,
+          overall_comment: 'Strong',
+          interview_conclusion: '通过',
+          is_strongly_recommended: true,
+        },
+        additional_info: {
+          strengths: ['Communication'],
+          concerns: [],
+          follow_up_questions: [],
+        },
       },
-      evaluation_dimensions: [],
-      summary: {
-        suggested_level: 'P7',
-        comprehensive_score: 4,
-        overall_comment: 'Strong',
-        interview_conclusion: '通过',
-        is_strongly_recommended: true,
-      },
-      additional_info: {
-        strengths: ['Communication'],
-        concerns: [],
-        follow_up_questions: [],
-      },
+      usage: { input: 10, cached: 2, output: 20 },
     });
 
     render(<SummaryEditor position={position} candidate={candidate} autoGenerate />);
@@ -110,5 +113,7 @@ describe('SummaryEditor', () => {
       candidate.meetingNotesContext,
       undefined
     );
+    expect(screen.getByText(/AI 总结生成 Token/)).toBeInTheDocument();
+    expect(screen.getByText(/input 10/)).toBeInTheDocument();
   });
 });

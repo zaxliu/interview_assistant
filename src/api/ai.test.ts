@@ -23,13 +23,14 @@ describe('ai api parsing', () => {
       })
     );
 
-    const questions = await generateQuestions(
+    const result = await generateQuestions(
       { apiKey: 'key', model: 'model' },
       'JD',
       'Resume',
       []
     );
 
+    const questions = result.data;
     expect(questions).toHaveLength(1);
     expect(questions[0]).toMatchObject({
       text: '介绍一下你做过的项目',
@@ -53,7 +54,7 @@ describe('ai api parsing', () => {
 
     await expect(
       generateQuestions({ apiKey: 'key', model: 'model' }, 'JD', 'Resume', [])
-    ).resolves.toEqual([]);
+    ).resolves.toEqual({ data: [] });
   });
 
   it('tops up generated questions when first response count is too low', async () => {
@@ -86,13 +87,14 @@ describe('ai api parsing', () => {
       });
     vi.stubGlobal('fetch', fetchMock);
 
-    const questions = await generateQuestions(
+    const result = await generateQuestions(
       { apiKey: 'key', model: 'model' },
       'JD',
       'Resume',
       []
     );
 
+    const questions = result.data;
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(questions.length).toBeGreaterThanOrEqual(8);
     expect(new Set(questions.map((q) => q.text)).size).toBe(questions.length);
@@ -117,13 +119,15 @@ describe('ai api parsing', () => {
     );
 
     await expect(processResumeText({ apiKey: 'key', model: 'model' }, 'raw text')).resolves.toEqual({
-      markdown: '# Alice\n\n## Experience\n- Built APIs',
-      highlights: {
-        summary: 'Backend engineer',
-        strengths: ['API design'],
-        risks: ['Domain depth'],
-        experience: ['Built APIs at X'],
-        keywords: ['Go', 'Redis'],
+      data: {
+        markdown: '# Alice\n\n## Experience\n- Built APIs',
+        highlights: {
+          summary: 'Backend engineer',
+          strengths: ['API design'],
+          risks: ['Domain depth'],
+          experience: ['Built APIs at X'],
+          keywords: ['Go', 'Redis'],
+        },
       },
     });
   });
@@ -152,14 +156,14 @@ describe('ai api parsing', () => {
       'meeting notes'
     );
 
-    expect(result.matchedAnswers).toEqual([
+    expect(result.data.matchedAnswers).toEqual([
       {
         questionId: 'q-1',
         answer: '讲了 checkpoint 自动恢复',
         evidence: '提到异常后加载 checkpoint',
       },
     ]);
-    expect(result.newQAs).toEqual([
+    expect(result.data.newQAs).toEqual([
       {
         question: '如何做故障节点隔离？',
         answer: '打污点并迁移任务',
@@ -193,8 +197,8 @@ describe('ai api parsing', () => {
       'meeting notes'
     );
 
-    expect(result.matchedAnswers).toEqual([]);
-    expect(result.newQAs).toEqual([
+    expect(result.data.matchedAnswers).toEqual([]);
+    expect(result.data.newQAs).toEqual([
       {
         question: 'Q',
         answer: 'A',
@@ -241,5 +245,31 @@ describe('ai api parsing', () => {
     expect(prompt).toContain('现有问题没有覆盖到的新考察角度');
     expect(prompt).toContain('补充追问、同义改写或换一种问法');
     expect(prompt).toContain('可以同时出现在 matched_answers 和 new_qa');
+  });
+
+  it('extracts usage for question generation responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '[]',
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 120,
+            completion_tokens: 45,
+            prompt_tokens_details: { cached_tokens: 30 },
+          },
+        }),
+      })
+    );
+
+    const result = await generateQuestions({ apiKey: 'key', model: 'model' }, 'JD', 'Resume', []);
+    expect(result.usage).toEqual({ input: 240, cached: 60, output: 90 });
   });
 });

@@ -2,11 +2,12 @@ import { useCallback, useState } from 'react';
 import { processResumeText } from '@/api/ai';
 import { useSettingsStore } from '@/store/settingsStore';
 import { emptyResumeHighlights, normalizeMarkdownText } from '@/utils/resume';
-import type { ResumeHighlights } from '@/types';
+import type { AIUsage, ResumeHighlights } from '@/types';
 
 interface ResumeProcessingOutput {
   markdown: string;
   highlights: ResumeHighlights;
+  usage?: AIUsage;
 }
 
 export const useResumeProcessor = () => {
@@ -32,7 +33,11 @@ export const useResumeProcessor = () => {
           };
         }
 
-        return await processResumeText({ apiKey: aiApiKey, model: aiModel }, trimmed);
+        const result = await processResumeText({ apiKey: aiApiKey, model: aiModel }, trimmed);
+        return {
+          ...result.data,
+          usage: result.usage,
+        };
       } catch (err) {
         const message = err instanceof Error ? err.message : '简历处理失败';
         setError(message);

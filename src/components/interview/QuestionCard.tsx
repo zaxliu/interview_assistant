@@ -268,6 +268,13 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
           </div>
         )}
 
+        {question.historicalReviewSummary && (
+          <div className="mb-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+            <span className="font-medium">历史面评：</span>
+            <span className="ml-1">{question.historicalReviewSummary}</span>
+          </div>
+        )}
+
         <Textarea
           placeholder={question.status === 'skipped' ? '已跳过' : '在这里记录面试过程中的回答与观察...'}
           value={notesDraft}
