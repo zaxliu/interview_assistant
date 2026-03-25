@@ -153,10 +153,10 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   }, [isSnapshotOpen]);
 
   useEffect(() => {
-    setMeetingNotesUrl(candidate.interviewLink || '');
+    setMeetingNotesUrl('');
     setMeetingImportStatus(null);
     setMeetingImportError(null);
-  }, [candidate.id, candidate.interviewLink]);
+  }, [candidate.id]);
 
   useEffect(() => {
     setQuestionGenerationUsage(candidate.aiUsage?.questionGeneration);
@@ -419,7 +419,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       </CardHeader>
       <CardBody className="space-y-2">
         <Input
-          placeholder="https://xxx.feishu.cn/docx/... 或 /wiki/..."
+          placeholder="请在飞书会议期间开启纪要功能，并在会议结束后找到会议文档（飞书-视频会议tab-会议entry下方），将链接拷贝到这里。"
           value={meetingNotesUrl}
           onChange={(event) => setMeetingNotesUrl(event.target.value)}
         />
@@ -445,6 +445,26 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         )}
       </CardBody>
     </Card>
+  );
+
+  const renderMissingResumeNotice = () => (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-amber-900">还没有导入候选人简历</p>
+          <p className="mt-1 text-xs text-amber-800">
+            请前往编辑候选人页面，点击“导入简历”后再回来继续生成问题或查看候选人快照。
+          </p>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => navigate(`/positions/${position.id}/candidates/${candidate.id}/edit`)}
+        >
+          {t.app.editCandidate}
+        </Button>
+      </div>
+    </div>
   );
 
   if (showPdfViewerProp && pdfData) {
@@ -552,6 +572,8 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               )}
             </div>
 
+            {isMissingResume && renderMissingResumeNotice()}
+
             <Card>
               <CardHeader>
                 <h3 className="text-sm font-medium text-gray-700">快速记录</h3>
@@ -622,6 +644,8 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
           </Button>
         )}
       </div>
+
+      {isMissingResume && renderMissingResumeNotice()}
 
       <Card>
         <CardHeader>
