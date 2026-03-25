@@ -7,6 +7,18 @@ const ORIGIN = 'https://www.wintalent.cn';
 const WINTALENT_RESUME_UNAVAILABLE_MESSAGE =
   '当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!';
 const WINTALENT_RESUME_UNAVAILABLE_KEYWORD = '当前简历已流转到其他环节或已被删除';
+const ERROR_CODES = {
+  BAD_REQUEST: 'BAD_REQUEST',
+  LINK_EXPIRED: 'LINK_EXPIRED',
+  RESUME_UNAVAILABLE: 'RESUME_UNAVAILABLE',
+  NO_ORIGINAL_RESUME_PERMISSION: 'NO_ORIGINAL_RESUME_PERMISSION',
+  JD_PERMISSION_DENIED: 'JD_PERMISSION_DENIED',
+  AUTH_REQUIRED: 'AUTH_REQUIRED',
+  PDF_FLOW_DATA_INCOMPLETE: 'PDF_FLOW_DATA_INCOMPLETE',
+  PDF_FETCH_FAILED: 'PDF_FETCH_FAILED',
+  NOT_FOUND: 'NOT_FOUND',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+};
 
 const JSON_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -413,6 +425,48 @@ function getErrorStatus(error) {
   return 500;
 }
 
+function getErrorCode(error) {
+  const message = String(error?.message || error || '');
+  const lower = message.toLowerCase();
+
+  if (message.includes('interviewUrl is required') || message.includes('Invalid JSON body')) {
+    return ERROR_CODES.BAD_REQUEST;
+  }
+  if (message.includes(WINTALENT_RESUME_UNAVAILABLE_KEYWORD)) {
+    return ERROR_CODES.RESUME_UNAVAILABLE;
+  }
+  if (message.includes('showResume') || message.includes('链接可能已失效')) {
+    return ERROR_CODES.LINK_EXPIRED;
+  }
+  if (message.includes('未拿到 postId/recruitType') || message.includes('currentResumeInfo 返回数据不完整')) {
+    return ERROR_CODES.PDF_FLOW_DATA_INCOMPLETE;
+  }
+  if (message.includes('未拿到 resumeOriginalInfoUrl') || message.includes('无原始简历权限')) {
+    return ERROR_CODES.NO_ORIGINAL_RESUME_PERMISSION;
+  }
+  if (message.includes('无职位JD权限')) {
+    return ERROR_CODES.JD_PERMISSION_DENIED;
+  }
+  if (message.includes('未拿到 createTokenUrl') || message.includes('createTokenUrl 无效')) {
+    return ERROR_CODES.AUTH_REQUIRED;
+  }
+  if (lower.includes('http 401') || lower.includes('unauthorized')) {
+    return ERROR_CODES.AUTH_REQUIRED;
+  }
+  if (message.includes('拉取 PDF 失败')) {
+    return ERROR_CODES.PDF_FETCH_FAILED;
+  }
+  return ERROR_CODES.INTERNAL_ERROR;
+}
+
+function sendProxyError(res, error) {
+  sendJson(res, getErrorStatus(error), {
+    ok: false,
+    code: getErrorCode(error),
+    error: String(error?.message || error),
+  });
+}
+
 function appendQueryParam(url, key, value) {
   const u = new URL(url);
   if (!u.searchParams.has(key)) {
@@ -443,6 +497,49 @@ function stripHtml(value) {
     .replace(/\n{2,}/g, '\n')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function stripHtmlMultiline(value) {
+  return decodeHtmlEntities(String(value || ''))
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|ul|ol|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+function extractResumeTextFromResumeDetailHtml(html) {
+  const source = String(html || '');
+  if (!source.trim()) return '';
+
+  const sections = [];
+  const itemPattern = /<div class="jlxqItem"[\s\S]*?<\/div>\s*(?=<div class="jlxqItem"|$)/gi;
+  let match;
+
+  while ((match = itemPattern.exec(source)) !== null) {
+    const block = match[0];
+    const titleMatch = block.match(/<p class="title"[^>]*>[\s\S]*?<span>([\s\S]*?)<\/span>[\s\S]*?<\/p>/i);
+    const title = stripHtmlMultiline(titleMatch?.[1] || '');
+    const blockText = stripHtmlMultiline(block);
+    if (!title || !blockText) continue;
+
+    const textWithoutTitle = blockText.startsWith(title)
+      ? blockText.slice(title.length).trim()
+      : blockText;
+    if (!textWithoutTitle) continue;
+
+    sections.push(`${title}\n${textWithoutTitle}`);
+  }
+
+  if (sections.length > 0) {
+    return sections.join('\n\n').trim();
+  }
+
+  return stripHtmlMultiline(source);
 }
 
 function normalizeWhitespace(value) {
@@ -640,7 +737,7 @@ function parseHistoricalInterviewReviewsFromHtml(evHistoryHtml) {
     : [];
 }
 
-async function resolvePdfFlow(interviewUrl, lanType = 1) {
+async function resolveBaseFlow(interviewUrl, lanType = 1) {
   const jar = new CookieJar();
 
   const entry = await requestWithJar(jar, interviewUrl, { followRedirects: 8 });
@@ -724,25 +821,6 @@ async function resolvePdfFlow(interviewUrl, lanType = 1) {
     showResumeUrl
   );
 
-  if (!detailType?.resumeOriginalInfoUrl) {
-    throw new Error('未拿到 resumeOriginalInfoUrl，可能无原始简历权限');
-  }
-
-  const resumeOriginalRaw = appendQueryParam(
-    new URL(detailType.resumeOriginalInfoUrl, ORIGIN).toString(),
-    'lanType',
-    String(lanType)
-  );
-  const resumeOriginalPath = new URL(resumeOriginalRaw).pathname + new URL(resumeOriginalRaw).search;
-
-  const tokenizedResumeOriginalUrl = await createTokenizedUrl(
-    jar,
-    createTokenUrl,
-    resumeOriginalPath,
-    showResumeUrl
-  );
-  const pdfUrl = appendQueryParam(tokenizedResumeOriginalUrl, 'showPdf', 'true');
-
   return {
     jar,
     showResumeUrl,
@@ -750,8 +828,8 @@ async function resolvePdfFlow(interviewUrl, lanType = 1) {
     currentResumeInfoUrl,
     currentResumeInfo,
     getResumeDetailTypeUrl,
-    tokenizedResumeOriginalUrl,
-    pdfUrl,
+    detailType,
+    params: p,
     metadata: {
       applyId,
       resumeId,
@@ -762,6 +840,35 @@ async function resolvePdfFlow(interviewUrl, lanType = 1) {
       originalFileName: detailType.originalFileName || null,
       encryptId: detailType.encryptId || null,
     },
+  };
+}
+
+async function resolvePdfFlow(interviewUrl, lanType = 1) {
+  const flow = await resolveBaseFlow(interviewUrl, lanType);
+
+  if (!flow.detailType?.resumeOriginalInfoUrl) {
+    throw new Error('未拿到 resumeOriginalInfoUrl，可能无原始简历权限');
+  }
+
+  const resumeOriginalRaw = appendQueryParam(
+    new URL(flow.detailType.resumeOriginalInfoUrl, ORIGIN).toString(),
+    'lanType',
+    String(lanType)
+  );
+  const resumeOriginalPath = new URL(resumeOriginalRaw).pathname + new URL(resumeOriginalRaw).search;
+
+  const tokenizedResumeOriginalUrl = await createTokenizedUrl(
+    flow.jar,
+    flow.createTokenUrl,
+    resumeOriginalPath,
+    flow.showResumeUrl
+  );
+  const pdfUrl = appendQueryParam(tokenizedResumeOriginalUrl, 'showPdf', 'true');
+
+  return {
+    ...flow,
+    tokenizedResumeOriginalUrl,
+    pdfUrl,
   };
 }
 
@@ -874,6 +981,45 @@ async function streamPdfFromFlow(flow) {
   };
 }
 
+async function resolveResumeTextFromFlow(flow) {
+  const applyId = String(flow?.metadata?.applyId || '');
+  const resumeId = String(flow?.metadata?.resumeId || '');
+  if (!applyId || !resumeId) {
+    throw new Error('未拿到 applyId/resumeId，无法获取标准简历');
+  }
+
+  const tokenizedResumeDetailInfoUrl = await createTokenizedUrl(
+    flow.jar,
+    flow.createTokenUrl,
+    '/interviewPlatform/resumeDetailInfo',
+    flow.showResumeUrl
+  );
+
+  const payload = await postFormJson(
+    flow.jar,
+    tokenizedResumeDetailInfoUrl,
+    {
+      applyId,
+      resumeId,
+      resumeType: '1',
+      isFromMessage: flow.params?.fromMessage || 'false',
+      lanType: '1',
+    },
+    flow.showResumeUrl
+  );
+
+  const text = extractResumeTextFromResumeDetailHtml(payload?.resumeDetailInfo || '');
+  if (!text) {
+    throw new Error('标准简历页面没有可提取的正文内容');
+  }
+
+  return {
+    text,
+    title: 'Wintalent 标准简历',
+    resumeId,
+  };
+}
+
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -921,7 +1067,7 @@ const server = http.createServer(async (req, res) => {
       const interviewUrl = String(body.interviewUrl || '');
       const lanType = Number(body.lanType || 1);
       if (!interviewUrl.startsWith('http')) {
-        sendJson(res, 400, { error: 'interviewUrl is required' });
+      sendJson(res, 400, { ok: false, code: ERROR_CODES.BAD_REQUEST, error: 'interviewUrl is required' });
         return;
       }
 
@@ -938,7 +1084,7 @@ const server = http.createServer(async (req, res) => {
         },
       });
     } catch (error) {
-      sendJson(res, getErrorStatus(error), { ok: false, error: String(error?.message || error) });
+      sendProxyError(res, error);
     }
     return;
   }
@@ -949,7 +1095,7 @@ const server = http.createServer(async (req, res) => {
       const interviewUrl = String(body.interviewUrl || '');
       const lanType = Number(body.lanType || 1);
       if (!interviewUrl.startsWith('http')) {
-        sendJson(res, 400, { error: 'interviewUrl is required' });
+        sendJson(res, 400, { ok: false, code: ERROR_CODES.BAD_REQUEST, error: 'interviewUrl is required' });
         return;
       }
 
@@ -966,7 +1112,7 @@ const server = http.createServer(async (req, res) => {
       });
       res.end(file.buffer);
     } catch (error) {
-      sendJson(res, getErrorStatus(error), { ok: false, error: String(error?.message || error) });
+      sendProxyError(res, error);
     }
     return;
   }
@@ -977,11 +1123,11 @@ const server = http.createServer(async (req, res) => {
       const interviewUrl = String(body.interviewUrl || '');
       const lanType = Number(body.lanType || 1);
       if (!interviewUrl.startsWith('http')) {
-        sendJson(res, 400, { error: 'interviewUrl is required' });
+        sendJson(res, 400, { ok: false, code: ERROR_CODES.BAD_REQUEST, error: 'interviewUrl is required' });
         return;
       }
 
-      const flow = await resolvePdfFlow(interviewUrl, lanType);
+      const flow = await resolveBaseFlow(interviewUrl, lanType);
       const jdResult = await resolveJdFromFlow(flow);
 
       sendJson(res, 200, {
@@ -995,7 +1141,7 @@ const server = http.createServer(async (req, res) => {
         },
       });
     } catch (error) {
-      sendJson(res, getErrorStatus(error), { ok: false, error: String(error?.message || error) });
+      sendProxyError(res, error);
     }
     return;
   }
@@ -1006,11 +1152,11 @@ const server = http.createServer(async (req, res) => {
       const interviewUrl = String(body.interviewUrl || '');
       const lanType = Number(body.lanType || 1);
       if (!interviewUrl.startsWith('http')) {
-        sendJson(res, 400, { error: 'interviewUrl is required' });
+        sendJson(res, 400, { ok: false, code: ERROR_CODES.BAD_REQUEST, error: 'interviewUrl is required' });
         return;
       }
 
-      const flow = await resolvePdfFlow(interviewUrl, lanType);
+      const flow = await resolveBaseFlow(interviewUrl, lanType);
       const candidateData = resolveCandidateDataFromFlow(flow);
 
       sendJson(res, 200, {
@@ -1019,12 +1165,39 @@ const server = http.createServer(async (req, res) => {
         metadata: flow.metadata,
       });
     } catch (error) {
-      sendJson(res, getErrorStatus(error), { ok: false, error: String(error?.message || error) });
+      sendProxyError(res, error);
     }
     return;
   }
 
-  sendJson(res, 404, { error: 'Not found' });
+  if (req.method === 'POST' && path === '/api/wintalent/resume-text') {
+    try {
+      const body = await readJsonBody(req);
+      const interviewUrl = String(body.interviewUrl || '');
+      const lanType = Number(body.lanType || 1);
+      if (!interviewUrl.startsWith('http')) {
+        sendJson(res, 400, { ok: false, code: ERROR_CODES.BAD_REQUEST, error: 'interviewUrl is required' });
+        return;
+      }
+
+      const flow = await resolveBaseFlow(interviewUrl, lanType);
+      const resumeText = await resolveResumeTextFromFlow(flow);
+
+      sendJson(res, 200, {
+        ok: true,
+        text: resumeText.text,
+        title: resumeText.title,
+        source: 'html',
+        resumeId: resumeText.resumeId,
+        metadata: flow.metadata,
+      });
+    } catch (error) {
+      sendProxyError(res, error);
+    }
+    return;
+  }
+
+  sendJson(res, 404, { ok: false, code: ERROR_CODES.NOT_FOUND, error: 'Not found' });
 });
 
 server.listen(PORT, HOST, () => {
@@ -1035,4 +1208,5 @@ server.listen(PORT, HOST, () => {
   console.log('  POST /api/wintalent/download');
   console.log('  POST /api/wintalent/jd');
   console.log('  POST /api/wintalent/candidate');
+  console.log('  POST /api/wintalent/resume-text');
 });

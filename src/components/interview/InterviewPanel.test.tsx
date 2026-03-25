@@ -10,9 +10,14 @@ import type { Candidate, Position } from '@/types';
 const {
   extractInterviewNotesInsightsMock,
   getFeishuDocRawContentFromLinkMock,
+  getPDFMock,
 } = vi.hoisted(() => ({
   extractInterviewNotesInsightsMock: vi.fn(),
   getFeishuDocRawContentFromLinkMock: vi.fn(),
+  getPDFMock: vi.fn(async () => ({
+    data: new ArrayBuffer(8),
+    filename: 'resume.pdf',
+  })),
 }));
 
 vi.mock('@/hooks/useAI', () => ({
@@ -28,10 +33,7 @@ vi.mock('@/api/feishu', () => ({
 }));
 
 vi.mock('@/utils/pdfStorage', () => ({
-  getPDF: vi.fn(async () => ({
-    data: new ArrayBuffer(8),
-    filename: 'resume.pdf',
-  })),
+  getPDF: getPDFMock,
 }));
 
 vi.mock('@/components/ui/PDFViewer', () => ({
@@ -67,6 +69,11 @@ describe('InterviewPanel', () => {
     localStorage.clear();
     extractInterviewNotesInsightsMock.mockReset();
     getFeishuDocRawContentFromLinkMock.mockReset();
+    getPDFMock.mockReset();
+    getPDFMock.mockResolvedValue({
+      data: new ArrayBuffer(8),
+      filename: 'resume.pdf',
+    });
     usePositionStore.setState({
       positions: [],
       currentUserId: null,
@@ -104,6 +111,24 @@ describe('InterviewPanel', () => {
     await waitFor(() => {
       expect(screen.queryByText('候选人亮点摘要')).not.toBeInTheDocument();
     });
+  });
+
+  it('shows Wintalent HTML resume text instead of PDF when resumeViewerMode is html', async () => {
+    const candidate = buildCandidate();
+    candidate.resumeViewerMode = 'html';
+    candidate.resumeRawText = '自我评价\n工作经历';
+    const position = buildPosition(candidate);
+
+    render(
+      <MemoryRouter>
+        <InterviewPanel position={position} candidate={candidate} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('当前候选人没有原始 PDF 简历，正在展示 Wintalent 标准简历文本。')).toBeInTheDocument();
+    expect(screen.getByText('简历文本')).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === '自我评价\n工作经历')).toBeInTheDocument();
+    expect(screen.queryByTestId('pdf-viewer')).not.toBeInTheDocument();
   });
 
   it('creates a new question when meeting notes reveal an uncovered angle', async () => {
@@ -155,7 +180,7 @@ describe('InterviewPanel', () => {
     );
 
     fireEvent.change(
-      screen.getByPlaceholderText('https://xxx.feishu.cn/docx/... 或 /wiki/...'),
+      screen.getByPlaceholderText(/请在飞书会议期间开启纪要功能/),
       { target: { value: 'https://example.feishu.cn/docx/abc123' } }
     );
     fireEvent.click(screen.getByRole('button', { name: '从纪要提取问答' }));

@@ -4,9 +4,9 @@ import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { usePDFParser } from '@/hooks/usePDFParser';
 import { useResumeProcessor } from '@/hooks/useResumeProcessor';
-import { storePDF } from '@/utils/pdfStorage';
+import { deletePDF, storePDF } from '@/utils/pdfStorage';
 import { debugDownloadPDFPageAsImage } from '@/api/pdf';
-import { downloadWintalentResumePDF, fetchWintalentCandidateData } from '@/api/wintalent';
+import { downloadWintalentResumePDF, fetchWintalentCandidateData, fetchWintalentResumeText } from '@/api/wintalent';
 import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea } from '@/components/ui';
 import { ResumeHighlightsPanel } from './ResumeHighlightsPanel';
 import { HistoricalInterviewReviewsPanel } from './HistoricalInterviewReviewsPanel';
@@ -57,6 +57,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   );
   const [resumeText, setResumeText] = useState(initialResumeText);
   const [resumeRawText, setResumeRawText] = useState(initialResumeRawText);
+  const [resumeViewerMode, setResumeViewerMode] = useState<Candidate['resumeViewerMode']>(candidate?.resumeViewerMode);
   const [resumeHighlights, setResumeHighlights] = useState(candidate?.resumeHighlights || emptyResumeHighlights());
   const [historicalInterviewReviews, setHistoricalInterviewReviews] = useState(
     candidate?.historicalInterviewReviews || []
@@ -143,6 +144,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     setWintalentLink(candidate?.candidateLink?.includes('wintalent.cn') ? candidate.candidateLink : '');
     setResumeText(candidate ? getPreferredResumeText(candidate) : '');
     setResumeRawText(candidate ? getRawResumeText(candidate) : '');
+    setResumeViewerMode(candidate?.resumeViewerMode);
     setResumeHighlights(candidate?.resumeHighlights || emptyResumeHighlights());
     setHistoricalInterviewReviews(candidate?.historicalInterviewReviews || []);
     setResumeOCRUsage(candidate?.aiUsage?.resumeOCR);
@@ -160,6 +162,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const buildCandidateData = useCallback(() => ({
     name,
     resumeUrl,
+    resumeViewerMode,
     resumeText,
     resumeRawText: resumeRawText || resumeText,
     resumeMarkdown: resumeText,
@@ -188,6 +191,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     resumeRawText,
     resumeText,
     resumeUrl,
+    resumeViewerMode,
     wintalentLink,
   ]);
 
@@ -275,6 +279,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
         return;
       }
       setResumeFilename(file.name);
+      setResumeViewerMode('pdf');
       setPendingPdfFile(file); // Store for later IndexedDB save
       setNeedsPdfPersist(true);
 
@@ -313,6 +318,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const handleUrlParse = async () => {
     if (resumeUrl) {
       const startedAt = Date.now();
+      setResumeViewerMode('pdf');
       // Use AI parsing if enabled and available, otherwise standard
       const result = await parseFromUrl(resumeUrl, useAIParsing && canUseAI, { maxPages: 5 });
       setResumeOCRUsage(result.usage);
@@ -355,45 +361,83 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
 
     try {
       const startedAt = Date.now();
-      const [{ blob, filename }, candidateData] = await Promise.all([
-        downloadWintalentResumePDF(link),
-        fetchWintalentCandidateData(link).catch(() => ({ historicalInterviewReviews: [] })),
-      ]);
-      const pdfFile = new File([blob], filename, {
-        type: blob.type || 'application/pdf',
-      });
-
-      setResumeFilename(pdfFile.name);
-      setPendingPdfFile(pdfFile);
-      setNeedsPdfPersist(true);
       setResumeUrl(link);
-      setHistoricalInterviewReviews(candidateData.historicalInterviewReviews || []);
+      const candidateDataPromise = fetchWintalentCandidateData(link).catch(() => ({ historicalInterviewReviews: [] }));
 
-      const result = await parseFromFile(pdfFile, useAIParsing && canUseAI, { maxPages: 5 });
-      setResumeOCRUsage(result.usage);
-      if (result.text) {
-        const processed = await applyProcessedResume(result.text);
-        const combinedUsage = mergeUsage(result.usage, processed.usage);
+      try {
+        const { blob, filename } = await downloadWintalentResumePDF(link);
+        const candidateData = await candidateDataPromise;
+        const pdfFile = new File([blob], filename, {
+          type: blob.type || 'application/pdf',
+        });
+
+        setResumeFilename(pdfFile.name);
+        setResumeViewerMode('pdf');
+        setPendingPdfFile(pdfFile);
+        setNeedsPdfPersist(true);
+        setHistoricalInterviewReviews(candidateData.historicalInterviewReviews || []);
+
+        const result = await parseFromFile(pdfFile, useAIParsing && canUseAI, { maxPages: 5 });
+        setResumeOCRUsage(result.usage);
+        if (result.text) {
+          const processed = await applyProcessedResume(result.text);
+          const combinedUsage = mergeUsage(result.usage, processed.usage);
+          trackEvent({
+            eventName: 'resume_import_succeeded',
+            feature: 'resume_import',
+            success: true,
+            durationMs: Date.now() - startedAt,
+            model: canUseAI && useAIParsing ? aiModel : undefined,
+            ...usageFromAIUsage(combinedUsage),
+            details: {
+              method: 'wintalent',
+              source: 'pdf',
+            },
+          });
+        } else {
+          trackEvent({
+            eventName: 'resume_import_failed',
+            feature: 'resume_import',
+            success: false,
+            durationMs: Date.now() - startedAt,
+            errorCode: pdfError || resumeProcessingError || 'empty_resume_text',
+            details: {
+              method: 'wintalent',
+              source: 'pdf',
+            },
+          });
+        }
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '从 Wintalent 导入简历失败';
+        if (!message.includes('原始简历查看权限')) {
+          throw error;
+        }
+
+        const [resumeData, candidateData] = await Promise.all([
+          fetchWintalentResumeText(link),
+          candidateDataPromise,
+        ]);
+        if (persistedCandidateIdRef.current) {
+          await deletePDF(persistedCandidateIdRef.current).catch(() => undefined);
+        }
+        setResumeFilename(resumeData.title || 'Wintalent 标准简历');
+        setResumeViewerMode('html');
+        setPendingPdfFile(null);
+        setNeedsPdfPersist(false);
+        setResumeOCRUsage(undefined);
+        setHistoricalInterviewReviews(candidateData.historicalInterviewReviews || []);
+        const processed = await applyProcessedResume(resumeData.text);
         trackEvent({
           eventName: 'resume_import_succeeded',
           feature: 'resume_import',
           success: true,
           durationMs: Date.now() - startedAt,
-          model: canUseAI && useAIParsing ? aiModel : undefined,
-          ...usageFromAIUsage(combinedUsage),
+          model: aiModel,
+          ...usageFromAIUsage(processed.usage),
           details: {
             method: 'wintalent',
-          },
-        });
-      } else {
-        trackEvent({
-          eventName: 'resume_import_failed',
-          feature: 'resume_import',
-          success: false,
-          durationMs: Date.now() - startedAt,
-          errorCode: pdfError || resumeProcessingError || 'empty_resume_text',
-          details: {
-            method: 'wintalent',
+            source: 'html',
           },
         });
       }
@@ -693,7 +737,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
             {(resumeRawText || resumeText) && (
               <details className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
                 <summary className="cursor-pointer text-xs font-medium text-gray-600">
-                  原始提取文本
+                  {resumeViewerMode === 'html' ? '原始 HTML 提取文本' : '原始提取文本'}
                 </summary>
                 <Textarea
                   value={resumeRawText}

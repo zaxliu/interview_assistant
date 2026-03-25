@@ -6,9 +6,11 @@ import { usePositionStore } from '@/store/positionStore';
 const parseFromFile = vi.fn();
 const parseFromUrl = vi.fn();
 const processResume = vi.fn();
-const { downloadWintalentResumePDF, fetchWintalentCandidateData } = vi.hoisted(() => ({
+const { downloadWintalentResumePDF, fetchWintalentCandidateData, fetchWintalentResumeText, deletePDF } = vi.hoisted(() => ({
   downloadWintalentResumePDF: vi.fn(),
   fetchWintalentCandidateData: vi.fn(),
+  fetchWintalentResumeText: vi.fn(),
+  deletePDF: vi.fn(),
 }));
 
 vi.mock('@/hooks/usePDFParser', () => ({
@@ -32,6 +34,7 @@ vi.mock('@/hooks/useResumeProcessor', () => ({
 
 vi.mock('@/utils/pdfStorage', () => ({
   storePDF: vi.fn(),
+  deletePDF,
 }));
 
 vi.mock('@/api/pdf', () => ({
@@ -41,12 +44,19 @@ vi.mock('@/api/pdf', () => ({
 vi.mock('@/api/wintalent', () => ({
   downloadWintalentResumePDF,
   fetchWintalentCandidateData,
+  fetchWintalentResumeText,
 }));
 
 describe('CandidateForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchWintalentCandidateData.mockResolvedValue({ historicalInterviewReviews: [] });
+    fetchWintalentResumeText.mockResolvedValue({
+      text: 'HTML resume text',
+      resumeId: '3540827',
+      source: 'html',
+      title: 'Wintalent 标准简历',
+    });
     processResume.mockResolvedValue({
       markdown: 'Normalized resume',
       highlights: {
@@ -278,6 +288,38 @@ describe('CandidateForm', () => {
       expect(screen.getByText('有过系统设计考察，结果较好。')).toBeInTheDocument();
       expect(screen.getByText(/AI OCR Token/)).toBeInTheDocument();
       expect(screen.getByText(/AI 简历整理 Token/)).toBeInTheDocument();
+    });
+  });
+
+  it('falls back to standard Wintalent resume text when original PDF is unavailable', async () => {
+    downloadWintalentResumePDF.mockRejectedValue(
+      new Error('当前链接没有原始简历查看权限，暂时无法一键导入，请在 Wintalent 中确认该候选人是否支持查看原始简历。')
+    );
+    fetchWintalentResumeText.mockResolvedValue({
+      text: '自我评价\n工作经历',
+      resumeId: '3540827',
+      source: 'html',
+      title: 'Wintalent 标准简历',
+    });
+
+    render(<CandidateForm positionId="position-1" onSave={() => undefined} onCancel={() => undefined} />);
+
+    fireEvent.change(screen.getByPlaceholderText('粘贴 Wintalent 面试链接，一键导入'), {
+      target: { value: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '导入' }));
+
+    await waitFor(() => {
+      expect(downloadWintalentResumePDF).toHaveBeenCalledWith(
+        'https://www.wintalent.cn/wt/Horizon/kurl?k=abc'
+      );
+      expect(fetchWintalentResumeText).toHaveBeenCalledWith(
+        'https://www.wintalent.cn/wt/Horizon/kurl?k=abc'
+      );
+      expect(parseFromFile).not.toHaveBeenCalled();
+      expect(processResume).toHaveBeenCalledWith('自我评价\n工作经历');
+      expect(screen.getByText(/Wintalent 标准简历/)).toBeInTheDocument();
+      expect(screen.getByText('原始 HTML 提取文本')).toBeInTheDocument();
     });
   });
 });

@@ -1,11 +1,55 @@
 const WINTALENT_DOWNLOAD_API = '/api/wintalent/download';
 const WINTALENT_JD_API = '/api/wintalent/jd';
 const WINTALENT_CANDIDATE_API = '/api/wintalent/candidate';
+const WINTALENT_RESUME_TEXT_API = '/api/wintalent/resume-text';
 const WINTALENT_PROXY_OFFLINE_MESSAGE =
   'Wintalent 代理服务不可用，请先运行 `npm run proxy:wintalent`（或直接使用 `npm run dev` / `npm start`）。';
 const WINTALENT_RESUME_UNAVAILABLE_MESSAGE =
   '当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!';
 const WINTALENT_RESUME_UNAVAILABLE_KEYWORD = '当前简历已流转到其他环节或已被删除';
+const WINTALENT_NO_ORIGINAL_RESUME_PERMISSION_MESSAGE =
+  '当前链接没有原始简历查看权限，暂时无法一键导入，请在 Wintalent 中确认该候选人是否支持查看原始简历。';
+const WINTALENT_LINK_EXPIRED_MESSAGE = 'Wintalent 链接可能已失效，请重新进入面试链接后再试。';
+const WINTALENT_AUTH_REQUIRED_MESSAGE = 'Wintalent 授权状态已失效，请重新打开新的面试链接后再试。';
+
+type WintalentErrorCode =
+  | 'BAD_REQUEST'
+  | 'LINK_EXPIRED'
+  | 'RESUME_UNAVAILABLE'
+  | 'NO_ORIGINAL_RESUME_PERMISSION'
+  | 'JD_PERMISSION_DENIED'
+  | 'AUTH_REQUIRED'
+  | 'PDF_FLOW_DATA_INCOMPLETE'
+  | 'PDF_FETCH_FAILED'
+  | 'NOT_FOUND'
+  | 'INTERNAL_ERROR';
+
+const mapWintalentErrorCode = (code: WintalentErrorCode | string | undefined): string | null => {
+  switch (code) {
+    case 'RESUME_UNAVAILABLE':
+      return WINTALENT_RESUME_UNAVAILABLE_MESSAGE;
+    case 'NO_ORIGINAL_RESUME_PERMISSION':
+      return WINTALENT_NO_ORIGINAL_RESUME_PERMISSION_MESSAGE;
+    case 'LINK_EXPIRED':
+      return WINTALENT_LINK_EXPIRED_MESSAGE;
+    case 'AUTH_REQUIRED':
+      return WINTALENT_AUTH_REQUIRED_MESSAGE;
+    default:
+      return null;
+  }
+};
+
+const extractNoOriginalResumePermissionMessage = (text: string): string | null => {
+  if (!text) return null;
+  const normalized = text.replace(/\s+/g, '');
+  if (normalized.includes('未拿到resumeOriginalInfoUrl')) {
+    return WINTALENT_NO_ORIGINAL_RESUME_PERMISSION_MESSAGE;
+  }
+  if (normalized.includes('无原始简历权限')) {
+    return WINTALENT_NO_ORIGINAL_RESUME_PERMISSION_MESSAGE;
+  }
+  return null;
+};
 
 const extractResumeUnavailableMessage = (text: string): string | null => {
   if (!text) return null;
@@ -53,12 +97,24 @@ const parseErrorMessage = async (response: Response): Promise<string> => {
   if (resumeUnavailableMessage) {
     return resumeUnavailableMessage;
   }
+  const noOriginalResumePermissionMessage = extractNoOriginalResumePermissionMessage(text);
+  if (noOriginalResumePermissionMessage) {
+    return noOriginalResumePermissionMessage;
+  }
   try {
-    const json = JSON.parse(text) as { error?: string };
+    const json = JSON.parse(text) as { error?: string; code?: WintalentErrorCode | string };
+    const codeMessage = mapWintalentErrorCode(json.code);
+    if (codeMessage) {
+      return codeMessage;
+    }
     if (json.error) {
       const nestedResumeUnavailableMessage = extractResumeUnavailableMessage(json.error);
       if (nestedResumeUnavailableMessage) {
         return nestedResumeUnavailableMessage;
+      }
+      const nestedNoOriginalResumePermissionMessage = extractNoOriginalResumePermissionMessage(json.error);
+      if (nestedNoOriginalResumePermissionMessage) {
+        return nestedNoOriginalResumePermissionMessage;
       }
       if (isWintalentProxyUnavailableMessage(json.error)) {
         return WINTALENT_PROXY_OFFLINE_MESSAGE;
@@ -90,6 +146,10 @@ const toNetworkErrorMessage = (error: unknown): string => {
   const resumeUnavailableMessage = extractResumeUnavailableMessage(message);
   if (resumeUnavailableMessage) {
     return resumeUnavailableMessage;
+  }
+  const noOriginalResumePermissionMessage = extractNoOriginalResumePermissionMessage(message);
+  if (noOriginalResumePermissionMessage) {
+    return noOriginalResumePermissionMessage;
   }
   if (isWintalentProxyUnavailableMessage(message) || message.toLowerCase().includes('failed to fetch')) {
     return WINTALENT_PROXY_OFFLINE_MESSAGE;
@@ -127,6 +187,13 @@ export interface WintalentJDData {
 
 export interface WintalentCandidateData {
   historicalInterviewReviews: WintalentHistoricalInterviewReview[];
+}
+
+export interface WintalentResumeTextData {
+  text: string;
+  resumeId: string | null;
+  source: 'html';
+  title?: string;
 }
 
 const normalizeJdText = (value: string | undefined): string => {
@@ -199,6 +266,10 @@ export const downloadWintalentResumePDF = async (interviewUrl: string): Promise<
     const resumeUnavailableMessage = extractResumeUnavailableMessage(nonPdfText);
     if (resumeUnavailableMessage) {
       throw new Error(resumeUnavailableMessage);
+    }
+    const noOriginalResumePermissionMessage = extractNoOriginalResumePermissionMessage(nonPdfText);
+    if (noOriginalResumePermissionMessage) {
+      throw new Error(noOriginalResumePermissionMessage);
     }
     throw new Error(`返回内容类型异常：${contentType || '未知'}`);
   }
@@ -280,5 +351,48 @@ export const fetchWintalentCandidateData = async (interviewUrl: string): Promise
     historicalInterviewReviews: Array.isArray(payload.historicalInterviewReviews)
       ? payload.historicalInterviewReviews
       : [],
+  };
+};
+
+export const fetchWintalentResumeText = async (interviewUrl: string): Promise<WintalentResumeTextData> => {
+  const normalized = interviewUrl.trim();
+  if (!normalized) {
+    throw new Error('请输入 Wintalent 面试链接');
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(WINTALENT_RESUME_TEXT_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ interviewUrl: normalized }),
+    });
+  } catch (error) {
+    throw new Error(toNetworkErrorMessage(error));
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  const payload = (await response.json()) as {
+    ok?: boolean;
+    error?: string;
+    text?: string;
+    resumeId?: string | null;
+    source?: 'html';
+    title?: string;
+  };
+  if (!payload?.ok || !payload.text?.trim()) {
+    throw new Error(payload?.error || '获取标准简历文本失败');
+  }
+
+  return {
+    text: payload.text,
+    resumeId: payload.resumeId ?? null,
+    source: payload.source || 'html',
+    title: payload.title,
   };
 };

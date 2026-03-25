@@ -103,6 +103,12 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
 
   useEffect(() => {
     const loadPdf = async () => {
+      if (candidate.resumeViewerMode === 'html') {
+        setPdfData(null);
+        setPdfFilename('');
+        setHasPdf(false);
+        return;
+      }
       try {
         const pdf = await getPDF(candidate.id);
         if (pdf) {
@@ -118,7 +124,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       }
     };
     loadPdf();
-  }, [candidate.id, setHasPdf]);
+  }, [candidate.id, candidate.resumeViewerMode, setHasPdf]);
 
   useEffect(() => {
     setQuickNotesDraft(candidate.quickNotes || '');
@@ -396,7 +402,9 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   };
 
   const preferredResumeText = getPreferredResumeText(candidate);
+  const preferredResumeViewerText = candidate.resumeRawText?.trim() || preferredResumeText;
   const isMissingResume = !preferredResumeText;
+  const shouldShowResumeTextPane = showPdfViewerProp && candidate.resumeViewerMode === 'html' && !!preferredResumeViewerText;
   const canGenerateQuestions = position.description && preferredResumeText;
   const hasInterviewLink = Boolean(candidate.interviewLink);
   const missingRequirements = [
@@ -513,6 +521,173 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
             filename={pdfFilename}
             onPageSelect={handlePdfTextSelect}
           />
+          <div className="pointer-events-none absolute left-3 top-[60px] z-10 max-w-[min(360px,calc(100%-24px))]">
+            <div
+              className={`pointer-events-auto transition-all duration-200 ${
+                isSnapshotOpen
+                  ? 'translate-x-0 opacity-100'
+                  : '-translate-x-3 opacity-0'
+              }`}
+            >
+              {isSnapshotOpen && (
+                <div
+                  ref={snapshotPanelRef}
+                  className="w-[320px] max-w-full space-y-2 rounded-xl border border-gray-200 bg-white/95 p-1 shadow-lg backdrop-blur"
+                >
+                  <ResumeHighlightsPanel
+                    highlights={candidate.resumeHighlights}
+                    title="候选人快照"
+                    emptyText="暂无提取亮点。"
+                    compact
+                  />
+                  <HistoricalInterviewReviewsPanel
+                    reviews={candidate.historicalInterviewReviews}
+                    title="历史面评"
+                    emptyText="暂无历史面评。"
+                    compact
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div
+          className={`w-1 flex-shrink-0 cursor-col-resize transition-colors ${
+            isDragging ? 'bg-blue-500' : 'bg-gray-200 hover:bg-blue-400'
+          }`}
+          onMouseDown={handleMouseDown}
+        />
+
+        <div
+          style={{ width: `${(1 - interviewSplitRatio) * 100}%` }}
+          className="min-w-[300px] overflow-auto"
+        >
+          <div className="space-y-4 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
+                <p className="text-xs text-gray-500">{position.title}</p>
+              </div>
+              {isMissingResume && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate(`/positions/${position.id}/candidates/${candidate.id}/edit`)}
+                >
+                  {t.app.editCandidate}
+                </Button>
+              )}
+            </div>
+
+            {isMissingResume && renderMissingResumeNotice()}
+
+            <Card>
+              <CardHeader>
+                <h3 className="text-sm font-medium text-gray-700">快速记录</h3>
+              </CardHeader>
+              <CardBody>
+                <Textarea
+                  placeholder="记录面试中的即时观察..."
+                  value={quickNotesDraft}
+                  onChange={(e) => handleQuickNotesChange(e.target.value)}
+                  autoResize
+                  className="text-sm"
+                />
+              </CardBody>
+            </Card>
+
+            {renderMeetingNotesImporter()}
+
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={handleGenerateQuestions}
+                  isLoading={aiLoading}
+                  disabled={!canGenerateQuestions || aiLoading}
+                  title={generateQuestionsHint || ''}
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  生成面试问题
+                </Button>
+                <AddQuestionForm positionId={position.id} candidateId={candidate.id} />
+              </div>
+              {generateQuestionsHint && (
+                <p className="text-xs text-amber-700">{generateQuestionsHint}</p>
+              )}
+              {renderUsage(questionGenerationUsage, 'AI 问题生成 Token')}
+              {renderUsage(meetingNotesUsage, 'AI 纪要提取 Token')}
+            </div>
+
+            <QuestionList
+              positionId={position.id}
+              candidateId={candidate.id}
+              questions={candidate.questions}
+              onQuestionClick={setActiveQuestionId}
+              activeQuestionId={activeQuestionId}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (shouldShowResumeTextPane) {
+    return (
+      <div ref={containerRef} className="flex h-[calc(100vh-120px)] w-full">
+        <div
+          style={{ width: `${interviewSplitRatio * 100}%` }}
+          className="relative min-w-[300px] bg-white"
+        >
+          <div className="border-b bg-gray-50 px-3 py-2">
+            <div className="flex items-stretch gap-2">
+              {hasInterviewLink && (
+                <div className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-3 py-2 shadow-sm">
+                  <p className="text-xs font-medium text-gray-700">面试链接</p>
+                  {candidate.interviewLink && (
+                    <a
+                      href={candidate.interviewLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 block break-all text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      {candidate.interviewLink}
+                    </a>
+                  )}
+                </div>
+              )}
+              <button
+                type="button"
+                ref={snapshotButtonRef}
+                onClick={() => setIsSnapshotOpen((open) => !open)}
+                className="flex flex-1 items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-sm text-gray-700 shadow-sm hover:bg-gray-50"
+              >
+                <div>
+                  <p className="font-medium">候选人快照</p>
+                  <p className="text-xs text-gray-500">
+                    {isSnapshotOpen ? '收起亮点与摘要' : '展开亮点与摘要'}
+                  </p>
+                </div>
+                <span className={`text-xs text-gray-400 transition-transform ${isSnapshotOpen ? 'rotate-180' : ''}`}>▾</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="h-[calc(100%-61px)] overflow-auto px-4 py-4">
+            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              当前候选人没有原始 PDF 简历，正在展示 Wintalent 标准简历文本。
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+              <p className="mb-3 text-sm font-medium text-gray-700">简历文本</p>
+              <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-800">
+                {preferredResumeViewerText}
+              </pre>
+            </div>
+          </div>
+
           <div className="pointer-events-none absolute left-3 top-[60px] z-10 max-w-[min(360px,calc(100%-24px))]">
             <div
               className={`pointer-events-auto transition-all duration-200 ${

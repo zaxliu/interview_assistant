@@ -4,6 +4,7 @@ import {
   downloadWintalentResumePDF,
   fetchWintalentCandidateData,
   fetchWintalentPositionJD,
+  fetchWintalentResumeText,
   isWintalentInterviewLink,
 } from './wintalent';
 
@@ -87,6 +88,52 @@ describe('downloadWintalentResumePDF', () => {
     await expect(
       downloadWintalentResumePDF('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
     ).rejects.toThrow('当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!');
+  });
+
+  it('maps missing original resume permission to a user-facing hint', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ok: false,
+            code: 'NO_ORIGINAL_RESUME_PERMISSION',
+            error: '未拿到 resumeOriginalInfoUrl，可能无原始简历权限',
+          }),
+          {
+          status: 403,
+          headers: { 'content-type': 'application/json' },
+          }
+        )
+      )
+    );
+
+    await expect(
+      downloadWintalentResumePDF('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
+    ).rejects.toThrow('当前链接没有原始简历查看权限，暂时无法一键导入');
+  });
+
+  it('maps structured link-expired code to a user-facing hint', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ok: false,
+            code: 'LINK_EXPIRED',
+            error: 'showResume 链接可能已失效',
+          }),
+          {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          }
+        )
+      )
+    );
+
+    await expect(
+      downloadWintalentResumePDF('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
+    ).rejects.toThrow('Wintalent 链接可能已失效，请重新进入面试链接后再试。');
   });
 
   it('extracts resume-unavailable hint from non-pdf success payload', async () => {
@@ -204,6 +251,45 @@ describe('fetchWintalentCandidateData', () => {
     expect(result.historicalInterviewReviews[0]).toMatchObject({
       stageName: '一面',
       result: '通过',
+    });
+  });
+});
+
+describe('fetchWintalentResumeText', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns standard resume text payload on success', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            text: '自我评价\n工作经历',
+            resumeId: '3540827',
+            source: 'html',
+            title: 'Wintalent 标准简历',
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }
+        )
+      )
+    );
+
+    const result = await fetchWintalentResumeText('https://www.wintalent.cn/wt/Horizon/kurl?k=abc');
+    expect(result).toMatchObject({
+      text: '自我评价\n工作经历',
+      resumeId: '3540827',
+      source: 'html',
+      title: 'Wintalent 标准简历',
     });
   });
 });

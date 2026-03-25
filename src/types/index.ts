@@ -74,6 +74,7 @@ export interface Candidate {
   name: string;
   resumeText?: string;
   resumeRawText?: string;
+  resumeViewerMode?: 'pdf' | 'html';
   resumeMarkdown?: string;
   resumeHighlights?: ResumeHighlights;
   historicalInterviewReviews?: HistoricalInterviewReview[];
