@@ -3,6 +3,7 @@ import { extractMeetingNotesInsights, generateQuestions, generateSummary } from 
 import { useSettingsStore } from '@/store/settingsStore';
 import type { Question, InterviewResult, CodingChallenge, HistoricalInterviewReview } from '@/types';
 import type { AIResultWithUsage, MeetingNotesExtractionResult } from '@/api/ai';
+import { reportError } from '@/lib/analytics';
 
 export const useAI = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -34,7 +35,30 @@ export const useAI = () => {
           historicalInterviewReviews
         );
       } catch (err) {
-        setError(err instanceof Error ? err.message : '生成面试问题失败');
+        const message = err instanceof Error ? err.message : '生成面试问题失败';
+        setError(message);
+        reportError({
+          error: err,
+          feature: 'question_generation',
+          errorCategory: 'ai',
+          model: aiModel,
+          requestContext: {
+            endpoint: '/api/ai/chat/completions',
+            method: 'POST',
+            provider: 'openai-compatible',
+            model: aiModel,
+            operation: 'generate_questions',
+          },
+          reproContext: {
+            route: window.location.pathname,
+          },
+          inputSnapshot: {
+            criteriaCount: criteria.length,
+            hasJobDescription: Boolean(jobDescription.trim()),
+            resumeLength: resumeText.length,
+            historicalReviewCount: historicalInterviewReviews?.length || 0,
+          },
+        });
         return { data: [] };
       } finally {
         setIsLoading(false);
@@ -75,7 +99,32 @@ export const useAI = () => {
           codingChallenges
         );
       } catch (err) {
-        setError(err instanceof Error ? err.message : '生成面试总结失败');
+        const message = err instanceof Error ? err.message : '生成面试总结失败';
+        setError(message);
+        reportError({
+          error: err,
+          feature: 'summary_generation',
+          errorCategory: 'ai',
+          model: aiModel,
+          requestContext: {
+            endpoint: '/api/ai/chat/completions',
+            method: 'POST',
+            provider: 'openai-compatible',
+            model: aiModel,
+            operation: 'generate_summary',
+          },
+          reproContext: {
+            route: window.location.pathname,
+          },
+          inputSnapshot: {
+            candidateName,
+            positionTitle,
+            questionCount: questions.length,
+            askedQuestionCount: questions.filter((question) => question.status === 'asked').length,
+            hasMeetingNotesContext: Boolean(meetingNotesContext?.trim()),
+            codingChallengeCount: codingChallenges?.length || 0,
+          },
+        });
         return null;
       } finally {
         setIsLoading(false);
@@ -104,7 +153,28 @@ export const useAI = () => {
           meetingNotesContent
         );
       } catch (err) {
-        setError(err instanceof Error ? err.message : '提取会议纪要洞察失败');
+        const message = err instanceof Error ? err.message : '提取会议纪要洞察失败';
+        setError(message);
+        reportError({
+          error: err,
+          feature: 'meeting_notes_extraction',
+          errorCategory: 'ai',
+          model: aiModel,
+          requestContext: {
+            endpoint: '/api/ai/chat/completions',
+            method: 'POST',
+            provider: 'openai-compatible',
+            model: aiModel,
+            operation: 'extract_meeting_notes',
+          },
+          reproContext: {
+            route: window.location.pathname,
+          },
+          inputSnapshot: {
+            questionCount: existingQuestions.length,
+            meetingNotesLength: meetingNotesContent.length,
+          },
+        });
         return { data: { matchedAnswers: [], newQAs: [] } };
       } finally {
         setIsLoading(false);

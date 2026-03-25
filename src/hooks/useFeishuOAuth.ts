@@ -12,7 +12,7 @@ import {
   normalizeFeishuOAuthReturnTo,
   parseFeishuOAuthReturnTo,
 } from '@/utils/feishuOAuth';
-import { trackEvent } from '@/lib/analytics';
+import { reportError, trackEvent } from '@/lib/analytics';
 
 // Track processed OAuth codes to prevent duplicate processing
 const processedCodes = new Set<string>();
@@ -89,6 +89,25 @@ export const useFeishuOAuth = () => {
         if (message.includes('Failed to fetch') || message.includes('Network error')) {
           message = '网络错误：无法连接飞书 API，请检查网络连接。';
         }
+        reportError({
+          error,
+          feature: 'feishu_oauth',
+          errorCategory: 'feishu',
+          eventName: 'feishu_login_failed',
+          requestContext: {
+            endpoint: '/api/feishu/authen/v2/oauth/token',
+            method: 'POST',
+            provider: 'feishu',
+            operation: 'oauth_exchange_code',
+          },
+          reproContext: {
+            route: window.location.pathname,
+            hasFeishuAuth: Boolean(feishuUserAccessToken),
+          },
+          inputSnapshot: {
+            returnTo,
+          },
+        });
         alert(`飞书 OAuth 失败：${message}`);
         if (returnTo === window.location.pathname) {
           window.history.replaceState({}, '', returnTo);
@@ -99,7 +118,7 @@ export const useFeishuOAuth = () => {
       .finally(() => {
         isProcessingRef.current = false;
       });
-  }, [feishuAppId, feishuAppSecret, setFeishuUserAccessToken, setFeishuRefreshToken, setFeishuUser]);
+  }, [feishuAppId, feishuAppSecret, feishuUserAccessToken, setFeishuUserAccessToken, setFeishuRefreshToken, setFeishuUser]);
 
   // Start OAuth flow
   const startOAuth = useCallback((returnTo?: string) => {
@@ -139,6 +158,22 @@ export const useFeishuOAuth = () => {
       return true;
     } catch (error) {
       console.error('Token refresh failed:', error);
+      reportError({
+        error,
+        feature: 'feishu_oauth',
+        errorCategory: 'feishu',
+        eventName: 'feishu_refresh_token_failed',
+        requestContext: {
+          endpoint: '/api/feishu/authen/v2/oauth/token',
+          method: 'POST',
+          provider: 'feishu',
+          operation: 'refresh_token',
+        },
+        reproContext: {
+          route: window.location.pathname,
+          hasFeishuAuth: Boolean(feishuUserAccessToken),
+        },
+      });
       // Clear invalid tokens and user info
       setFeishuUserAccessToken('');
       setFeishuRefreshToken('');
@@ -149,6 +184,7 @@ export const useFeishuOAuth = () => {
     feishuRefreshToken,
     feishuAppId,
     feishuAppSecret,
+    feishuUserAccessToken,
     setFeishuUserAccessToken,
     setFeishuRefreshToken,
     setFeishuUser,

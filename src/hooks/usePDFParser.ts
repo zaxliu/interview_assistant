@@ -7,6 +7,7 @@ import {
 } from '@/api/pdf';
 import { useSettingsStore } from '@/store/settingsStore';
 import type { AIUsage } from '@/types';
+import { reportError } from '@/lib/analytics';
 
 interface AIOptions {
   maxPages?: number;
@@ -65,6 +66,28 @@ export const usePDFParser = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'PDF 解析失败';
       setError(errorMessage);
+      reportError({
+        error: err,
+        feature: 'resume_pdf_parse',
+        errorCategory: 'pdf',
+        model: useAI ? aiModel : undefined,
+        requestContext: {
+          operation: useAI ? 'parse_pdf_with_ai_file' : 'parse_pdf_file',
+          provider: useAI ? 'openai-compatible' : 'pdfjs',
+          model: useAI ? aiModel : undefined,
+        },
+        reproContext: {
+          route: window.location.pathname,
+          useAIParsing: useAI,
+        },
+        inputSnapshot: {
+          filename: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          maxPages: options?.maxPages,
+          scale: options?.scale,
+        },
+      });
       return { text: '' };
     } finally {
       setIsLoading(false);
@@ -105,6 +128,26 @@ export const usePDFParser = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '从 URL 解析 PDF 失败';
       setError(errorMessage);
+      reportError({
+        error: err,
+        feature: 'resume_pdf_parse',
+        errorCategory: 'pdf',
+        model: useAI ? aiModel : undefined,
+        requestContext: {
+          operation: useAI ? 'parse_pdf_with_ai_url' : 'parse_pdf_url',
+          provider: useAI ? 'openai-compatible' : 'pdfjs',
+          model: useAI ? aiModel : undefined,
+        },
+        reproContext: {
+          route: window.location.pathname,
+          useAIParsing: useAI,
+        },
+        inputSnapshot: {
+          url,
+          maxPages: options?.maxPages,
+          scale: options?.scale,
+        },
+      });
       return { text: '' };
     } finally {
       setIsLoading(false);

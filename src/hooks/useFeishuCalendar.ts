@@ -7,7 +7,7 @@ import {
 } from '@/api/feishu';
 import { useSettingsStore } from '@/store/settingsStore';
 import type { CalendarEvent, InterviewResult } from '@/types';
-import { trackEvent } from '@/lib/analytics';
+import { reportError, trackEvent } from '@/lib/analytics';
 
 export const useFeishuCalendar = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -51,6 +51,24 @@ export const useFeishuCalendar = () => {
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : '同步日历失败';
         setError(errorMessage);
+        reportError({
+          error: err,
+          feature: 'calendar_sync',
+          errorCategory: 'feishu',
+          requestContext: {
+            endpoint: '/api/feishu/calendar/v4/calendars',
+            method: 'GET',
+            provider: 'feishu',
+            operation: 'sync_calendar',
+          },
+          reproContext: {
+            route: window.location.pathname,
+            hasFeishuAuth: Boolean(feishuUserAccessToken),
+          },
+          inputSnapshot: {
+            syncWindow: typeof syncWindow === 'number' ? syncWindow : JSON.stringify(syncWindow),
+          },
+        });
         trackEvent({
           eventName: 'calendar_sync_failed',
           feature: 'calendar_sync',
@@ -98,6 +116,25 @@ export const useFeishuCalendar = () => {
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : '创建飞书文档失败';
         setError(errorMessage);
+        reportError({
+          error: err,
+          feature: 'feishu_export',
+          errorCategory: 'feishu',
+          requestContext: {
+            endpoint: '/api/feishu/docx/v1/documents',
+            method: 'POST',
+            provider: 'feishu',
+            operation: 'create_doc',
+          },
+          reproContext: {
+            route: window.location.pathname,
+            hasFeishuAuth: Boolean(feishuUserAccessToken),
+          },
+          inputSnapshot: {
+            candidateName,
+            positionTitle,
+          },
+        });
         return { success: false, message: errorMessage };
       } finally {
         setIsLoading(false);

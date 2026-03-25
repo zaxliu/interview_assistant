@@ -15,7 +15,7 @@ import { useInterviewUIStore } from '@/store/interviewUIStore';
 import { useTokenValidation } from '@/hooks/useTokenValidation';
 import { useFeishuOAuth } from '@/hooks/useFeishuOAuth';
 import { migrateLegacyData } from '@/utils/migration';
-import { trackAppOpenedOnce } from '@/lib/analytics';
+import { reportError, trackAppOpenedOnce } from '@/lib/analytics';
 import { UserLoginBanner } from '@/components/auth/UserLoginBanner';
 import { CalendarSync } from '@/components/calendar/CalendarSync';
 import { Button, Logo } from '@/components/ui';
@@ -94,8 +94,8 @@ const AppHeader = () => {
 
   const isInterviewRoute = location.pathname.endsWith('/interview');
   const isUsageAdminRoute = location.pathname === '/usage-admin';
-  const isWideLayout = isInterviewRoute;
-  const containerClass = isWideLayout ? 'w-full' : 'max-w-4xl mx-auto';
+  const isWideLayout = isInterviewRoute || isUsageAdminRoute;
+  const containerClass = isUsageAdminRoute ? 'max-w-7xl mx-auto' : isWideLayout ? 'w-full' : 'max-w-4xl mx-auto';
   const settingsFrom = getSettingsFrom(location.state);
   const backTarget = getBackTarget(
     location.pathname,
@@ -221,6 +221,48 @@ const AppShell = () => {
   }, []);
 
   useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      reportError({
+        error: event.error || event.message || 'Unhandled window error',
+        feature: 'global_error_boundary',
+        errorCategory: 'ui',
+        eventName: 'frontend_exception',
+        page: window.location.pathname,
+        reproContext: {
+          route: window.location.pathname,
+          hasFeishuAuth: Boolean(feishuUser?.id),
+        },
+        inputSnapshot: {
+          source: event.filename,
+          line: event.lineno,
+          column: event.colno,
+        },
+      });
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      reportError({
+        error: event.reason || 'Unhandled promise rejection',
+        feature: 'global_error_boundary',
+        errorCategory: 'ui',
+        eventName: 'frontend_rejection',
+        page: window.location.pathname,
+        reproContext: {
+          route: window.location.pathname,
+          hasFeishuAuth: Boolean(feishuUser?.id),
+        },
+      });
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, [feishuUser?.id]);
+
+  useEffect(() => {
     const currentUserId = feishuUser?.id ?? null;
 
     if (currentUserId) {
@@ -241,8 +283,12 @@ const AppShell = () => {
     }
   }, [location.pathname, resetInterviewUI]);
 
-  const isWideLayout = location.pathname.endsWith('/interview');
-  const containerClass = isWideLayout ? 'w-full' : 'max-w-4xl mx-auto';
+  const isWideLayout = location.pathname.endsWith('/interview') || location.pathname === '/usage-admin';
+  const containerClass = location.pathname === '/usage-admin'
+    ? 'max-w-7xl mx-auto'
+    : isWideLayout
+      ? 'w-full'
+      : 'max-w-4xl mx-auto';
 
   return (
     <div className="min-h-screen bg-gray-50">

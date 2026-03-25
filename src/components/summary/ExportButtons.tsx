@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { InterviewResult } from '@/types';
 import { Button } from '@/components/ui';
 import { useFeishuCalendar } from '@/hooks/useFeishuCalendar';
-import { trackEvent } from '@/lib/analytics';
+import { reportError, trackEvent } from '@/lib/analytics';
 
 interface ExportButtonsProps {
   result: InterviewResult;
@@ -92,6 +92,25 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
       });
       window.open(response.docUrl, '_blank');
     } else if (!response.success) {
+      reportError({
+        error: response.message,
+        feature: 'feishu_export',
+        errorCategory: 'feishu',
+        durationMs: Date.now() - startedAt,
+        requestContext: {
+          endpoint: '/api/feishu/docx/v1/documents',
+          method: 'POST',
+          provider: 'feishu',
+          operation: 'export_summary',
+        },
+        reproContext: {
+          route: window.location.pathname,
+        },
+        inputSnapshot: {
+          candidateName,
+          positionTitle,
+        },
+      });
       trackEvent({
         eventName: 'feishu_export_failed',
         feature: 'feishu_export',

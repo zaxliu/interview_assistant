@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   getMetricsAdminMe,
   getMetricsAi,
+  getMetricsErrorDetail,
+  getMetricsErrors,
   getMetricsFunnel,
   getMetricsOverview,
   getMetricsTimeseries,
@@ -9,6 +11,8 @@ import {
   logoutUsageAdmin,
   type MetricsAdminUser,
   type MetricsAiModelSummary,
+  type MetricsErrorEvent,
+  type MetricsErrorSummary,
   type MetricsFunnelStep,
   type MetricsOverview,
   type MetricsTimeseriesPoint,
@@ -26,6 +30,24 @@ const getDefaultRange = () => {
 
 const formatNumber = (value: number) => new Intl.NumberFormat('zh-CN').format(value);
 const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`;
+const formatDateTime = (value: string | undefined) => (value ? new Date(value).toLocaleString() : '-');
+
+const DetailSection = ({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) => (
+  <details className="rounded-lg border border-gray-200 bg-white" open={defaultOpen}>
+    <summary className="cursor-pointer list-none px-4 py-3 text-xs font-medium text-gray-700">
+      {title}
+    </summary>
+    <div className="border-t border-gray-100 px-4 py-3">{children}</div>
+  </details>
+);
 
 const EVENT_LABELS: Record<string, string> = {
   app_opened: '打开应用',
@@ -80,7 +102,7 @@ const RangeSelector = ({
 };
 
 const OverviewCards = ({ overview }: { overview: MetricsOverview }) => (
-  <div className="grid gap-3 md:grid-cols-4">
+  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
     {[
       { label: '访客数', value: formatNumber(overview.uniqueVisitors) },
       { label: '总事件', value: formatNumber(overview.totalEvents) },
@@ -90,7 +112,7 @@ const OverviewCards = ({ overview }: { overview: MetricsOverview }) => (
       <Card key={item.label}>
         <CardBody>
           <div className="text-xs text-gray-500">{item.label}</div>
-          <div className="mt-2 text-2xl font-semibold text-gray-900">{item.value}</div>
+          <div className="mt-3 text-3xl font-semibold tracking-tight text-gray-900">{item.value}</div>
         </CardBody>
       </Card>
     ))}
@@ -136,12 +158,12 @@ const TimeseriesPanel = ({ timeseries }: { timeseries: MetricsTimeseriesPoint[] 
         <h2 className="text-sm font-medium text-gray-900">趋势</h2>
       </CardHeader>
       <CardBody>
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-1 gap-3">
           {timeseries.length === 0 && (
             <div className="text-sm text-gray-500">当前时间范围内暂无数据。</div>
           )}
           {timeseries.map((point) => (
-            <div key={point.bucket} className="grid grid-cols-[120px,1fr,120px] items-center gap-3 text-xs">
+            <div key={point.bucket} className="grid gap-2 text-xs md:grid-cols-[130px,1fr,140px] md:items-center md:gap-3">
               <span className="text-gray-500">{point.bucket}</span>
               <div className="h-2 rounded-full bg-gray-100">
                 <div
@@ -149,7 +171,7 @@ const TimeseriesPanel = ({ timeseries }: { timeseries: MetricsTimeseriesPoint[] 
                   style={{ width: `${Math.max(6, (point.totalEvents / maxValue) * 100)}%` }}
                 />
               </div>
-              <span className="text-right text-gray-700">
+              <span className="text-gray-700 md:text-right">
                 {formatNumber(point.totalEvents)} 事件 / {formatNumber(point.totalAiCalls)} AI
               </span>
             </div>
@@ -233,6 +255,237 @@ const AiPanel = ({
   </Card>
 );
 
+const ErrorPanel = ({
+  errors,
+  selectedError,
+  errorDetail,
+  featureFilter,
+  categoryFilter,
+  searchTerm,
+  featureOptions,
+  categoryOptions,
+  onFeatureFilterChange,
+  onCategoryFilterChange,
+  onSearchTermChange,
+  onSelect,
+}: {
+  errors: MetricsErrorSummary[];
+  selectedError: string | null;
+  errorDetail: { error: MetricsErrorEvent; related: MetricsErrorEvent[] } | null;
+  featureFilter: string;
+  categoryFilter: string;
+  searchTerm: string;
+  featureOptions: string[];
+  categoryOptions: string[];
+  onFeatureFilterChange: (value: string) => void;
+  onCategoryFilterChange: (value: string) => void;
+  onSearchTermChange: (value: string) => void;
+  onSelect: (id: string) => void;
+}) => (
+  <div className="space-y-4">
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-medium text-gray-900">错误筛选</h2>
+          <span className="text-xs text-gray-500">顶部筛选会即时刷新错误列表</span>
+        </div>
+      </CardHeader>
+      <CardBody>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr,180px,180px,auto]">
+          <input
+            value={searchTerm}
+            onChange={(event) => onSearchTermChange(event.target.value)}
+            placeholder="搜索错误消息、页面、版本"
+            className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+          />
+          <select
+            value={featureFilter}
+            onChange={(event) => onFeatureFilterChange(event.target.value)}
+            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+          >
+            <option value="">全部功能</option>
+            {featureOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+          <select
+            value={categoryFilter}
+            onChange={(event) => onCategoryFilterChange(event.target.value)}
+            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+          >
+            <option value="">全部分类</option>
+            {categoryOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+          <div className="flex items-center justify-end text-xs text-gray-500">
+            共 {formatNumber(errors.length)} 条聚合错误
+          </div>
+        </div>
+      </CardBody>
+    </Card>
+
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr),minmax(360px,0.88fr)]">
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-medium text-gray-900">错误列表</h2>
+          <span className="text-xs text-gray-500">按错误指纹聚合，点击查看最近样本</span>
+        </div>
+      </CardHeader>
+      <CardBody className="px-0">
+        <div className="max-h-[70vh] overflow-auto">
+          <table className="min-w-[760px] w-full text-sm">
+            <thead className="text-left text-gray-500">
+              <tr>
+                <th className="px-4 pb-3">最近时间</th>
+                <th className="pb-3 pr-4">分类</th>
+                <th className="pb-3 pr-4">功能</th>
+                <th className="pb-3 pr-4">错误</th>
+                <th className="pb-3 pr-4 text-right">次数</th>
+                <th className="pb-3 pr-4 text-right">用户数</th>
+              </tr>
+            </thead>
+            <tbody>
+              {errors.length === 0 && (
+                <tr>
+                  <td className="px-4 py-6 text-gray-500" colSpan={6}>当前时间范围内暂无错误数据。</td>
+                </tr>
+              )}
+              {errors.map((item) => (
+                <tr
+                  key={item.latestEventId}
+                  className={`border-t border-gray-100 text-gray-700 cursor-pointer transition-colors ${
+                    selectedError === item.latestEventId ? 'bg-rose-50/80' : 'hover:bg-gray-50'
+                  }`}
+                  onClick={() => onSelect(item.latestEventId)}
+                >
+                  <td className="px-4 py-3 align-top text-xs text-gray-500">{formatDateTime(item.latestOccurredAt)}</td>
+                  <td className="py-3 pr-4 align-top">
+                    <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+                      {item.errorCategory || '-'}
+                    </span>
+                  </td>
+                  <td className="py-3 pr-4 align-top text-xs text-gray-600">{item.feature || '-'}</td>
+                  <td className="py-3 pr-4 align-top">
+                    <div className="max-w-[360px] space-y-1">
+                      <div className="line-clamp-2 font-medium text-gray-900" title={item.errorMessage || item.errorCode}>
+                        {item.errorMessage || item.errorCode || item.fingerprint}
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        {item.latestPage || '-'} · {item.latestAppVersion || '-'}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3 pr-4 align-top text-right font-medium">{formatNumber(item.count)}</td>
+                  <td className="py-3 pr-4 align-top text-right">{formatNumber(item.uniqueClients)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardBody>
+    </Card>
+
+    <Card className="xl:sticky xl:top-24 xl:self-start">
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-medium text-gray-900">错误详情</h2>
+          {errorDetail?.error.fingerprint && (
+            <span className="max-w-full truncate text-[11px] text-gray-500">
+              指纹：{errorDetail.error.fingerprint}
+            </span>
+          )}
+        </div>
+      </CardHeader>
+      <CardBody className="max-h-[70vh] space-y-4 overflow-auto text-sm">
+        {!errorDetail && <div className="py-8 text-gray-500">选择一条错误查看详情。</div>}
+        {errorDetail && (
+          <>
+            <div className="rounded-lg border border-rose-100 bg-rose-50/70 p-4">
+              <div className="text-xs text-rose-700">错误消息</div>
+              <div className="mt-2 font-medium leading-6 text-rose-950 break-all">
+                {errorDetail.error.errorMessage || errorDetail.error.errorCode || '-'}
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <div className="text-xs text-gray-500">分类</div>
+                <div className="mt-1 text-gray-800">{errorDetail.error.errorCategory || '-'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">功能</div>
+                <div className="mt-1 text-gray-800">{errorDetail.error.feature || '-'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">页面</div>
+                <div className="mt-1 text-gray-800 break-all">{errorDetail.error.page || '-'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">最近发生</div>
+                <div className="mt-1 text-gray-800">{formatDateTime(errorDetail.error.occurredAt)}</div>
+              </div>
+            </div>
+            {errorDetail.error.requestContext && (
+              <DetailSection title="请求上下文" defaultOpen>
+                <pre className="overflow-auto rounded-lg bg-gray-50 p-3 text-xs leading-5 text-gray-700 whitespace-pre-wrap">
+                  {JSON.stringify(errorDetail.error.requestContext, null, 2)}
+                </pre>
+              </DetailSection>
+            )}
+            {errorDetail.error.reproContext && (
+              <DetailSection title="复现上下文">
+                <pre className="overflow-auto rounded-lg bg-gray-50 p-3 text-xs leading-5 text-gray-700 whitespace-pre-wrap">
+                  {JSON.stringify(errorDetail.error.reproContext, null, 2)}
+                </pre>
+              </DetailSection>
+            )}
+            {errorDetail.error.inputSnapshot && (
+              <DetailSection title="输入快照（已脱敏）">
+                <pre className="overflow-auto rounded-lg bg-gray-50 p-3 text-xs leading-5 text-gray-700 whitespace-pre-wrap">
+                  {JSON.stringify(errorDetail.error.inputSnapshot, null, 2)}
+                </pre>
+              </DetailSection>
+            )}
+            {errorDetail.error.breadcrumbs && errorDetail.error.breadcrumbs.length > 0 && (
+              <DetailSection title="最近操作步骤">
+                <div className="mt-2 space-y-2">
+                  {errorDetail.error.breadcrumbs.map((breadcrumb) => (
+                    <div key={`${breadcrumb.at}-${breadcrumb.eventName}`} className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs text-gray-700">
+                      <div className="font-medium text-gray-800">{breadcrumb.eventName}</div>
+                      <div className="mt-1">{formatDateTime(breadcrumb.at)} · {breadcrumb.page || '-'}</div>
+                    </div>
+                  ))}
+                </div>
+              </DetailSection>
+            )}
+            {errorDetail.error.errorStack && (
+              <DetailSection title="错误栈">
+                <pre className="max-h-72 overflow-auto rounded-lg bg-rose-50 p-3 text-xs leading-5 text-rose-900 whitespace-pre-wrap">
+                  {errorDetail.error.errorStack}
+                </pre>
+              </DetailSection>
+            )}
+            {errorDetail.related.length > 0 && (
+              <DetailSection title="同类错误最近样本">
+                <div className="mt-2 space-y-2">
+                  {errorDetail.related.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs text-gray-700">
+                      <div className="text-gray-500">{formatDateTime(item.occurredAt)}</div>
+                      <div className="mt-1 break-all">{item.errorMessage || item.errorCode || '-'}</div>
+                    </div>
+                  ))}
+                </div>
+              </DetailSection>
+            )}
+          </>
+        )}
+      </CardBody>
+    </Card>
+    </div>
+  </div>
+);
+
 export default function UsageAdminPage() {
   const [range, setRange] = useState(getDefaultRange);
   const [adminUser, setAdminUser] = useState<MetricsAdminUser | null>(null);
@@ -249,10 +502,40 @@ export default function UsageAdminPage() {
     };
     byModel: MetricsAiModelSummary[];
   } | null>(null);
+  const [errors, setErrors] = useState<MetricsErrorSummary[]>([]);
+  const [selectedErrorId, setSelectedErrorId] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<{ error: MetricsErrorEvent; related: MetricsErrorEvent[] } | null>(null);
+  const [featureFilter, setFeatureFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [authState, setAuthState] = useState<'loading' | 'unauthorized' | 'forbidden' | 'ready' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const authHint = useMemo(() => new URLSearchParams(window.location.search).get('adminAuth'), []);
+
+  const filteredErrors = useMemo(() => {
+    const keyword = searchTerm.trim().toLowerCase();
+    return errors.filter((item) => {
+      if (!keyword) return true;
+      const scope = [
+        item.errorMessage,
+        item.errorCode,
+        item.latestPage,
+        item.latestAppVersion,
+        item.fingerprint,
+      ].join(' ').toLowerCase();
+      return scope.includes(keyword);
+    });
+  }, [errors, searchTerm]);
+
+  const featureOptions = useMemo(
+    () => Array.from(new Set(errors.map((item) => item.feature).filter(Boolean))) as string[],
+    [errors]
+  );
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(errors.map((item) => item.errorCategory).filter(Boolean))) as string[],
+    [errors]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -269,11 +552,15 @@ export default function UsageAdminPage() {
 
         setAdminUser(me.user);
 
-        const [overviewResponse, funnelResponse, timeseriesResponse, aiResponse] = await Promise.all([
+        const [overviewResponse, funnelResponse, timeseriesResponse, aiResponse, errorsResponse] = await Promise.all([
           getMetricsOverview(range.from, range.to),
           getMetricsFunnel(range.from, range.to),
           getMetricsTimeseries(range.from, range.to),
           getMetricsAi(range.from, range.to),
+          getMetricsErrors(range.from, range.to, {
+            feature: featureFilter || undefined,
+            errorCategory: categoryFilter || undefined,
+          }),
         ]);
 
         if (cancelled) {
@@ -284,6 +571,12 @@ export default function UsageAdminPage() {
         setFunnel(funnelResponse.funnel);
         setTimeseries(timeseriesResponse.timeseries);
         setAiSummary(aiResponse.ai);
+        setErrors(errorsResponse.errors);
+        setSelectedErrorId((current) => {
+          const currentStillExists = errorsResponse.errors.some((item) => item.latestEventId === current);
+          if (currentStillExists) return current;
+          return errorsResponse.errors[0]?.latestEventId || null;
+        });
         setAuthState('ready');
       } catch (error) {
         const status = (error as Error & { status?: number }).status;
@@ -305,7 +598,32 @@ export default function UsageAdminPage() {
     return () => {
       cancelled = true;
     };
-  }, [authHint, range.from, range.to]);
+  }, [authHint, categoryFilter, featureFilter, range.from, range.to]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!selectedErrorId || authState !== 'ready') {
+      setErrorDetail(null);
+      return;
+    }
+
+    void getMetricsErrorDetail(selectedErrorId)
+      .then((detail) => {
+        if (!cancelled) {
+          setErrorDetail(detail);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setErrorDetail(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authState, selectedErrorId]);
 
   if (authState === 'loading') {
     return (
@@ -362,18 +680,18 @@ export default function UsageAdminPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <Card>
         <CardHeader>
           <h1 className="text-sm font-medium text-gray-900">使用数据后台</h1>
         </CardHeader>
         <CardBody className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <div className="text-sm font-medium text-gray-900">{adminUser?.name}</div>
-              <div className="text-xs text-gray-500">{adminUser?.id}</div>
+              <div className="text-base font-semibold text-gray-900">{adminUser?.name}</div>
+              <div className="mt-1 text-xs text-gray-500">{adminUser?.id}</div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col items-start gap-3 lg:items-end">
               <RangeSelector from={range.from} to={range.to} onChange={setRange} />
               <Button
                 variant="secondary"
@@ -392,12 +710,27 @@ export default function UsageAdminPage() {
 
       <OverviewCards overview={overview} />
 
-      <div className="grid gap-4 lg:grid-cols-[1fr,1.2fr]">
+      <div className="grid gap-4 xl:grid-cols-[0.9fr,1.1fr]">
         <FunnelPanel funnel={funnel} />
         <TimeseriesPanel timeseries={timeseries} />
       </div>
 
       <AiPanel totals={aiSummary.totals} byModel={aiSummary.byModel} />
+
+      <ErrorPanel
+        errors={filteredErrors}
+        selectedError={selectedErrorId}
+        errorDetail={errorDetail}
+        featureFilter={featureFilter}
+        categoryFilter={categoryFilter}
+        searchTerm={searchTerm}
+        featureOptions={featureOptions}
+        categoryOptions={categoryOptions}
+        onFeatureFilterChange={setFeatureFilter}
+        onCategoryFilterChange={setCategoryFilter}
+        onSearchTermChange={setSearchTerm}
+        onSelect={setSelectedErrorId}
+      />
     </div>
   );
 }

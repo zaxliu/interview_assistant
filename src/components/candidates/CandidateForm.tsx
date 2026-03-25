@@ -13,7 +13,7 @@ import { HistoricalInterviewReviewsPanel } from './HistoricalInterviewReviewsPan
 import { emptyResumeHighlights, getPreferredResumeText, getRawResumeText } from '@/utils/resume';
 import { formatInterviewTimeForInput, normalizeInterviewTimeForSave } from '@/utils/dateTime';
 import { zhCN as t } from '@/i18n/zhCN';
-import { trackEvent, usageFromAIUsage } from '@/lib/analytics';
+import { reportError, trackEvent, usageFromAIUsage } from '@/lib/analytics';
 
 const AUTO_SAVE_DELAY = 800;
 
@@ -301,6 +301,29 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
           },
         });
       } else {
+        reportError({
+          error: pdfError || resumeProcessingError || 'empty_resume_text',
+          feature: 'resume_import',
+          errorCategory: 'pdf',
+          durationMs: Date.now() - startedAt,
+          model: canUseAI && useAIParsing ? aiModel : undefined,
+          requestContext: {
+            operation: 'import_resume_file',
+            provider: useAIParsing && canUseAI ? 'openai-compatible' : 'pdfjs',
+          },
+          reproContext: {
+            route: window.location.pathname,
+            positionId,
+            candidateId: candidate?.id,
+            useAIParsing: useAIParsing && canUseAI,
+            viewMode: 'pdf',
+          },
+          inputSnapshot: {
+            filename: file.name,
+            fileSize: file.size,
+            method: 'file',
+          },
+        });
         trackEvent({
           eventName: 'resume_import_failed',
           feature: 'resume_import',
@@ -323,6 +346,28 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
       const result = await parseFromUrl(resumeUrl, useAIParsing && canUseAI, { maxPages: 5 });
       setResumeOCRUsage(result.usage);
       if (!result.text.trim()) {
+        reportError({
+          error: pdfError || 'empty_resume_text',
+          feature: 'resume_import',
+          errorCategory: 'pdf',
+          durationMs: Date.now() - startedAt,
+          model: canUseAI && useAIParsing ? aiModel : undefined,
+          requestContext: {
+            operation: 'import_resume_url',
+            provider: useAIParsing && canUseAI ? 'openai-compatible' : 'pdfjs',
+          },
+          reproContext: {
+            route: window.location.pathname,
+            positionId,
+            candidateId: candidate?.id,
+            useAIParsing: useAIParsing && canUseAI,
+            viewMode: 'pdf',
+          },
+          inputSnapshot: {
+            url: resumeUrl,
+            method: 'url',
+          },
+        });
         trackEvent({
           eventName: 'resume_import_failed',
           feature: 'resume_import',
@@ -444,6 +489,28 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     } catch (error) {
       const message = error instanceof Error ? error.message : '从 Wintalent 导入简历失败';
       setWintalentError(message);
+      reportError({
+        error,
+        feature: 'resume_import',
+        errorCategory: 'wintalent',
+        requestContext: {
+          endpoint: '/api/wintalent/download',
+          method: 'POST',
+          provider: 'wintalent',
+          operation: 'import_wintalent_resume',
+        },
+        reproContext: {
+          route: window.location.pathname,
+          positionId,
+          candidateId: candidate?.id,
+          useAIParsing: useAIParsing && canUseAI,
+          viewMode: 'pdf',
+        },
+        inputSnapshot: {
+          wintalentLink: link,
+          method: 'wintalent',
+        },
+      });
       trackEvent({
         eventName: 'resume_import_failed',
         feature: 'resume_import',

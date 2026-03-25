@@ -359,6 +359,31 @@ const sanitizeDetails = (value) => {
   return entries.length ? Object.fromEntries(entries) : undefined;
 };
 
+const sanitizeBreadcrumbs = (value) => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const breadcrumbs = value
+    .slice(-20)
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return null;
+      }
+
+      return {
+        at: clampString(item.at, 40),
+        eventName: clampString(item.eventName, 80),
+        feature: clampString(item.feature, 80),
+        page: clampString(item.page, 160),
+        details: sanitizeDetails(item.details),
+      };
+    })
+    .filter((item) => item && item.at && item.eventName);
+
+  return breadcrumbs.length ? breadcrumbs : undefined;
+};
+
 const sanitizeEvent = (rawEvent, req) => {
   if (!rawEvent || typeof rawEvent !== 'object' || Array.isArray(rawEvent)) {
     return null;
@@ -370,10 +395,12 @@ const sanitizeEvent = (rawEvent, req) => {
     ? new Date(occurredAtRaw).toISOString()
     : now;
   const success = typeof rawEvent.success === 'boolean' ? rawEvent.success : undefined;
+  const eventType = rawEvent.eventType === 'error' ? 'error' : 'event';
 
   return {
     id: randomUUID(),
     eventName: clampString(rawEvent.eventName, 80),
+    eventType,
     clientId: clampString(rawEvent.clientId, 100),
     sessionId: clampString(rawEvent.sessionId, 100),
     occurredAt,
@@ -387,9 +414,17 @@ const sanitizeEvent = (rawEvent, req) => {
     cachedTokens: clampNumber(rawEvent.cachedTokens),
     outputTokens: clampNumber(rawEvent.outputTokens),
     errorCode: clampString(rawEvent.errorCode, 120),
+    errorCategory: clampString(rawEvent.errorCategory, 40),
+    errorMessage: clampString(rawEvent.errorMessage, 1000),
+    errorStack: clampString(rawEvent.errorStack, 4000),
+    fingerprint: clampString(rawEvent.fingerprint, 300),
     appVersion: clampString(rawEvent.appVersion, 40) || config.appVersion,
     deploymentEnv: clampString(rawEvent.deploymentEnv, 40),
     details: sanitizeDetails(rawEvent.details),
+    requestContext: sanitizeDetails(rawEvent.requestContext),
+    reproContext: sanitizeDetails(rawEvent.reproContext),
+    inputSnapshot: sanitizeDetails(rawEvent.inputSnapshot),
+    breadcrumbs: sanitizeBreadcrumbs(rawEvent.breadcrumbs),
     userAgent: clampString(req.headers['user-agent'], 300),
   };
 };
@@ -565,6 +600,105 @@ const summarizeTimeseries = (events, interval) => {
   return Array.from(buckets.values()).sort((left, right) => left.bucket.localeCompare(right.bucket));
 };
 
+const getErrorEvents = (events) =>
+  events.filter((event) => event.eventType === 'error' || event.success === false);
+
+const filterErrorEvents = (events, searchParams) => {
+  const feature = clampString(searchParams.get('feature'), 80);
+  const errorCategory = clampString(searchParams.get('errorCategory'), 40);
+  const fingerprint = clampString(searchParams.get('fingerprint'), 300);
+
+  return getErrorEvents(events).filter((event) => {
+    if (feature && event.feature !== feature) return false;
+    if (errorCategory && event.errorCategory !== errorCategory) return false;
+    if (fingerprint && event.fingerprint !== fingerprint) return false;
+    return true;
+  });
+};
+
+const summarizeErrors = (events) => {
+  const groups = new Map();
+
+  events.forEach((event) => {
+    const groupKey = event.fingerprint || `${event.feature || 'unknown'}|${event.errorCode || event.eventName || event.id}`;
+    const current = groups.get(groupKey) || {
+      fingerprint: groupKey,
+      latestEventId: event.id,
+      latestOccurredAt: event.occurredAt || event.receivedAt,
+      firstOccurredAt: event.occurredAt || event.receivedAt,
+      count: 0,
+      uniqueClients: new Set(),
+      feature: event.feature,
+      errorCategory: event.errorCategory,
+      errorCode: event.errorCode,
+      errorMessage: event.errorMessage,
+      latestPage: event.page,
+      latestModel: event.model,
+      latestAppVersion: event.appVersion,
+    };
+
+    current.count += 1;
+    if (event.clientId) {
+      current.uniqueClients.add(event.clientId);
+    }
+
+    const currentTime = Date.parse(event.occurredAt || event.receivedAt || '');
+    const latestTime = Date.parse(current.latestOccurredAt || '');
+    const firstTime = Date.parse(current.firstOccurredAt || '');
+    if (Number.isFinite(currentTime) && (!Number.isFinite(latestTime) || currentTime > latestTime)) {
+      current.latestEventId = event.id;
+      current.latestOccurredAt = event.occurredAt || event.receivedAt;
+      current.latestPage = event.page;
+      current.latestModel = event.model;
+      current.latestAppVersion = event.appVersion;
+      current.errorCode = event.errorCode || current.errorCode;
+      current.errorMessage = event.errorMessage || current.errorMessage;
+      current.feature = event.feature || current.feature;
+      current.errorCategory = event.errorCategory || current.errorCategory;
+    }
+    if (Number.isFinite(currentTime) && (!Number.isFinite(firstTime) || currentTime < firstTime)) {
+      current.firstOccurredAt = event.occurredAt || event.receivedAt;
+    }
+
+    groups.set(groupKey, current);
+  });
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      fingerprint: group.fingerprint,
+      latestEventId: group.latestEventId,
+      latestOccurredAt: group.latestOccurredAt,
+      firstOccurredAt: group.firstOccurredAt,
+      count: group.count,
+      uniqueClients: group.uniqueClients.size,
+      feature: group.feature,
+      errorCategory: group.errorCategory,
+      errorCode: group.errorCode,
+      errorMessage: group.errorMessage,
+      latestPage: group.latestPage,
+      latestModel: group.latestModel,
+      latestAppVersion: group.latestAppVersion,
+    }))
+    .sort((left, right) => right.latestOccurredAt.localeCompare(left.latestOccurredAt));
+};
+
+const getErrorDetail = (events, id) => {
+  const target = getErrorEvents(events).find((event) => event.id === id);
+  if (!target) {
+    return null;
+  }
+
+  const related = getErrorEvents(events)
+    .filter((event) => event.id !== id && event.fingerprint && event.fingerprint === target.fingerprint)
+    .sort((left, right) => (right.occurredAt || right.receivedAt).localeCompare(left.occurredAt || left.receivedAt))
+    .slice(0, 10);
+
+  return {
+    error: target,
+    related,
+  };
+};
+
 const requireAdmin = (req, res) => {
   const user = getSessionUser(req);
   if (!user || !user.id) {
@@ -729,6 +863,45 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    if (req.method === 'GET' && requestUrl.pathname === '/api/metrics/errors') {
+      const user = requireAdmin(req, res);
+      if (!user) {
+        return;
+      }
+
+      const events = await loadEvents();
+      const range = filterEventsByRange(events, requestUrl.searchParams);
+      const errorEvents = filterErrorEvents(range.events, requestUrl.searchParams);
+      sendJson(res, 200, {
+        range: { from: range.from, to: range.to },
+        errors: summarizeErrors(errorEvents),
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname.startsWith('/api/metrics/errors/')) {
+      const user = requireAdmin(req, res);
+      if (!user) {
+        return;
+      }
+
+      const id = decodeURIComponent(requestUrl.pathname.slice('/api/metrics/errors/'.length));
+      if (!id) {
+        notFound(res);
+        return;
+      }
+
+      const events = await loadEvents();
+      const detail = getErrorDetail(events, id);
+      if (!detail) {
+        notFound(res);
+        return;
+      }
+
+      sendJson(res, 200, detail);
+      return;
+    }
+
     notFound(res);
   } catch (error) {
     console.error('[metrics] request failed:', error);
@@ -750,4 +923,6 @@ server.listen(config.port, config.host, () => {
   console.log('  GET  /api/metrics/dashboard/funnel');
   console.log('  GET  /api/metrics/dashboard/ai');
   console.log('  GET  /api/metrics/dashboard/timeseries');
+  console.log('  GET  /api/metrics/errors');
+  console.log('  GET  /api/metrics/errors/:id');
 });

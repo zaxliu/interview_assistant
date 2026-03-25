@@ -7,7 +7,7 @@ import { useAI } from '@/hooks/useAI';
 import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { getPreferredResumeText } from '@/utils/resume';
-import { trackEvent, usageFromAIUsage } from '@/lib/analytics';
+import { reportError, trackEvent, usageFromAIUsage } from '@/lib/analytics';
 
 const AUTO_SAVE_DELAY = 2000; // 2 seconds debounce
 
@@ -145,6 +145,31 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       durationMs: Date.now() - startedAt,
       model: aiModel,
       errorCode: 'empty_summary_result',
+    });
+    reportError({
+      error: 'AI summary generation returned empty result',
+      feature: 'summary_generation',
+      errorCategory: 'ai',
+      durationMs: Date.now() - startedAt,
+      model: aiModel,
+      requestContext: {
+        endpoint: '/api/ai/chat/completions',
+        method: 'POST',
+        provider: 'openai-compatible',
+        model: aiModel,
+        operation: 'generate_summary',
+      },
+      reproContext: {
+        route: window.location.pathname,
+        positionId: position.id,
+        candidateId: candidate.id,
+        candidateStatus: candidate.status,
+      },
+      inputSnapshot: {
+        candidateName: candidate.name,
+        positionTitle: position.title,
+        questionCount: candidate.questions.length,
+      },
     });
   };
 
