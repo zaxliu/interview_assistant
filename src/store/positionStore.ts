@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Position, Candidate, Question, InterviewResult, CodingChallenge } from '@/types';
 import { saveToStorage, loadFromStorage } from '@/utils/storage';
+import { trackEvent } from '@/lib/analytics';
 
 interface PositionState {
   positions: Position[];
@@ -134,6 +135,15 @@ export const usePositionStore = create<PositionState>((set, get) => ({
       );
       persistPositions(positions, state.currentUserId);
       return { positions };
+    });
+
+    trackEvent({
+      eventName: 'candidate_created',
+      feature: 'candidate',
+      success: true,
+      details: {
+        source: candidateData.calendarEventId ? 'calendar' : 'manual',
+      },
     });
 
     return candidate;

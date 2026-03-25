@@ -12,6 +12,7 @@ import {
   normalizeFeishuOAuthReturnTo,
   parseFeishuOAuthReturnTo,
 } from '@/utils/feishuOAuth';
+import { trackEvent } from '@/lib/analytics';
 
 // Track processed OAuth codes to prevent duplicate processing
 const processedCodes = new Set<string>();
@@ -63,6 +64,11 @@ export const useFeishuOAuth = () => {
         try {
           const user = await getUserInfo(tokens.accessToken);
           setFeishuUser(user);
+          trackEvent({
+            eventName: 'feishu_login_succeeded',
+            feature: 'feishu_oauth',
+            success: true,
+          });
           console.log('User info fetched:', user);
         } catch (error) {
           console.error('Failed to fetch user info:', error);

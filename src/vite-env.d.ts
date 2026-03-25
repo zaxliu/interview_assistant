@@ -8,8 +8,11 @@ interface ImportMetaEnv {
   readonly VITE_NOTION_DATABASE_ID: string
   readonly VITE_FEISHU_APP_ID: string
   readonly VITE_FEISHU_APP_SECRET: string
+  readonly VITE_METRICS_PROXY_URL: string
 }
 
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+declare const __APP_VERSION__: string

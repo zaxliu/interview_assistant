@@ -11,9 +11,27 @@ services:
       - .:/app:ro
     restart: unless-stopped
 
+  metrics:
+    image: node:18-alpine
+    working_dir: /app
+    command: ["node", "scripts/metrics-server.mjs"]
+    environment:
+      - METRICS_HOST=0.0.0.0
+      - METRICS_PORT=8788
+      - METRICS_STORAGE_FILE=/data/events.ndjson
+      - METRICS_SESSION_SECRET=${METRICS_SESSION_SECRET:-change-me}
+      - METRICS_ADMIN_FEISHU_USER_IDS=${METRICS_ADMIN_FEISHU_USER_IDS:-}
+      - METRICS_FEISHU_APP_ID=${METRICS_FEISHU_APP_ID:-}
+      - METRICS_FEISHU_APP_SECRET=${METRICS_FEISHU_APP_SECRET:-}
+    volumes:
+      - .:/app:ro
+      - metrics-data:/data
+    restart: unless-stopped
+
   interview-assistant:
     depends_on:
       - wintalent-proxy
+      - metrics
     build:
       context: .
       args:
@@ -24,6 +42,7 @@ services:
     environment:
       - VITE_AI_BASE_URL=${VITE_AI_BASE_URL:-https://api.openai.com}
       - VITE_WINTALENT_PROXY_URL=${DOCKER_WINTALENT_PROXY_URL:-http://wintalent-proxy:8787}
+      - VITE_METRICS_PROXY_URL=${DOCKER_METRICS_PROXY_URL:-http://metrics:8788}
       - HTTP_PROXY=${DOCKER_HTTP_PROXY:-http://host.docker.internal:7890}
       - HTTPS_PROXY=${DOCKER_HTTPS_PROXY:-http://host.docker.internal:7890}
       - ALL_PROXY=${DOCKER_ALL_PROXY:-http://host.docker.internal:7890}
@@ -31,3 +50,6 @@ services:
     ports:
       - "3000:80"
     restart: unless-stopped
+
+volumes:
+  metrics-data:

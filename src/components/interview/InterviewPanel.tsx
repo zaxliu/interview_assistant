@@ -15,6 +15,7 @@ import { ResumeHighlightsPanel } from '@/components/candidates/ResumeHighlightsP
 import { HistoricalInterviewReviewsPanel } from '@/components/candidates/HistoricalInterviewReviewsPanel';
 import { getFeishuDocRawContentFromLink } from '@/api/feishu';
 import { zhCN as t } from '@/i18n/zhCN';
+import { trackEvent, usageFromAIUsage } from '@/lib/analytics';
 
 interface InterviewPanelProps {
   position: Position;
@@ -78,6 +79,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const {
     interviewSplitRatio,
     setInterviewSplitRatio,
+    aiModel,
     feishuUserAccessToken,
     feishuAppId,
     feishuAppSecret,
@@ -214,6 +216,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       alert('请先补充岗位描述与候选人简历');
       return;
     }
+    const startedAt = Date.now();
 
     const generated = await generateInterviewQuestions(
       position.description,
@@ -233,7 +236,28 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
           },
         });
       }
+      trackEvent({
+        eventName: 'question_generation_succeeded',
+        feature: 'question_generation',
+        success: true,
+        durationMs: Date.now() - startedAt,
+        model: aiModel,
+        ...usageFromAIUsage(generated.usage),
+        details: {
+          questions: generated.data.length,
+        },
+      });
+      return;
     }
+
+    trackEvent({
+      eventName: 'question_generation_failed',
+      feature: 'question_generation',
+      success: false,
+      durationMs: Date.now() - startedAt,
+      model: aiModel,
+      errorCode: 'empty_question_list',
+    });
   };
 
   const handleQuickNotesChange = (quickNotes: string) => {

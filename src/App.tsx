@@ -15,6 +15,7 @@ import { useInterviewUIStore } from '@/store/interviewUIStore';
 import { useTokenValidation } from '@/hooks/useTokenValidation';
 import { useFeishuOAuth } from '@/hooks/useFeishuOAuth';
 import { migrateLegacyData } from '@/utils/migration';
+import { trackAppOpenedOnce } from '@/lib/analytics';
 import { UserLoginBanner } from '@/components/auth/UserLoginBanner';
 import { CalendarSync } from '@/components/calendar/CalendarSync';
 import { Button, Logo } from '@/components/ui';
@@ -27,6 +28,7 @@ const CandidateFormPage = lazy(() => import('@/pages/CandidateFormPage'));
 const InterviewPage = lazy(() => import('@/pages/InterviewPage'));
 const SummaryPage = lazy(() => import('@/pages/SummaryPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
+const UsageAdminPage = lazy(() => import('@/pages/UsageAdminPage'));
 
 const getSettingsFrom = (state: unknown): string | undefined => {
   if (!state || typeof state !== 'object') return undefined;
@@ -91,6 +93,7 @@ const AppHeader = () => {
   );
 
   const isInterviewRoute = location.pathname.endsWith('/interview');
+  const isUsageAdminRoute = location.pathname === '/usage-admin';
   const isWideLayout = isInterviewRoute;
   const containerClass = isWideLayout ? 'w-full' : 'max-w-4xl mx-auto';
   const settingsFrom = getSettingsFrom(location.state);
@@ -170,6 +173,9 @@ const AppHeader = () => {
             </>
           )}
           {location.pathname === '/' && isAuthenticated && <CalendarSync />}
+          <Button variant={isUsageAdminRoute ? 'primary' : 'ghost'} size="sm" onClick={() => navigate('/usage-admin')}>
+            使用数据
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -209,6 +215,10 @@ const AppShell = () => {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    trackAppOpenedOnce();
+  }, []);
 
   useEffect(() => {
     const currentUserId = feishuUser?.id ?? null;
@@ -252,6 +262,7 @@ function App() {
       <Route element={<AppShell />}>
         <Route index element={<DashboardPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="usage-admin" element={<UsageAdminPage />} />
         <Route path="positions/new" element={<PositionFormPage />} />
         <Route path="positions/:positionId" element={<PositionDetailPage />} />
         <Route path="positions/:positionId/edit" element={<PositionFormPage />} />

@@ -15,6 +15,26 @@ const JSON_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
+function formatFetchError(url, error) {
+  const parts = [`请求 ${url} 失败`];
+  const message = String(error?.message || error || '').trim();
+  const cause = error && typeof error === 'object' && 'cause' in error ? error.cause : null;
+  const causeCode = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : '';
+  const causeMessage = cause && typeof cause === 'object' && 'message' in cause ? String(cause.message) : '';
+
+  if (causeCode) {
+    parts.push(`code=${causeCode}`);
+  }
+
+  if (causeMessage && causeMessage !== message) {
+    parts.push(causeMessage);
+  } else if (message) {
+    parts.push(message);
+  }
+
+  return parts.join(' | ');
+}
+
 function extractResumeUnavailableMessage(rawText) {
   if (!rawText) return null;
   const text = String(rawText);
@@ -195,12 +215,17 @@ async function requestWithJar(jar, url, options = {}) {
     if (cookieHeader) reqHeaders.Cookie = cookieHeader;
     if (referer && !reqHeaders.Referer) reqHeaders.Referer = referer;
 
-    const res = await fetch(currentUrl, {
-      method: currentMethod,
-      headers: reqHeaders,
-      body: currentBody,
-      redirect: 'manual',
-    });
+    let res;
+    try {
+      res = await fetch(currentUrl, {
+        method: currentMethod,
+        headers: reqHeaders,
+        body: currentBody,
+        redirect: 'manual',
+      });
+    } catch (error) {
+      throw new Error(formatFetchError(currentUrl, error));
+    }
 
     for (const setCookie of getSetCookieHeaders(res.headers)) {
       jar.setFromHeader(setCookie, currentUrl);
@@ -803,7 +828,7 @@ async function resolveCandidateDataFromFlow(flow) {
       if (evHistoryResult?.haveEv && evHistoryResult?.evHistory) {
         historicalInterviewReviews = parseHistoricalInterviewReviewsFromHtml(evHistoryResult.evHistory);
       }
-    } catch (error) {
+    } catch {
       historicalInterviewReviews = [];
     }
   }

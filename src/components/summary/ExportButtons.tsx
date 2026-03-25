@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { InterviewResult } from '@/types';
 import { Button } from '@/components/ui';
 import { useFeishuCalendar } from '@/hooks/useFeishuCalendar';
+import { trackEvent } from '@/lib/analytics';
 
 interface ExportButtonsProps {
   result: InterviewResult;
@@ -77,13 +78,27 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
   const [copyDocUrlSuccess, setCopyDocUrlSuccess] = useState(false);
 
   const handleFeishuExport = async () => {
+    const startedAt = Date.now();
     const response = await createDoc(result, candidateName, positionTitle);
     if (response.success && response.docUrl) {
       setLatestDocUrl(response.docUrl);
       setLatestExportMessage(response.message);
       setCopyDocUrlSuccess(false);
+      trackEvent({
+        eventName: 'feishu_export_succeeded',
+        feature: 'feishu_export',
+        success: true,
+        durationMs: Date.now() - startedAt,
+      });
       window.open(response.docUrl, '_blank');
     } else if (!response.success) {
+      trackEvent({
+        eventName: 'feishu_export_failed',
+        feature: 'feishu_export',
+        success: false,
+        durationMs: Date.now() - startedAt,
+        errorCode: response.message,
+      });
       alert(`导出到飞书失败：${response.message}`);
     }
   };

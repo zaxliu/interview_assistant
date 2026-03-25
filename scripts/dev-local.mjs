@@ -48,4 +48,5 @@ process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
 startProcess('wintalent-proxy', ['run', 'proxy:wintalent'], { required: false });
+startProcess('metrics', ['run', 'metrics'], { required: false });
 startProcess('vite', ['run', 'dev:vite']);

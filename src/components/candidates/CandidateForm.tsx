@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { AIUsage, Candidate } from '@/types';
 import { usePositionStore } from '@/store/positionStore';
+import { useSettingsStore } from '@/store/settingsStore';
 import { usePDFParser } from '@/hooks/usePDFParser';
 import { useResumeProcessor } from '@/hooks/useResumeProcessor';
 import { storePDF } from '@/utils/pdfStorage';
@@ -12,6 +13,7 @@ import { HistoricalInterviewReviewsPanel } from './HistoricalInterviewReviewsPan
 import { emptyResumeHighlights, getPreferredResumeText, getRawResumeText } from '@/utils/resume';
 import { formatInterviewTimeForInput, normalizeInterviewTimeForSave } from '@/utils/dateTime';
 import { zhCN as t } from '@/i18n/zhCN';
+import { trackEvent, usageFromAIUsage } from '@/lib/analytics';
 
 const AUTO_SAVE_DELAY = 800;
 
@@ -29,6 +31,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   onCancel,
 }) => {
   const { addCandidate, updateCandidate } = usePositionStore();
+  const aiModel = useSettingsStore((state) => state.aiModel);
   const {
     isLoading: pdfLoading,
     error: pdfError,
@@ -83,6 +86,17 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     content.length > limit ? `${content.slice(0, limit)}...` : content
   );
 
+  const mergeUsage = (base?: AIUsage, extra?: AIUsage): AIUsage | undefined => {
+    if (!base && !extra) {
+      return undefined;
+    }
+    return {
+      input: (base?.input || 0) + (extra?.input || 0),
+      cached: (base?.cached || 0) + (extra?.cached || 0),
+      output: (base?.output || 0) + (extra?.output || 0),
+    };
+  };
+
   const applyProcessedResume = async (rawText: string) => {
     console.log('[CandidateForm] applyProcessedResume start', {
       rawTextLength: rawText.length,
@@ -105,6 +119,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     setResumeText(processed.markdown);
     setResumeHighlights(processed.highlights);
     setResumeProcessingUsage(processed.usage);
+    return processed;
   };
 
   const renderUsage = (usage: AIUsage | undefined, label: string) => {
@@ -253,6 +268,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const startedAt = Date.now();
       // Check file type
       if (!file.name.toLowerCase().endsWith('.pdf')) {
         alert('请上传 PDF 文件。如果你拿到的是 ZIP，请先解压后再上传 PDF。');
@@ -266,21 +282,67 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
       const result = await parseFromFile(file, useAIParsing && canUseAI, { maxPages: 5 });
       setResumeOCRUsage(result.usage);
       if (result.text) {
-        await applyProcessedResume(result.text);
+        const processed = await applyProcessedResume(result.text);
+        const combinedUsage = mergeUsage(result.usage, processed.usage);
+        trackEvent({
+          eventName: 'resume_import_succeeded',
+          feature: 'resume_import',
+          success: true,
+          durationMs: Date.now() - startedAt,
+          model: canUseAI && useAIParsing ? aiModel : undefined,
+          ...usageFromAIUsage(combinedUsage),
+          details: {
+            method: 'file',
+          },
+        });
+      } else {
+        trackEvent({
+          eventName: 'resume_import_failed',
+          feature: 'resume_import',
+          success: false,
+          durationMs: Date.now() - startedAt,
+          errorCode: pdfError || resumeProcessingError || 'empty_resume_text',
+          details: {
+            method: 'file',
+          },
+        });
       }
     }
   };
 
   const handleUrlParse = async () => {
     if (resumeUrl) {
+      const startedAt = Date.now();
       // Use AI parsing if enabled and available, otherwise standard
       const result = await parseFromUrl(resumeUrl, useAIParsing && canUseAI, { maxPages: 5 });
       setResumeOCRUsage(result.usage);
       if (!result.text.trim()) {
+        trackEvent({
+          eventName: 'resume_import_failed',
+          feature: 'resume_import',
+          success: false,
+          durationMs: Date.now() - startedAt,
+          errorCode: pdfError || 'empty_resume_text',
+          details: {
+            method: 'url',
+          },
+        });
         alert('简历链接内容获取失败，请检查链接是否可访问且为 PDF 直链。');
         return;
       }
-      await applyProcessedResume(result.text);
+      const processed = await applyProcessedResume(result.text);
+      const combinedUsage = mergeUsage(result.usage, processed.usage);
+      trackEvent({
+        eventName: 'resume_import_succeeded',
+        feature: 'resume_import',
+        success: true,
+        durationMs: Date.now() - startedAt,
+        model: canUseAI && useAIParsing ? aiModel : undefined,
+        ...usageFromAIUsage(combinedUsage),
+        details: {
+          method: 'url',
+        },
+      });
     }
   };
 
@@ -292,6 +354,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     setWintalentLoading(true);
 
     try {
+      const startedAt = Date.now();
       const [{ blob, filename }, candidateData] = await Promise.all([
         downloadWintalentResumePDF(link),
         fetchWintalentCandidateData(link).catch(() => ({ historicalInterviewReviews: [] })),
@@ -309,11 +372,43 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
       const result = await parseFromFile(pdfFile, useAIParsing && canUseAI, { maxPages: 5 });
       setResumeOCRUsage(result.usage);
       if (result.text) {
-        await applyProcessedResume(result.text);
+        const processed = await applyProcessedResume(result.text);
+        const combinedUsage = mergeUsage(result.usage, processed.usage);
+        trackEvent({
+          eventName: 'resume_import_succeeded',
+          feature: 'resume_import',
+          success: true,
+          durationMs: Date.now() - startedAt,
+          model: canUseAI && useAIParsing ? aiModel : undefined,
+          ...usageFromAIUsage(combinedUsage),
+          details: {
+            method: 'wintalent',
+          },
+        });
+      } else {
+        trackEvent({
+          eventName: 'resume_import_failed',
+          feature: 'resume_import',
+          success: false,
+          durationMs: Date.now() - startedAt,
+          errorCode: pdfError || resumeProcessingError || 'empty_resume_text',
+          details: {
+            method: 'wintalent',
+          },
+        });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : '从 Wintalent 导入简历失败';
       setWintalentError(message);
+      trackEvent({
+        eventName: 'resume_import_failed',
+        feature: 'resume_import',
+        success: false,
+        errorCode: message,
+        details: {
+          method: 'wintalent',
+        },
+      });
     } finally {
       setWintalentLoading(false);
     }

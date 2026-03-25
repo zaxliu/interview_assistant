@@ -46,3 +46,9 @@ CLAUDE_SESSIONS_REPORT.md
 # Local wintalent debug artifacts
 wintalent_resume.pdf
 wintalent_resume.headers.txt
+
+# Local metrics storage
+.metrics/
+
+# Local env backups
+.env.backup-*

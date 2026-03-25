@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "proxy:wintalent": "node scripts/wintalent-proxy.mjs"
+    "proxy:wintalent": "node scripts/wintalent-proxy.mjs",
+    "metrics": "node scripts/metrics-server.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.0.0",

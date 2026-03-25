@@ -9,4 +9,8 @@ if [ -n "${VITE_WINTALENT_PROXY_URL:-}" ]; then
   export VITE_WINTALENT_PROXY_URL="${VITE_WINTALENT_PROXY_URL%/}"
 fi
 
+if [ -n "${VITE_METRICS_PROXY_URL:-}" ]; then
+  export VITE_METRICS_PROXY_URL="${VITE_METRICS_PROXY_URL%/}"
+fi
+
 exec /docker-entrypoint.sh "$@"

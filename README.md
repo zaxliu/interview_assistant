@@ -10,6 +10,7 @@ A web-based interview assistant that helps interviewers prepare for interviews, 
 - **Structured Summary**: Editable interview result with evaluation dimensions, scores, and comprehensive assessment
 - **Multiple Export Options**: Export to Feishu Doc
 - **Built-in CORS Proxy**: No external proxy needed for API calls
+- **Usage Admin**: Optional `/usage-admin` dashboard with anonymous usage funnel and AI cost metrics
 
 ## Quick Start
 
@@ -52,8 +53,61 @@ A web-based interview assistant that helps interviewers prepare for interviews, 
 Notes:
 
 - Docker compose now starts a built-in `wintalent-proxy` sidecar automatically.
+- Docker compose also starts a built-in `metrics` sidecar for `/usage-admin`.
 - If you need custom proxy target, set `DOCKER_WINTALENT_PROXY_URL` in `.env`.
 - If you previously set `VITE_WINTALENT_PROXY_URL=http://127.0.0.1:8787` in `.env`, it can cause `502 Bad Gateway` in Docker (because `127.0.0.1` points to the nginx container itself, not your host).
+
+### Transfer Packaging
+
+Use this flow when you need to ship the repository source through a registry image and unpack it on another machine.
+
+Build and push the transfer image:
+
+```bash
+chmod +x scripts/build-transfer-image.sh
+scripts/build-transfer-image.sh
+```
+
+Optional environment variables:
+
+```bash
+TRANSFER_DIR=/tmp/interview_assitant_transfer
+TRANSFER_IMAGE=hub.hobot.cc/carsim/interview_assitant-transfer:latest
+TRANSFER_DOCKERFILE=/tmp/interview_assitant_transfer/Dockerfile.transfer
+```
+
+What gets packed:
+
+- Frontend and server source under `src/`, `public/`, and `scripts/`
+- Build and Docker files such as `Dockerfile`, `docker-compose.yml`, `.env.example`, `nginx.conf.template`
+- Node and TypeScript config files required to rebuild the app
+
+What is intentionally excluded:
+
+- `.git`, `node_modules`, `dist`, coverage output, local `.env`, and other local-only artifacts
+
+Extract the source on the target machine:
+
+```bash
+chmod +x scripts/extract-transfer-image.sh
+scripts/extract-transfer-image.sh
+```
+
+Or specify image and destination explicitly:
+
+```bash
+scripts/extract-transfer-image.sh \
+  hub.hobot.cc/carsim/interview_assitant-transfer:latest \
+  ./interview_assitant_src
+```
+
+After extraction:
+
+```bash
+cd interview_assitant_src
+cp .env.example .env
+docker compose up --build
+```
 
 ## Configuration
 
@@ -65,6 +119,7 @@ Notes:
 | `VITE_AI_MODEL` | Model to use | `gpt-4` |
 | `VITE_AI_BASE_URL` | AI provider base URL, including OpenAI-compatible prefix such as `/v1` | `https://api.openai.com/v1` |
 | `VITE_WINTALENT_PROXY_URL` | Wintalent backend proxy base URL | `http://127.0.0.1:8787` |
+| `VITE_METRICS_PROXY_URL` | Metrics backend proxy base URL | `http://127.0.0.1:8788` |
 
 **Note**: The AI provider URL is configured server-side via environment variables, not in browser settings. It should point to the OpenAI-compatible API root, for example `https://api.openai.com/v1` or `https://api.openai-proxy.org/v1`. API keys are stored in browser localStorage and sent with each request.
 
@@ -74,6 +129,8 @@ Notes:
 |----------|-------------|
 | `VITE_FEISHU_APP_ID` | Feishu app ID |
 | `VITE_FEISHU_APP_SECRET` | Feishu app secret |
+| `METRICS_ADMIN_FEISHU_USER_IDS` | Comma-separated Feishu user IDs allowed to access `/usage-admin` |
+| `METRICS_SESSION_SECRET` | Secret used to sign metrics admin session cookies |
 
 **Note**: CORS proxy is built-in. No need to run `local-cors-proxy` anymore.
 
@@ -117,10 +174,11 @@ This app now always uses the site root as OAuth `redirect_uri` and restores the 
 7. **Generate Summary**: After the interview, generate a structured summary
 
 8. **Export**: Export to Feishu Doc
+9. **Usage Admin**: Visit `/usage-admin` and log in with a whitelisted Feishu account to view aggregated usage data
 
 ## Data Storage
 
-All data is stored in the browser's localStorage. No backend required.
+Interview business data is stored in the browser's localStorage. If the metrics service is enabled, anonymous usage events are also stored server-side for `/usage-admin`.
 
 ## Development
 
@@ -169,8 +227,8 @@ The app uses built-in CORS proxies for both local development and Docker deploym
 
 | Environment | AI API | Feishu API | Wintalent API |
 |-------------|--------|------------|---------------|
-| Local (`npm run dev`) | Vite proxy → `VITE_AI_BASE_URL` | Vite proxy → Feishu | Vite proxy → `VITE_WINTALENT_PROXY_URL` |
-| Docker | nginx proxy → `VITE_AI_BASE_URL` | nginx proxy → Feishu | nginx proxy → `VITE_WINTALENT_PROXY_URL` |
+| Local (`npm run dev`) | Vite proxy → `VITE_AI_BASE_URL` | Vite proxy → Feishu | Vite proxy → `VITE_WINTALENT_PROXY_URL` / `VITE_METRICS_PROXY_URL` |
+| Docker | nginx proxy → `VITE_AI_BASE_URL` | nginx proxy → Feishu | nginx proxy → `VITE_WINTALENT_PROXY_URL` / `VITE_METRICS_PROXY_URL` |
 
 ### Tech Stack
 

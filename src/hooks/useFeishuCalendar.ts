@@ -7,6 +7,7 @@ import {
 } from '@/api/feishu';
 import { useSettingsStore } from '@/store/settingsStore';
 import type { CalendarEvent, InterviewResult } from '@/types';
+import { trackEvent } from '@/lib/analytics';
 
 export const useFeishuCalendar = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -27,6 +28,7 @@ export const useFeishuCalendar = () => {
 
       setIsLoading(true);
       setError(null);
+      const startedAt = Date.now();
 
       try {
         const result = await syncInterviewsFromCalendar(
@@ -35,10 +37,27 @@ export const useFeishuCalendar = () => {
           feishuAppId || undefined,
           feishuAppSecret || undefined
         );
+        trackEvent({
+          eventName: 'calendar_sync_succeeded',
+          feature: 'calendar_sync',
+          success: true,
+          durationMs: Date.now() - startedAt,
+          details: {
+            syncedEvents: result.events.length,
+            positions: result.positions.size,
+          },
+        });
         return result;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : '同步日历失败';
         setError(errorMessage);
+        trackEvent({
+          eventName: 'calendar_sync_failed',
+          feature: 'calendar_sync',
+          success: false,
+          durationMs: Date.now() - startedAt,
+          errorCode: errorMessage,
+        });
         return null;
       } finally {
         setIsLoading(false);
