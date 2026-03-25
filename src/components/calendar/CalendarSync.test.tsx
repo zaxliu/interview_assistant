@@ -8,7 +8,7 @@ import type { Position } from '@/types';
 const {
   syncCalendarMock,
   extractLinksFromDescriptionMock,
-  fetchWintalentPositionJDMock,
+  fetchFirstAvailableWintalentPositionJDMock,
   buildPositionDescriptionFromWintalentJDMock,
   hookState,
 } = vi.hoisted(() => ({
@@ -17,7 +17,7 @@ const {
     interviewLink: undefined,
     candidateLink: undefined,
   })),
-  fetchWintalentPositionJDMock: vi.fn(),
+  fetchFirstAvailableWintalentPositionJDMock: vi.fn(),
   buildPositionDescriptionFromWintalentJDMock: vi.fn(),
   hookState: {
     isLoading: false,
@@ -38,7 +38,7 @@ vi.mock('@/api/feishu', () => ({
 }));
 
 vi.mock('@/api/wintalent', () => ({
-  fetchWintalentPositionJD: fetchWintalentPositionJDMock,
+  fetchFirstAvailableWintalentPositionJD: fetchFirstAvailableWintalentPositionJDMock,
   buildPositionDescriptionFromWintalentJD: buildPositionDescriptionFromWintalentJDMock,
   isWintalentInterviewLink: (url: string | undefined) => Boolean(url && url.includes('wintalent.cn')),
 }));
@@ -80,10 +80,13 @@ describe('CalendarSync', () => {
     hookState.isLoading = false;
     hookState.error = null;
     syncCalendarMock.mockResolvedValue(emptySyncResult);
-    fetchWintalentPositionJDMock.mockResolvedValue({
-      postName: 'AI Agent应用工程师',
-      workContent: '职责A',
-      serviceCondition: '要求B',
+    fetchFirstAvailableWintalentPositionJDMock.mockResolvedValue({
+      link: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc',
+      jd: {
+        postName: 'AI Agent应用工程师',
+        workContent: '职责A',
+        serviceCondition: '要求B',
+      },
     });
     buildPositionDescriptionFromWintalentJDMock.mockReturnValue('自动拉取的JD内容');
 
@@ -414,7 +417,65 @@ describe('CalendarSync', () => {
       expect(updated?.description).toBe('自动拉取的JD内容');
     });
 
-    expect(fetchWintalentPositionJDMock).toHaveBeenCalledWith('https://www.wintalent.cn/wt/Horizon/kurl?k=abc');
+    expect(fetchFirstAvailableWintalentPositionJDMock).toHaveBeenCalledWith([
+      'https://www.wintalent.cn/wt/Horizon/kurl?k=abc',
+    ]);
     expect(buildPositionDescriptionFromWintalentJDMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('tries multiple candidate links when auto-filling JD', async () => {
+    usePositionStore.setState({
+      positions: [
+        {
+          id: 'position-jd',
+          title: 'AI Agent应用工程师',
+          team: '平台',
+          description: '',
+          criteria: [],
+          createdAt: '2026-03-01T08:00:00.000Z',
+          source: 'calendar',
+          candidates: [
+            {
+              id: 'candidate-1',
+              name: 'Alex',
+              status: 'scheduled',
+              candidateLink: 'https://www.wintalent.cn/wt/Horizon/kurl?k=first',
+              questions: [],
+            },
+            {
+              id: 'candidate-2',
+              name: 'Bob',
+              status: 'scheduled',
+              candidateLink: 'https://www.wintalent.cn/wt/Horizon/kurl?k=second',
+              questions: [],
+            },
+          ],
+        },
+      ],
+      currentUserId: 'user-1',
+    });
+
+    fetchFirstAvailableWintalentPositionJDMock.mockResolvedValue({
+      link: 'https://www.wintalent.cn/wt/Horizon/kurl?k=second',
+      jd: {
+        postName: 'AI Agent应用工程师',
+        workContent: '职责B',
+      },
+    });
+    buildPositionDescriptionFromWintalentJDMock.mockReturnValue('候选人2的JD内容');
+    syncCalendarMock.mockResolvedValue(emptySyncResult);
+
+    render(<CalendarSync />);
+    fireEvent.click(screen.getByRole('button', { name: '同步日历' }));
+
+    await waitFor(() => {
+      const updated = usePositionStore.getState().getPosition('position-jd');
+      expect(updated?.description).toBe('候选人2的JD内容');
+    });
+
+    expect(fetchFirstAvailableWintalentPositionJDMock).toHaveBeenCalledWith([
+      'https://www.wintalent.cn/wt/Horizon/kurl?k=first',
+      'https://www.wintalent.cn/wt/Horizon/kurl?k=second',
+    ]);
   });
 });

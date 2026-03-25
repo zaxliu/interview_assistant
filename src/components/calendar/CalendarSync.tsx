@@ -6,7 +6,7 @@ import { Button } from '@/components/ui';
 import { extractLinksFromDescription } from '@/api/feishu';
 import {
   buildPositionDescriptionFromWintalentJD,
-  fetchWintalentPositionJD,
+  fetchFirstAvailableWintalentPositionJD,
   isWintalentInterviewLink,
 } from '@/api/wintalent';
 import type { Candidate, CalendarEvent, Position } from '@/types';
@@ -278,19 +278,20 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
       if (position.source !== 'calendar') continue;
       if ((position.description || '').trim()) continue;
 
-      const candidateLink = position.candidates
+      const candidateLinks = position.candidates
         .map((candidate) => candidate.candidateLink?.trim() || '')
-        .find((link) => isWintalentInterviewLink(link));
+        .filter((link) => isWintalentInterviewLink(link));
 
-      if (!candidateLink) continue;
+      if (candidateLinks.length === 0) continue;
 
       try {
-        let nextDescription = descriptionCache.get(candidateLink);
+        const cacheKey = candidateLinks.join('|');
+        let nextDescription = descriptionCache.get(cacheKey);
         if (!nextDescription) {
-          const jd = await fetchWintalentPositionJD(candidateLink);
+          const { jd } = await fetchFirstAvailableWintalentPositionJD(candidateLinks);
           nextDescription = buildPositionDescriptionFromWintalentJD(jd);
           if (!nextDescription) continue;
-          descriptionCache.set(candidateLink, nextDescription);
+          descriptionCache.set(cacheKey, nextDescription);
         }
 
         updatePosition(position.id, { description: nextDescription });

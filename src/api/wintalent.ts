@@ -196,6 +196,11 @@ export interface WintalentResumeTextData {
   title?: string;
 }
 
+export interface WintalentJDResolution {
+  link: string;
+  jd: WintalentJDData;
+}
+
 const normalizeJdText = (value: string | undefined): string => {
   return (value || '').replace(/&br&/g, '\n').replace(/\r\n/g, '\n').trim();
 };
@@ -313,6 +318,37 @@ export const fetchWintalentPositionJD = async (interviewUrl: string): Promise<Wi
     throw new Error(payload?.error || '获取岗位 JD 失败');
   }
   return payload.jd;
+};
+
+export const fetchFirstAvailableWintalentPositionJD = async (
+  interviewUrls: string[]
+): Promise<WintalentJDResolution> => {
+  const links = Array.from(
+    new Set(
+      interviewUrls
+        .map((value) => value.trim())
+        .filter((value) => isWintalentInterviewLink(value))
+    )
+  );
+
+  if (links.length === 0) {
+    throw new Error('当前岗位下未找到 Wintalent 候选人链接。');
+  }
+
+  let lastError: unknown = null;
+  for (const link of links) {
+    try {
+      const jd = await fetchWintalentPositionJD(link);
+      return { link, jd };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+  throw new Error('获取岗位 JD 失败');
 };
 
 export const fetchWintalentCandidateData = async (interviewUrl: string): Promise<WintalentCandidateData> => {

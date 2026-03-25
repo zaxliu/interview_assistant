@@ -3,7 +3,7 @@ import type { Position } from '@/types';
 import { usePositionStore } from '@/store/positionStore';
 import {
   buildPositionDescriptionFromWintalentJD,
-  fetchWintalentPositionJD,
+  fetchFirstAvailableWintalentPositionJD,
   isWintalentInterviewLink,
 } from '@/api/wintalent';
 import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea } from '@/components/ui';
@@ -31,13 +31,12 @@ export const PositionForm: React.FC<PositionFormProps> = ({
   const [jdLoading, setJdLoading] = useState(false);
   const [jdStatus, setJdStatus] = useState<string | null>(null);
 
-  const getWintalentLinkFromPosition = (): string | null => {
-    if (!position) return null;
-    const link = position.candidates
-      .map((candidate) => candidate.candidateLink?.trim() || '')
-      .find((value) => isWintalentInterviewLink(value));
-    return link || null;
-  };
+  const getWintalentLinksFromPosition = (): string[] =>
+    !position
+      ? []
+      : position.candidates
+          .map((candidate) => candidate.candidateLink?.trim() || '')
+          .filter((value) => isWintalentInterviewLink(value));
 
   const handleRefreshJD = async () => {
     if (!position) {
@@ -45,8 +44,8 @@ export const PositionForm: React.FC<PositionFormProps> = ({
       return;
     }
 
-    const candidateLink = getWintalentLinkFromPosition();
-    if (!candidateLink) {
+    const candidateLinks = getWintalentLinksFromPosition();
+    if (candidateLinks.length === 0) {
       setJdStatus('当前岗位下未找到 Wintalent 候选人链接。');
       return;
     }
@@ -54,7 +53,7 @@ export const PositionForm: React.FC<PositionFormProps> = ({
     setJdLoading(true);
     setJdStatus(null);
     try {
-      const jd = await fetchWintalentPositionJD(candidateLink);
+      const { jd } = await fetchFirstAvailableWintalentPositionJD(candidateLinks);
       const nextDescription = buildPositionDescriptionFromWintalentJD(jd);
       if (!nextDescription) {
         throw new Error('已获取 JD，但内容为空。');

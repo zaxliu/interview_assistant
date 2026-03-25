@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPositionDescriptionFromWintalentJD,
+  fetchFirstAvailableWintalentPositionJD,
   downloadWintalentResumePDF,
   fetchWintalentCandidateData,
   fetchWintalentPositionJD,
@@ -210,6 +211,52 @@ describe('fetchWintalentPositionJD', () => {
     await expect(
       fetchWintalentPositionJD('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
     ).rejects.toThrow('Wintalent 代理服务不可用');
+  });
+});
+
+describe('fetchFirstAvailableWintalentPositionJD', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('tries subsequent wintalent links when the first one fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ ok: false, error: '无职位JD权限' }), {
+            status: 403,
+            headers: { 'content-type': 'application/json' },
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              ok: true,
+              jd: {
+                postName: 'AI Agent应用工程师',
+                workContent: '职责A',
+              },
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }
+          )
+        )
+    );
+
+    const result = await fetchFirstAvailableWintalentPositionJD([
+      'https://www.wintalent.cn/wt/Horizon/kurl?k=first',
+      'https://www.wintalent.cn/wt/Horizon/kurl?k=second',
+    ]);
+
+    expect(result.link).toBe('https://www.wintalent.cn/wt/Horizon/kurl?k=second');
+    expect(result.jd.postName).toBe('AI Agent应用工程师');
   });
 });
 
