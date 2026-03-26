@@ -41,3 +41,10 @@ export const getPreferredResumeText = (candidate: Candidate): string =>
 
 export const getRawResumeText = (candidate: Candidate): string =>
   candidate.resumeRawText?.trim() || candidate.resumeText?.trim() || '';
+
+export const hasImportedResume = (candidate: Candidate): boolean =>
+  Boolean(
+    getPreferredResumeText(candidate) ||
+    getRawResumeText(candidate) ||
+    candidate.resumeFilename?.trim()
+  );

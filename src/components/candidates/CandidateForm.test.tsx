@@ -45,6 +45,7 @@ vi.mock('@/api/wintalent', () => ({
   downloadWintalentResumePDF,
   fetchWintalentCandidateData,
   fetchWintalentResumeText,
+  isWintalentInterviewLink: (url: string | undefined) => Boolean(url?.includes('wintalent.cn')),
 }));
 
 describe('CandidateForm', () => {
@@ -156,6 +157,69 @@ describe('CandidateForm', () => {
     expect(screen.getByText('日历链接')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'https://vc.feishu.cn/j/681359281' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc' })).toBeInTheDocument();
+  });
+
+  it('auto imports Wintalent resume on mount when requested and candidate has no resume', async () => {
+    downloadWintalentResumePDF.mockResolvedValue({
+      blob: new Blob(['%PDF-1.7 fake'], { type: 'application/pdf' }),
+      filename: 'candidate.pdf',
+      resolvedPdfUrl: 'https://www.wintalent.cn/interviewer/interviewPlatform/getResumeOriginalInfo?...',
+      resumeId: '3293935',
+    });
+    parseFromFile.mockResolvedValue({
+      text: 'Imported resume text',
+      usage: { input: 31, cached: 6, output: 18 },
+    });
+
+    render(
+      <CandidateForm
+        positionId="position-1"
+        candidate={{
+          id: 'candidate-1',
+          name: 'Alice',
+          status: 'scheduled',
+          questions: [],
+          candidateLink: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc',
+        }}
+        autoImportOnMount
+        onSave={() => undefined}
+        onCancel={() => undefined}
+      />
+    );
+
+    await waitFor(() => {
+      expect(downloadWintalentResumePDF).toHaveBeenCalledWith(
+        'https://www.wintalent.cn/wt/Horizon/kurl?k=abc'
+      );
+      expect(parseFromFile).toHaveBeenCalledTimes(1);
+      expect(processResume).toHaveBeenCalledWith('Imported resume text');
+      expect(screen.getByText(/candidate\.pdf/)).toBeInTheDocument();
+    });
+  });
+
+  it('does not auto import on mount when candidate already has a resume', async () => {
+    render(
+      <CandidateForm
+        positionId="position-1"
+        candidate={{
+          id: 'candidate-1',
+          name: 'Alice',
+          status: 'scheduled',
+          questions: [],
+          candidateLink: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc',
+          resumeText: 'Existing resume',
+          resumeMarkdown: 'Existing resume',
+        }}
+        autoImportOnMount
+        onSave={() => undefined}
+        onCancel={() => undefined}
+      />
+    );
+
+    await waitFor(() => {
+      expect(downloadWintalentResumePDF).not.toHaveBeenCalled();
+      expect(processResume).not.toHaveBeenCalled();
+    });
   });
 
   it('renders stored ISO interview time without UTC shift in the datetime input', () => {

@@ -14,12 +14,15 @@ import { emptyResumeHighlights, getPreferredResumeText, getRawResumeText } from 
 import { formatInterviewTimeForInput, normalizeInterviewTimeForSave } from '@/utils/dateTime';
 import { zhCN as t } from '@/i18n/zhCN';
 import { reportError, trackEvent, usageFromAIUsage } from '@/lib/analytics';
+import { isWintalentInterviewLink } from '@/api/wintalent';
+import { enqueueSerialTask } from '@/utils/serialTaskQueue';
 
 const AUTO_SAVE_DELAY = 800;
 
 interface CandidateFormProps {
   positionId: string;
   candidate?: Candidate;
+  autoImportOnMount?: boolean;
   onSave: (candidateId: string) => void;
   onCancel: () => void;
 }
@@ -27,6 +30,7 @@ interface CandidateFormProps {
 export const CandidateForm: React.FC<CandidateFormProps> = ({
   positionId,
   candidate,
+  autoImportOnMount = false,
   onSave,
   onCancel,
 }) => {
@@ -73,6 +77,8 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
   const [needsPdfPersist, setNeedsPdfPersist] = useState(false);
   const [useAIParsing, setUseAIParsing] = useState(true);
+  const [wintalentTrigger, setWintalentTrigger] = useState<'auto_from_start' | 'manual' | null>(null);
+  const [wintalentQueued, setWintalentQueued] = useState(false);
   const [wintalentLoading, setWintalentLoading] = useState(false);
   const [wintalentError, setWintalentError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'saving' | 'unsaved'>(
@@ -81,7 +87,17 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistedCandidateIdRef = useRef<string | null>(candidate?.id || null);
   const isHydratingRef = useRef(true);
-  const isResumeBusy = pdfLoading || resumeProcessing || wintalentLoading;
+  const autoImportAttemptedRef = useRef(false);
+  const isResumeBusy = pdfLoading || resumeProcessing || wintalentLoading || wintalentQueued;
+  const hasResumeContent = Boolean(
+    resumeText.trim() || resumeRawText.trim() || resumeFilename.trim()
+  );
+  const canAutoImportFromLink = Boolean(
+    candidate?.id &&
+    !hasResumeContent &&
+    wintalentLink.trim() &&
+    isWintalentInterviewLink(wintalentLink)
+  );
 
   const previewDebugText = (content: string, limit: number = 300): string => (
     content.length > limit ? `${content.slice(0, limit)}...` : content
@@ -98,7 +114,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     };
   };
 
-  const applyProcessedResume = async (rawText: string) => {
+  const applyProcessedResume = useCallback(async (rawText: string) => {
     console.log('[CandidateForm] applyProcessedResume start', {
       rawTextLength: rawText.length,
       rawTextPreview: previewDebugText(rawText),
@@ -121,7 +137,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     setResumeHighlights(processed.highlights);
     setResumeProcessingUsage(processed.usage);
     return processed;
-  };
+  }, [processResume]);
 
   const renderUsage = (usage: AIUsage | undefined, label: string) => {
     if (!usage) return null;
@@ -152,8 +168,11 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     setResumeFilename(candidate?.resumeFilename || '');
     setPendingPdfFile(null);
     setNeedsPdfPersist(false);
+    setWintalentTrigger(null);
+    setWintalentQueued(false);
     setSaveStatus(candidate ? 'saved' : 'idle');
     setInterviewTime(formatInterviewTimeForInput(candidate?.interviewTime));
+    autoImportAttemptedRef.current = false;
     queueMicrotask(() => {
       isHydratingRef.current = false;
     });
@@ -397,7 +416,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     }
   };
 
-  const handleWintalentImport = async () => {
+  const runWintalentImport = useCallback(async (trigger: 'auto_from_start' | 'manual') => {
     const link = wintalentLink.trim();
     if (!link) return;
 
@@ -437,6 +456,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
             details: {
               method: 'wintalent',
               source: 'pdf',
+              trigger,
             },
           });
         } else {
@@ -449,6 +469,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
             details: {
               method: 'wintalent',
               source: 'pdf',
+              trigger,
             },
           });
         }
@@ -483,6 +504,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
           details: {
             method: 'wintalent',
             source: 'html',
+            trigger,
           },
         });
       }
@@ -518,12 +540,53 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
         errorCode: message,
         details: {
           method: 'wintalent',
+          trigger,
         },
       });
     } finally {
       setWintalentLoading(false);
     }
+  }, [
+    aiModel,
+    applyProcessedResume,
+    canUseAI,
+    candidate?.id,
+    parseFromFile,
+    pdfError,
+    positionId,
+    resumeProcessingError,
+    useAIParsing,
+    wintalentLink,
+  ]);
+
+  const queueWintalentImport = useCallback(
+    async (trigger: 'auto_from_start' | 'manual') => {
+      setWintalentQueued(true);
+      try {
+        setWintalentTrigger(trigger);
+        await enqueueSerialTask(() => runWintalentImport(trigger));
+      } finally {
+        setWintalentQueued(false);
+        setWintalentTrigger(null);
+      }
+    },
+    [runWintalentImport]
+  );
+
+  const handleWintalentImport = async () => {
+    await queueWintalentImport('manual');
   };
+
+  useEffect(() => {
+    if (!autoImportOnMount || autoImportAttemptedRef.current || isResumeBusy || !canAutoImportFromLink) {
+      return;
+    }
+
+    autoImportAttemptedRef.current = true;
+    queueWintalentImport('auto_from_start').catch((error) => {
+      console.error('[CandidateForm] Error auto importing Wintalent resume:', error);
+    });
+  }, [autoImportOnMount, canAutoImportFromLink, isResumeBusy, queueWintalentImport]);
 
   const handleReprocessResume = async () => {
     await applyProcessedResume(resumeRawText || resumeText);
@@ -716,6 +779,18 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
             {resumeProcessing && (
               <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                 正在整理简历内容并生成亮点...
+              </div>
+            )}
+
+            {wintalentQueued && !wintalentLoading && wintalentTrigger === 'auto_from_start' && (
+              <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+                正在等待自动导入简历...
+              </div>
+            )}
+
+            {wintalentLoading && wintalentTrigger === 'auto_from_start' && (
+              <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+                正在自动导入简历...
               </div>
             )}
 
