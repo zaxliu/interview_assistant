@@ -2,6 +2,7 @@ const WINTALENT_DOWNLOAD_API = '/api/wintalent/download';
 const WINTALENT_JD_API = '/api/wintalent/jd';
 const WINTALENT_CANDIDATE_API = '/api/wintalent/candidate';
 const WINTALENT_RESUME_TEXT_API = '/api/wintalent/resume-text';
+const WINTALENT_EVALUATION_AUTOFILL_API = '/api/wintalent/evaluation-autofill';
 const WINTALENT_PROXY_OFFLINE_MESSAGE =
   'Wintalent 代理服务不可用，请先运行 `npm run proxy:wintalent`（或直接使用 `npm run dev` / `npm start`）。';
 const WINTALENT_RESUME_UNAVAILABLE_MESSAGE =
@@ -194,6 +195,36 @@ export interface WintalentResumeTextData {
   resumeId: string | null;
   source: 'html';
   title?: string;
+}
+
+export interface WintalentEvaluationAutofillResultPayload {
+  interview_info: {
+    interviewer: string;
+    overall_result: '通过' | '不通过' | '待定';
+    interview_time: string;
+  };
+  evaluation_dimensions: Array<{
+    dimension: string;
+    score: number;
+    assessment_points: string;
+  }>;
+  summary: {
+    suggested_level: string;
+    comprehensive_score: number;
+    overall_comment: string;
+    interview_conclusion: '通过' | '不通过' | '待定';
+    is_strongly_recommended: boolean;
+  };
+  additional_info?: {
+    strengths?: string[];
+    concerns?: string[];
+    follow_up_questions?: string[];
+  };
+}
+
+export interface WintalentEvaluationAutofillResult {
+  evaluationUrl: string;
+  candidateLinkUrl: string | null;
 }
 
 export interface WintalentJDResolution {
@@ -430,5 +461,47 @@ export const fetchWintalentResumeText = async (interviewUrl: string): Promise<Wi
     resumeId: payload.resumeId ?? null,
     source: payload.source || 'html',
     title: payload.title,
+  };
+};
+
+export const autofillWintalentEvaluationDraft = async (
+  interviewUrl: string,
+  result: WintalentEvaluationAutofillResultPayload
+): Promise<WintalentEvaluationAutofillResult> => {
+  const normalized = interviewUrl.trim();
+  if (!normalized) {
+    throw new Error('请输入 Wintalent 面试链接');
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(WINTALENT_EVALUATION_AUTOFILL_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ interviewUrl: normalized, result }),
+    });
+  } catch (error) {
+    throw new Error(toNetworkErrorMessage(error));
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  const payload = (await response.json()) as {
+    ok?: boolean;
+    error?: string;
+    evaluationUrl?: string;
+    candidateLinkUrl?: string | null;
+  };
+  if (!payload?.ok || !payload.evaluationUrl) {
+    throw new Error(payload?.error || '回填 Wintalent 评价草稿失败');
+  }
+
+  return {
+    evaluationUrl: payload.evaluationUrl,
+    candidateLinkUrl: payload.candidateLinkUrl ?? null,
   };
 };

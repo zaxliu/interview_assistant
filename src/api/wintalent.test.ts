@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  autofillWintalentEvaluationDraft,
   buildPositionDescriptionFromWintalentJD,
   fetchFirstAvailableWintalentPositionJD,
   downloadWintalentResumePDF,
@@ -8,6 +9,24 @@ import {
   fetchWintalentResumeText,
   isWintalentInterviewLink,
 } from './wintalent';
+
+const sampleInterviewResult = {
+  interview_info: {
+    interviewer: 'Lewis',
+    overall_result: '通过' as const,
+    interview_time: '2026-03-27 10:00',
+  },
+  evaluation_dimensions: [
+    { dimension: '专业能力', score: 4, assessment_points: '扎实' },
+  ],
+  summary: {
+    suggested_level: 'P7',
+    comprehensive_score: 4,
+    overall_comment: '整体较强',
+    interview_conclusion: '通过' as const,
+    is_strongly_recommended: true,
+  },
+};
 
 describe('downloadWintalentResumePDF', () => {
   beforeEach(() => {
@@ -211,6 +230,58 @@ describe('fetchWintalentPositionJD', () => {
     await expect(
       fetchWintalentPositionJD('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
     ).rejects.toThrow('Wintalent 代理服务不可用');
+  });
+});
+
+describe('autofillWintalentEvaluationDraft', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns evaluation url when draft autofill succeeds', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            evaluationUrl: 'https://www.wintalent.cn/interviewer/interviewPlatform/newpc/jsp/interviewEvaluation.html?x=1',
+            candidateLinkUrl: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc',
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }
+        )
+      )
+    );
+
+    await expect(
+      autofillWintalentEvaluationDraft('https://www.wintalent.cn/wt/Horizon/kurl?k=abc', sampleInterviewResult)
+    ).resolves.toEqual({
+      evaluationUrl: 'https://www.wintalent.cn/interviewer/interviewPlatform/newpc/jsp/interviewEvaluation.html?x=1',
+      candidateLinkUrl: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc',
+    });
+  });
+
+  it('throws backend error when draft autofill fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ok: false, error: '自动暂存失败' }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        })
+      )
+    );
+
+    await expect(
+      autofillWintalentEvaluationDraft('https://www.wintalent.cn/wt/Horizon/kurl?k=abc', sampleInterviewResult)
+    ).rejects.toThrow('自动暂存失败');
   });
 });
 

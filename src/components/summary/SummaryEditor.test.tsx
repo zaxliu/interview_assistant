@@ -4,7 +4,10 @@ import { SummaryEditor } from './SummaryEditor';
 import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 
-const generateInterviewSummary = vi.fn();
+const { generateInterviewSummary, autofillWintalentEvaluationDraft } = vi.hoisted(() => ({
+  generateInterviewSummary: vi.fn(),
+  autofillWintalentEvaluationDraft: vi.fn(),
+}));
 
 vi.mock('@/hooks/useAI', () => ({
   useAI: () => ({
@@ -12,6 +15,11 @@ vi.mock('@/hooks/useAI', () => ({
     error: null,
     generateInterviewSummary,
   }),
+}));
+
+vi.mock('@/api/wintalent', () => ({
+  autofillWintalentEvaluationDraft,
+  isWintalentInterviewLink: (url: string | undefined) => Boolean(url?.includes('wintalent.cn')),
 }));
 
 const position = {
@@ -29,6 +37,7 @@ const position = {
 const candidate = {
   id: 'candidate-1',
   name: 'Alice',
+  candidateLink: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc',
   status: 'pending' as const,
   interviewTime: '2026-03-11T10:00:00.000Z',
   questions: [],
@@ -40,6 +49,7 @@ const candidate = {
 describe('SummaryEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('open', vi.fn());
     useSettingsStore.setState({
       ...useSettingsStore.getState(),
       feishuUser: { id: 'user-1', name: 'Lewis', loginTime: '2026-03-11T00:00:00.000Z' },
@@ -48,6 +58,26 @@ describe('SummaryEditor', () => {
       ...usePositionStore.getState(),
       positions: [{ ...position, candidates: [candidate] }],
       currentUserId: 'user-1',
+    });
+  });
+
+  it('autofills wintalent draft and opens evaluation page', async () => {
+    autofillWintalentEvaluationDraft.mockResolvedValue({
+      evaluationUrl: 'https://www.wintalent.cn/interviewer/interviewPlatform/newpc/jsp/interviewEvaluation.html?x=1',
+      candidateLinkUrl: candidate.candidateLink,
+    });
+
+    render(<SummaryEditor position={position} candidate={candidate} />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: '一键回填到 Wintalent' })[0]);
+
+    await waitFor(() => {
+      expect(autofillWintalentEvaluationDraft).toHaveBeenCalled();
+      expect(window.open).toHaveBeenCalledWith(
+        'https://www.wintalent.cn/interviewer/interviewPlatform/newpc/jsp/interviewEvaluation.html?x=1',
+        '_blank',
+        'noopener,noreferrer'
+      );
     });
   });
 

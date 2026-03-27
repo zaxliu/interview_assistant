@@ -7,6 +7,7 @@ import { useAI } from '@/hooks/useAI';
 import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { getPreferredResumeText } from '@/utils/resume';
+import { autofillWintalentEvaluationDraft, isWintalentInterviewLink } from '@/api/wintalent';
 import { reportError, trackEvent, usageFromAIUsage } from '@/lib/analytics';
 
 const AUTO_SAVE_DELAY = 2000; // 2 seconds debounce
@@ -79,6 +80,8 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
   const [summaryUsage, setSummaryUsage] = useState<AIUsage | undefined>(
     candidate.interviewResult?.aiUsage?.summaryGeneration
   );
+  const [wintalentAutofillLoading, setWintalentAutofillLoading] = useState(false);
+  const [wintalentAutofillError, setWintalentAutofillError] = useState<string | null>(null);
 
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -314,6 +317,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
 
   const isCompleted = candidate.status === 'completed';
   const hasPageLink = Boolean(candidate.candidateLink);
+  const canAutofillWintalent = isWintalentInterviewLink(candidate.candidateLink);
 
   const renderUsage = (usage: AIUsage | undefined, label: string) => {
     if (!usage) {
@@ -329,6 +333,26 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       </div>
     );
   };
+
+  const handleAutofillWintalent = useCallback(async () => {
+    const candidateLink = candidate.candidateLink?.trim();
+    if (!candidateLink || !isWintalentInterviewLink(candidateLink)) {
+      setWintalentAutofillError('当前候选人没有可用的 Wintalent 面试链接。');
+      return;
+    }
+
+    setWintalentAutofillLoading(true);
+    setWintalentAutofillError(null);
+    try {
+      const finalResult = buildFinalResult();
+      const response = await autofillWintalentEvaluationDraft(candidateLink, finalResult);
+      window.open(response.evaluationUrl || response.candidateLinkUrl || candidateLink, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      setWintalentAutofillError(error instanceof Error ? error.message : '回填 Wintalent 评价页失败');
+    } finally {
+      setWintalentAutofillLoading(false);
+    }
+  }, [buildFinalResult, candidate.candidateLink]);
 
   return (
     <div className="space-y-4">
@@ -357,6 +381,15 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
         </div>
 
         <div className="flex gap-2">
+          {canAutofillWintalent && (
+            <Button
+              variant="secondary"
+              onClick={() => void handleAutofillWintalent()}
+              isLoading={wintalentAutofillLoading}
+            >
+              一键回填到 Wintalent
+            </Button>
+          )}
           <Button
             variant="secondary"
             onClick={handleGenerateSummary}
@@ -392,6 +425,12 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       )}
 
       {renderUsage(summaryUsage, 'AI 总结生成 Token')}
+
+      {wintalentAutofillError && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {wintalentAutofillError}
+        </div>
+      )}
 
       {/* Interview Info */}
       <Card>
@@ -570,6 +609,15 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       {/* Export Buttons */}
       <Card>
         <CardBody className="flex justify-end gap-2">
+          {canAutofillWintalent && (
+            <Button
+              variant="secondary"
+              onClick={() => void handleAutofillWintalent()}
+              isLoading={wintalentAutofillLoading}
+            >
+              一键回填到 Wintalent
+            </Button>
+          )}
           {!isCompleted && (
             <Button onClick={handleComplete}>
               完成面试

@@ -20,6 +20,12 @@ const ERROR_CODES = {
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 };
 
+const WINTALENT_INTERVIEW_RESULT_CODE = {
+  PASS: 1,
+  FAIL: 2,
+  PENDING: 4,
+};
+
 const JSON_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
   'Access-Control-Allow-Origin': '*',
@@ -320,6 +326,27 @@ async function postFormJson(jar, url, formObj, referer) {
   }
 }
 
+async function postFormText(jar, url, formObj, referer) {
+  const { res } = await requestWithJar(jar, url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: encodeForm(formObj),
+    referer,
+  });
+  const text = await res.text();
+  const resumeUnavailableMessage = extractResumeUnavailableMessage(text);
+  if (!res.ok) {
+    if (resumeUnavailableMessage) {
+      throw new Error(resumeUnavailableMessage);
+    }
+    throw new Error(`HTTP ${res.status} calling ${url}: ${text.slice(0, 200)}`);
+  }
+  return text;
+}
+
 async function createTokenizedUrl(jar, createTokenUrl, rawPath, referer) {
   const createTokenEndpoint = normalizeTokenEndpoint(createTokenUrl);
   if (!createTokenEndpoint) {
@@ -544,6 +571,186 @@ function extractResumeTextFromResumeDetailHtml(html) {
 
 function normalizeWhitespace(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function formatSummarySections(result) {
+  const lines = [];
+  const overallComment = String(result?.summary?.overall_comment || '').trim();
+  if (overallComment) {
+    lines.push(overallComment);
+  }
+
+  const appendList = (title, items) => {
+    const list = Array.isArray(items)
+      ? items.map((item) => String(item || '').trim()).filter(Boolean)
+      : [];
+    if (list.length === 0) return;
+    if (lines.length > 0) lines.push('');
+    lines.push(`${title}：`);
+    for (const item of list) {
+      lines.push(`- ${item}`);
+    }
+  };
+
+  appendList('优势', result?.additional_info?.strengths);
+  appendList('顾虑', result?.additional_info?.concerns);
+  appendList('后续跟进问题', result?.additional_info?.follow_up_questions);
+
+  return lines.join('\n').trim();
+}
+
+function mapInterviewConclusionToStatus(value) {
+  switch (String(value || '').trim()) {
+    case '通过':
+      return WINTALENT_INTERVIEW_RESULT_CODE.PASS;
+    case '不通过':
+      return WINTALENT_INTERVIEW_RESULT_CODE.FAIL;
+    default:
+      return WINTALENT_INTERVIEW_RESULT_CODE.PENDING;
+  }
+}
+
+function extractOperationUrlFromJavascript(value) {
+  const text = String(value || '');
+  const match = text.match(/openResumeEvaluate\('([^']+)'/i);
+  if (!match?.[1]) {
+    return null;
+  }
+  return new URL(match[1], ORIGIN).toString();
+}
+
+function resolveWintalentOptionCode(item, preferred) {
+  const options = Array.isArray(item?.evDicInfoVOList) ? item.evDicInfoVOList : [];
+  if (options.length === 0) return null;
+
+  if (typeof preferred === 'number') {
+    const option = options[Math.min(Math.max(preferred - 1, 0), options.length - 1)];
+    return option?.code || null;
+  }
+
+  const normalized = String(preferred || '').trim().toLowerCase();
+  if (!normalized) return null;
+
+  const option = options.find((entry) => {
+    const candidates = [
+      entry?.name,
+      entry?.cnName,
+      entry?.label,
+      entry?.text,
+      entry?.displayName,
+      entry?.value,
+    ]
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean);
+    return candidates.includes(normalized);
+  });
+
+  return option?.code || null;
+}
+
+function buildEvaluationInfosFromResult(formData, result) {
+  const groups = Array.isArray(formData?.informationSetList) ? formData.informationSetList : [];
+  const dimensionMap = new Map(
+    (Array.isArray(result?.evaluation_dimensions) ? result.evaluation_dimensions : [])
+      .map((item) => [String(item?.dimension || '').trim(), item])
+      .filter(([key]) => key)
+  );
+
+  const evaluationInfos = [];
+  const pushInfo = (item, itemValue) => {
+    if (itemValue === null || itemValue === undefined) return;
+    if (typeof itemValue === 'string' && !itemValue.trim()) return;
+    evaluationInfos.push({
+      fillType: item.fillType,
+      itemId: item.uniqueKey || item.id,
+      itemValue,
+      memo: '',
+    });
+  };
+
+  for (const group of groups) {
+    const groupName = String(group?.name || group?.title || '').trim();
+    const dimension = dimensionMap.get(groupName);
+    const items = Array.isArray(group?.informationItemList) ? group.informationItemList : [];
+
+    if (dimension) {
+      for (const item of items) {
+        if (item.fillType === 3 || item.fillType === 4) {
+          pushInfo(item, resolveWintalentOptionCode(item, Number(dimension.score || 0)));
+        } else if (item.fillType === 6) {
+          pushInfo(item, String(dimension.assessment_points || '').trim());
+        }
+      }
+      continue;
+    }
+
+    if (groupName === '综合评分') {
+      const item = items[0];
+      if (item) {
+        pushInfo(item, resolveWintalentOptionCode(item, Number(result?.summary?.comprehensive_score || 0)));
+      }
+      continue;
+    }
+
+    if (groupName === '建议职级') {
+      const item = items[0];
+      const suggestedLevel = String(result?.summary?.suggested_level || '').trim();
+      if (item && suggestedLevel) {
+        pushInfo(item, resolveWintalentOptionCode(item, suggestedLevel));
+      }
+      continue;
+    }
+
+    if (groupName === '总评') {
+      const item = items.find((entry) => entry.fillType === 6) || items[0];
+      if (item) {
+        pushInfo(item, formatSummarySections(result));
+      }
+      continue;
+    }
+
+    if (groupName === '面试结论') {
+      for (const item of items) {
+        if (String(item?.name || '').includes('强烈建议') && result?.summary?.is_strongly_recommended) {
+          pushInfo(item, resolveWintalentOptionCode(item, 1));
+        }
+      }
+    }
+  }
+
+  return evaluationInfos;
+}
+
+function buildLegacyEvaluationAutoSavePayload(formData, evaluationContext, result) {
+  const evaluateStatus = mapInterviewConclusionToStatus(
+    result?.summary?.interview_conclusion || result?.interview_info?.overall_result
+  );
+  const overallComment = formatSummarySections(result);
+  const evaluationInfos = buildEvaluationInfosFromResult(formData, result);
+  const evInfoStr = evaluationInfos
+    .map((item) => `${item.itemId}::${item.itemValue}`)
+    .join(';;');
+
+  return {
+    planId: String(formData?.planId || evaluationContext?.evaluationPayload?.planId || ''),
+    interviewerId: String(formData?.interviewerId || evaluationContext?.evaluationPayload?.interviewerId || ''),
+    evInfoStr: evInfoStr ? `${evInfoStr};;` : '',
+    memoInfoStr: '',
+    score: '0',
+    type: '1',
+    interviewerInfo: '',
+    isToReplaceEv: 'false',
+    questionAnswerInfo: '',
+    interviewResult: evaluateStatus ? String(evaluateStatus) : '',
+    noPassReason: '',
+    noPassOtherReason: evaluateStatus === WINTALENT_INTERVIEW_RESULT_CODE.FAIL ? overallComment : '',
+    pendingRemark: evaluateStatus === WINTALENT_INTERVIEW_RESULT_CODE.PENDING ? overallComment : '',
+    aiEvaluation: 'false',
+  };
+}
+
+function buildCandidateLinkFallbackUrl(showResumeUrl) {
+  return appendQueryParam(showResumeUrl, 'operateToEv', 'true');
 }
 
 function looksLikeMeaningfulReviewText(value) {
@@ -834,6 +1041,7 @@ async function resolveBaseFlow(interviewUrl, lanType = 1) {
       applyId,
       resumeId,
       postId,
+      planId: String(resumeTab0?.planId || ''),
       recruitType: recruitType || null,
       positionName: detailHeadPersInfo?.positionName || null,
       originalFileId: detailType.originalFileId || null,
@@ -946,6 +1154,101 @@ async function resolveCandidateDataFromFlow(flow) {
 
   return {
     historicalInterviewReviews,
+  };
+}
+
+function resolveEvaluationContextFromFlow(flow) {
+  const operateList = Array.isArray(flow?.currentResumeInfo?.detailHeadPersInfo?.operateList)
+    ? flow.currentResumeInfo.detailHeadPersInfo.operateList
+    : [];
+  const evaluateOperate = operateList.find((item) => String(item?.name || item?.cnName || '').includes('去评价'));
+  const evaluationUrl = extractOperationUrlFromJavascript(
+    evaluateOperate?.url || evaluateOperate?.tokenUrl || evaluateOperate?.functionUrl
+  );
+
+  if (!evaluateOperate || !evaluationUrl) {
+    throw new Error('当前候选人没有可用的“去评价”入口');
+  }
+
+  const url = new URL(evaluationUrl);
+  const query = url.searchParams;
+  const interviewType = query.get('interviewType') || '';
+  const operateObjStr =
+    query.get('operateObjStr') ||
+    String(flow?.currentResumeInfo?.resumeTab?.[0]?.operateObjStr || '');
+  const planId = Number(query.get('planId') || flow?.metadata?.planId || 0);
+  const interviewerId = Number(query.get('interviewerId') || 0);
+  const isMain = Number(query.get('isMain') || 0);
+
+  return {
+    evaluationUrl,
+    evaluationPayload: {
+      operateObjStr,
+      isMyself: 1,
+      isMyInterview: 0,
+      interviewTempleteId: '',
+      quickEv: 1,
+      isMain,
+      planId,
+      interviewType,
+      interviewerId,
+    },
+  };
+}
+
+async function resolveEvaluationFormFromFlow(flow) {
+  const evaluationContext = resolveEvaluationContextFromFlow(flow);
+  const tokenizedShowUrl = await createTokenizedUrl(
+    flow.jar,
+    flow.createTokenUrl,
+    '/interviewPlatform/candidate/interviewEvaluate/show',
+    flow.showResumeUrl
+  );
+  const response = await postFormJson(
+    flow.jar,
+    tokenizedShowUrl,
+    {
+      content: JSON.stringify(evaluationContext.evaluationPayload),
+    },
+    flow.showResumeUrl
+  );
+
+  if (!response || response.state !== 0 || !response.data) {
+    throw new Error(response?.msg || '加载 Wintalent 评价表失败');
+  }
+
+  return {
+    ...evaluationContext,
+    tokenizedShowUrl,
+    formData: response.data,
+  };
+}
+
+async function autoSaveEvaluationDraftFromFlow(flow, result) {
+  const evaluationForm = await resolveEvaluationFormFromFlow(flow);
+  const tokenizedAutoSaveUrl = await createTokenizedUrl(
+    flow.jar,
+    flow.createTokenUrl,
+    '/interviewPlatform/autoSaveEv',
+    flow.showResumeUrl
+  );
+  const payload = buildLegacyEvaluationAutoSavePayload(evaluationForm.formData, evaluationForm, result);
+  const responseText = await postFormText(
+    flow.jar,
+    tokenizedAutoSaveUrl,
+    payload,
+    flow.showResumeUrl
+  );
+  if (/系统服务出现异常|操作失败|失败/i.test(responseText || '')) {
+    throw new Error(responseText || '自动暂存 Wintalent 评价失败');
+  }
+
+  return {
+    evaluationUrl: evaluationForm.evaluationUrl,
+    candidateLinkUrl: buildCandidateLinkFallbackUrl(flow.showResumeUrl),
+    tokenizedAutoSaveUrl,
+    payload,
+    responseText,
   };
 }
 
@@ -1197,6 +1500,48 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && path === '/api/wintalent/evaluation-autofill') {
+    try {
+      const body = await readJsonBody(req);
+      const interviewUrl = String(body.interviewUrl || '');
+      const result = body.result;
+      const lanType = Number(body.lanType || 1);
+
+      if (!interviewUrl.startsWith('http')) {
+        sendJson(res, 400, { ok: false, code: ERROR_CODES.BAD_REQUEST, error: 'interviewUrl is required' });
+        return;
+      }
+      if (!result || typeof result !== 'object') {
+        sendJson(res, 400, { ok: false, code: ERROR_CODES.BAD_REQUEST, error: 'result is required' });
+        return;
+      }
+
+      const flow = await resolveBaseFlow(interviewUrl, lanType);
+      const draft = await autoSaveEvaluationDraftFromFlow(flow, result);
+
+      sendJson(res, 200, {
+        ok: true,
+        evaluationUrl: draft.evaluationUrl,
+        candidateLinkUrl: draft.candidateLinkUrl,
+        metadata: flow.metadata,
+        debug: {
+          showResumeUrl: flow.showResumeUrl,
+          tokenizedAutoSaveUrl: draft.tokenizedAutoSaveUrl,
+          payloadPreview: {
+            planId: draft.payload.planId,
+            interviewResult: draft.payload.interviewResult,
+            evaluationInfoCount: String(draft.payload.evInfoStr || '')
+              .split(';;')
+              .filter(Boolean).length,
+          },
+        },
+      });
+    } catch (error) {
+      sendProxyError(res, error);
+    }
+    return;
+  }
+
   sendJson(res, 404, { ok: false, code: ERROR_CODES.NOT_FOUND, error: 'Not found' });
 });
 
@@ -1209,4 +1554,5 @@ server.listen(PORT, HOST, () => {
   console.log('  POST /api/wintalent/jd');
   console.log('  POST /api/wintalent/candidate');
   console.log('  POST /api/wintalent/resume-text');
+  console.log('  POST /api/wintalent/evaluation-autofill');
 });
