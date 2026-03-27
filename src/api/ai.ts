@@ -153,6 +153,93 @@ const extractJsonFromModelContent = (content: string): string => {
   return extractBalancedJsonSnippet(content) || content;
 };
 
+const repairJsonStringLiterals = (input: string): string => {
+  let output = '';
+  let inString = false;
+  let hasPendingBackslash = false;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+
+    if (inString) {
+      if (hasPendingBackslash) {
+        if (char === 'u' || '"\\/bfnrt'.includes(char)) {
+          output += `\\${char}`;
+          hasPendingBackslash = false;
+          continue;
+        }
+
+        // Keep the backslash as a literal character when the model emits an invalid escape like \#.
+        output += `\\\\${char}`;
+        hasPendingBackslash = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        hasPendingBackslash = true;
+        continue;
+      }
+
+      if (char === '"') {
+        output += char;
+        inString = false;
+        continue;
+      }
+
+      if (char === '\n') {
+        output += '\\n';
+        continue;
+      }
+
+      if (char === '\r') {
+        output += '\\r';
+        continue;
+      }
+
+      if (char === '\t') {
+        output += '\\t';
+        continue;
+      }
+
+      const codePoint = char.charCodeAt(0);
+      if (codePoint < 0x20) {
+        output += `\\u${codePoint.toString(16).padStart(4, '0')}`;
+        continue;
+      }
+
+      output += char;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    }
+
+    output += char;
+  }
+
+  if (hasPendingBackslash) {
+    output += '\\\\';
+  }
+
+  return output;
+};
+
+const parseModelJson = <T>(content: string): T => {
+  const extracted = extractJsonFromModelContent(content).trim();
+
+  try {
+    return JSON.parse(extracted) as T;
+  } catch (initialError) {
+    const repaired = repairJsonStringLiterals(extracted);
+    try {
+      return JSON.parse(repaired) as T;
+    } catch {
+      throw initialError;
+    }
+  }
+};
+
 const extractCompletionContent = (payload: unknown, fallback: string): string => {
   if (!payload || typeof payload !== 'object') {
     return fallback;
@@ -225,7 +312,7 @@ const normalizeQuestionTextKey = (text: string): string =>
 
 const parseGeneratedQuestionDrafts = (content: string): GeneratedQuestionDraft[] => {
   try {
-    const parsed = JSON.parse(extractJsonFromModelContent(content)) as unknown;
+    const parsed = parseModelJson<unknown>(content);
     const items: unknown[] = Array.isArray(parsed)
       ? parsed
       : (
@@ -688,7 +775,7 @@ ${rawText}`,
         contentPreview: previewDebugText(content),
       });
 
-      const parsed = JSON.parse(extractJsonFromModelContent(content)) as Partial<ResumeProcessingResult>;
+      const parsed = parseModelJson<Partial<ResumeProcessingResult>>(content);
       const normalizedMarkdown = normalizeMarkdownText(parsed.markdown || rawText);
       const sanitizedHighlights = sanitizeResumeHighlights(parsed.highlights) || emptyResumeHighlights();
 
@@ -825,7 +912,7 @@ ${noteContentForPrompt}
   const usage = extractAIUsage(data);
 
   try {
-    const parsedContent = JSON.parse(extractJsonFromModelContent(content)) as {
+    const parsedContent = parseModelJson<{
       matched_answers?: Array<{
         question_id?: string;
         answer?: string;
@@ -837,7 +924,7 @@ ${noteContentForPrompt}
         source?: string;
         evaluation_dimension?: string;
       }>;
-    };
+    }>(content);
 
     const validQuestionIds = new Set(normalizedQuestions.map((question) => question.id));
     const matchedAnswers: ExtractedMatchedAnswer[] = (parsedContent.matched_answers || [])
@@ -1066,9 +1153,9 @@ ${quickNotesSection}${meetingNotesSection}${codingChallengesSection}${skippedTop
   const content = extractCompletionContent(data, '{}');
 
   try {
-    const result = JSON.parse(extractJsonFromModelContent(content));
+    const result = parseModelJson<InterviewResult>(content);
     return {
-      data: result as InterviewResult,
+      data: result,
       usage: extractAIUsage(data),
     };
   } catch (e) {

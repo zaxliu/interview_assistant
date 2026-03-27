@@ -42,7 +42,7 @@ export const useResumeProcessor = () => {
         const message = err instanceof Error ? err.message : '简历处理失败';
         setError(message);
         return {
-          markdown: '',
+          markdown: normalizeMarkdownText(trimmed),
           highlights: emptyResumeHighlights(),
         };
       } finally {

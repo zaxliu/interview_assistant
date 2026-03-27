@@ -259,6 +259,7 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
   const feishuUser = useSettingsStore((state) => state.feishuUser);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const autoSyncAttempted = useRef(new Set<string>());
+  const failedWintalentJDLookups = useRef(new Set<string>());
 
   const mergeAndPersistDuplicates = useCallback(() => {
     const currentPositions = usePositionStore.getState().positions;
@@ -286,6 +287,8 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
 
       try {
         const cacheKey = candidateLinks.join('|');
+        if (failedWintalentJDLookups.current.has(cacheKey)) continue;
+
         let nextDescription = descriptionCache.get(cacheKey);
         if (!nextDescription) {
           const { jd } = await fetchFirstAvailableWintalentPositionJD(candidateLinks);
@@ -296,6 +299,7 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
 
         updatePosition(position.id, { description: nextDescription });
       } catch (err) {
+        failedWintalentJDLookups.current.add(candidateLinks.join('|'));
         console.warn('[CalendarSync] Auto-fill position JD failed:', position.id, err);
       }
     }

@@ -170,6 +170,38 @@ describe('ai api parsing', () => {
     });
   });
 
+  it('repairs raw newlines inside markdown JSON strings during resume processing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '```json\n{\n  "markdown": "# 候选人 推荐报告\n\n## 推荐职位：大模型推理专家\n- 负责推理优化",\n  "highlights": {\n    "summary": "推理优化工程师",\n    "strengths": ["vLLM"],\n    "risks": [],\n    "experience": ["负责推理优化"],\n    "keywords": ["CUDA"]\n  }\n}\n```',
+              },
+            },
+          ],
+        }),
+      })
+    );
+
+    await expect(processResumeText({ apiKey: 'key', model: 'model' }, 'raw text')).resolves.toEqual({
+      data: {
+        markdown: '# 候选人 推荐报告\n\n## 推荐职位：大模型推理专家\n- 负责推理优化',
+        highlights: {
+          summary: '推理优化工程师',
+          strengths: ['vLLM'],
+          risks: [],
+          experience: ['负责推理优化'],
+          keywords: ['CUDA'],
+        },
+      },
+    });
+  });
+
   it('retries resume processing with a lighter prompt after a gateway timeout', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
@@ -295,6 +327,38 @@ describe('ai api parsing', () => {
       source: 'resume',
       evaluationDimension: '专业能力',
       context: '搜索排序项目',
+    });
+  });
+
+  it('repairs invalid backslash escapes in generated question context', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '```json\n[{"text":"你提到做了服务端研发，具体怎么做的？","source":"resume","evaluationDimension":"专业能力","context":"智驾模型服务端研发\\#全权负责云端调用逻辑"}]\n```',
+              },
+            },
+          ],
+        }),
+      })
+    );
+
+    const result = await generateQuestions(
+      { apiKey: 'key', model: 'model' },
+      'JD',
+      'Resume',
+      []
+    );
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toMatchObject({
+      text: '你提到做了服务端研发，具体怎么做的？',
+      context: '智驾模型服务端研发\\#全权负责云端调用逻辑',
     });
   });
 

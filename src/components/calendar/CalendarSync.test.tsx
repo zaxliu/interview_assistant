@@ -478,4 +478,48 @@ describe('CalendarSync', () => {
       'https://www.wintalent.cn/wt/Horizon/kurl?k=second',
     ]);
   });
+
+  it('does not retry JD autofill for the same failed wintalent links within the session', async () => {
+    usePositionStore.setState({
+      positions: [
+        {
+          id: 'position-jd',
+          title: 'AI Agent应用工程师',
+          team: '平台',
+          description: '',
+          criteria: [],
+          createdAt: '2026-03-01T08:00:00.000Z',
+          source: 'calendar',
+          candidates: [
+            {
+              id: 'candidate-jd',
+              name: 'Alex',
+              status: 'scheduled',
+              candidateLink: 'https://www.wintalent.cn/wt/Horizon/kurl?k=abc',
+              questions: [],
+            },
+          ],
+        },
+      ],
+      currentUserId: 'user-1',
+    });
+
+    fetchFirstAvailableWintalentPositionJDMock.mockRejectedValue(new Error('Wintalent 链接可能已失效'));
+    syncCalendarMock.mockResolvedValue(emptySyncResult);
+
+    render(<CalendarSync />);
+    const syncButton = screen.getByRole('button', { name: '同步日历' });
+
+    fireEvent.click(syncButton);
+    await waitFor(() => {
+      expect(fetchFirstAvailableWintalentPositionJDMock).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(syncButton);
+    await waitFor(() => {
+      expect(syncCalendarMock).toHaveBeenCalledTimes(2);
+    });
+
+    expect(fetchFirstAvailableWintalentPositionJDMock).toHaveBeenCalledTimes(1);
+  });
 });
