@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import type { Settings, User } from '@/types';
-import { loadSettingsFromStorage, saveSettingsToStorage } from '@/utils/storage';
+import {
+  hasSensitiveSettings,
+  loadSettingsFromStorage,
+  saveSettingsToStorage,
+} from '@/utils/storage';
 
 interface SettingsState extends Settings {
   feishuUser: User | null;
@@ -33,13 +37,8 @@ const preferEnvString = (envValue: string, storedValue?: string): string => {
 };
 
 const persistSettings = (state: SettingsState) => {
-  const settings: Settings & { feishuUser: User | null; interviewSplitRatio: number } = {
-    aiApiKey: state.aiApiKey,
+  const settings: Partial<Settings> & { feishuUser: User | null; interviewSplitRatio: number } = {
     aiModel: state.aiModel,
-    feishuAppId: state.feishuAppId,
-    feishuAppSecret: state.feishuAppSecret,
-    feishuUserAccessToken: state.feishuUserAccessToken,
-    feishuRefreshToken: state.feishuRefreshToken,
     feishuUser: state.feishuUser,
     interviewSplitRatio: state.interviewSplitRatio,
   };
@@ -82,17 +81,23 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         return;
       }
       const defaults = getDefaultSettings();
+      const loadedSensitiveSettings = hasSensitiveSettings(data);
 
       set({
-        aiApiKey: preferEnvString(defaults.aiApiKey, data.aiApiKey),
+        aiApiKey: defaults.aiApiKey,
         aiModel: preferEnvString(defaults.aiModel, data.aiModel),
-        feishuAppId: preferEnvString(defaults.feishuAppId, data.feishuAppId),
-        feishuAppSecret: preferEnvString(defaults.feishuAppSecret, data.feishuAppSecret),
-        feishuUserAccessToken: data.feishuUserAccessToken || '',
-        feishuRefreshToken: data.feishuRefreshToken || '',
+        feishuAppId: defaults.feishuAppId,
+        feishuAppSecret: defaults.feishuAppSecret,
+        feishuUserAccessToken: '',
+        feishuRefreshToken: '',
         feishuUser: data.feishuUser || null,
         interviewSplitRatio: data.interviewSplitRatio ?? defaults.interviewSplitRatio,
       });
+
+      // Rewrite legacy settings objects so previously persisted secrets are removed.
+      if (loadedSensitiveSettings) {
+        saveSettingsToStorage(data);
+      }
     } catch (error) {
       console.error('Failed to load settings from storage:', error);
     }

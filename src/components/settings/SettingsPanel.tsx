@@ -1,9 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useFeishuOAuth } from '@/hooks/useFeishuOAuth';
 import { Input, Card, CardHeader, CardBody, Button } from '@/components/ui';
-import { testAIApiKey } from '@/api/ai';
-import { testFeishuCredentials } from '@/api/feishu';
 import { zhCN as t } from '@/i18n/zhCN';
 import { getFeishuOAuthRedirectUri } from '@/utils/feishuOAuth';
 
@@ -13,40 +11,11 @@ interface SettingsPanelProps {
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
   const {
-    aiApiKey,
     aiModel,
-    feishuAppId,
-    feishuAppSecret,
-    setApiKey,
     setModel,
-    setFeishuAppId,
-    setFeishuAppSecret,
   } = useSettingsStore();
 
   const { isAuthenticated, user, logout } = useFeishuOAuth();
-
-  const [aiTestStatus, setAiTestStatus] = useState<{ loading: boolean; success?: boolean; message?: string }>({ loading: false });
-  const [feishuTestStatus, setFeishuTestStatus] = useState<{ loading: boolean; success?: boolean; message?: string }>({ loading: false });
-
-  const handleTestAI = async () => {
-    if (!aiApiKey) {
-      setAiTestStatus({ loading: false, success: false, message: '请先填写 API Key' });
-      return;
-    }
-    setAiTestStatus({ loading: true });
-    const result = await testAIApiKey(aiApiKey, aiModel || 'gpt-4');
-    setAiTestStatus({ loading: false, ...result });
-  };
-
-  const handleTestFeishu = async () => {
-    if (!feishuAppId || !feishuAppSecret) {
-      setFeishuTestStatus({ loading: false, success: false, message: '请先填写飞书 App ID 和 App Secret' });
-      return;
-    }
-    setFeishuTestStatus({ loading: true });
-    const result = await testFeishuCredentials(feishuAppId, feishuAppSecret);
-    setFeishuTestStatus({ loading: false, ...result });
-  };
 
   return (
     <div className="space-y-4">
@@ -66,36 +35,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
         </CardHeader>
         <CardBody className="space-y-3">
           <Input
-            label="API Key"
-            type="password"
-            value={aiApiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="请输入 AI API Key"
-          />
-          <Input
             label="模型"
             type="text"
             value={aiModel}
             onChange={(e) => setModel(e.target.value)}
             placeholder="gpt-4"
           />
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleTestAI}
-              disabled={aiTestStatus.loading}
-            >
-              {aiTestStatus.loading ? t.common.testing : '测试连接'}
-            </Button>
-            {aiTestStatus.message && (
-              <span className={`text-xs ${aiTestStatus.success ? 'text-green-600' : 'text-red-600'}`}>
-                {aiTestStatus.message}
-              </span>
-            )}
-          </div>
           <p className="text-xs text-gray-500">
-            AI 提供方地址由服务端环境变量配置，无需在前端填写。
+            模型可在前端调整，API Key 和服务地址由服务端环境变量提供，不在浏览器中显示或保存。
           </p>
         </CardBody>
       </Card>
@@ -106,37 +53,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
           <h3 className="text-sm font-medium text-gray-700">飞书配置</h3>
         </CardHeader>
         <CardBody className="space-y-3">
-          <Input
-            label="App ID"
-            type="text"
-            value={feishuAppId}
-            onChange={(e) => setFeishuAppId(e.target.value)}
-            placeholder="cli_xxx"
-          />
-          <Input
-            label="App Secret"
-            type="password"
-            value={feishuAppSecret}
-            onChange={(e) => setFeishuAppSecret(e.target.value)}
-            placeholder="请输入飞书 App Secret"
-          />
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleTestFeishu}
-              disabled={feishuTestStatus.loading}
-            >
-              {feishuTestStatus.loading ? t.common.testing : '测试凭证'}
-            </Button>
-            {feishuTestStatus.message && (
-              <span className={`text-xs ${feishuTestStatus.success ? 'text-green-600' : 'text-red-600'}`}>
-                {feishuTestStatus.message}
-              </span>
-            )}
-          </div>
           <p className="text-xs text-gray-500">
-            已内置 CORS 代理，无需额外配置。
+            App ID、App Secret 和代理相关配置由服务端环境变量提供，不在前端显示。
           </p>
 
           {/* OAuth Status and Login */}
@@ -160,11 +78,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                 </Button>
               )}
             </div>
-            {!feishuAppId || !feishuAppSecret ? (
-              <p className="text-xs text-amber-600 mt-1">
-                请先填写 App ID 和 App Secret
-              </p>
-            ) : null}
             <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
               <p className="text-gray-600 mb-1">请在飞书后台配置以下精确回调地址（安全设置 → 重定向 URL）：</p>
               <code className="text-blue-600 font-mono break-all">

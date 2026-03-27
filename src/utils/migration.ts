@@ -1,6 +1,7 @@
 import type { Position, Candidate } from '@/types';
 import {
   getLegacyStorage,
+  hasSensitiveSettings,
   loadFromStorage,
   loadSettingsFromStorage,
   saveSettingsToStorage,
@@ -67,6 +68,9 @@ export const migrateLegacyData = (userId: string): boolean => {
 
   if (!existingSettings && hasLegacySettings && legacySettings) {
     saveSettingsToStorage(legacySettings);
+    migrated = true;
+  } else if (existingSettings && hasSensitiveSettings(existingSettings)) {
+    saveSettingsToStorage(existingSettings);
     migrated = true;
   }
 

@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   clearStorage,
   getLegacyStorage,
+  hasSensitiveSettings,
   isLegacyMigrated,
   loadFromStorage,
+  loadSettingsFromStorage,
   markLegacyMigrated,
+  saveSettingsToStorage,
   saveToStorage,
 } from './storage';
 
@@ -45,5 +48,27 @@ describe('storage', () => {
       positions: [{ id: 'legacy' }],
       settings: {},
     });
+  });
+
+  it('never persists sensitive settings fields to localStorage', () => {
+    saveSettingsToStorage({
+      aiApiKey: 'secret-key',
+      aiModel: 'gpt-4.1',
+      feishuAppId: 'app-id',
+      feishuAppSecret: 'app-secret',
+      feishuUserAccessToken: 'user-token',
+      feishuRefreshToken: 'refresh-token',
+      interviewSplitRatio: 0.6,
+    });
+
+    expect(loadSettingsFromStorage()).toEqual({
+      aiModel: 'gpt-4.1',
+      interviewSplitRatio: 0.6,
+    });
+  });
+
+  it('detects sensitive settings fields in legacy payloads', () => {
+    expect(hasSensitiveSettings({ aiApiKey: 'secret-key' })).toBe(true);
+    expect(hasSensitiveSettings({ aiModel: 'gpt-4.1' })).toBe(false);
   });
 });

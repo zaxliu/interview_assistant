@@ -74,9 +74,28 @@ describe('migration', () => {
     expect(migrateLegacyData('user-1')).toBe(true);
     expect(localStorage.getItem(SETTINGS_STORAGE_KEY)).not.toBeNull();
     expect(loadSettingsFromStorage()).toEqual({
-      aiApiKey: 'legacy-key',
       aiModel: 'gpt-4o',
-      feishuAppId: 'app-id',
+      interviewSplitRatio: 0.6,
+    });
+  });
+
+  it('rewrites existing settings storage to remove sensitive fields', () => {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        aiApiKey: 'legacy-key',
+        aiModel: 'gpt-4o',
+        feishuAppId: 'app-id',
+        feishuAppSecret: 'app-secret',
+        feishuUserAccessToken: 'access-token',
+        feishuRefreshToken: 'refresh-token',
+        interviewSplitRatio: 0.6,
+      })
+    );
+
+    expect(migrateLegacyData('user-1')).toBe(true);
+    expect(loadSettingsFromStorage()).toEqual({
+      aiModel: 'gpt-4o',
       interviewSplitRatio: 0.6,
     });
   });

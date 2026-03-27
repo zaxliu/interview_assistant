@@ -1,11 +1,32 @@
 export const STORAGE_KEY = 'interview-assistant-data';
 export const SETTINGS_STORAGE_KEY = 'interview-assistant-settings';
 const LEGACY_MIGRATED_KEY = 'interview-assistant-migrated';
+const SENSITIVE_SETTINGS_KEYS = new Set([
+  'aiApiKey',
+  'feishuAppId',
+  'feishuAppSecret',
+  'feishuUserAccessToken',
+  'feishuRefreshToken',
+]);
 
 export interface StorageData {
   positions: unknown[];
   settings: unknown;
 }
+
+export const omitSensitiveSettings = <T extends Record<string, unknown>>(settings: T): Partial<T> => {
+  return Object.fromEntries(
+    Object.entries(settings).filter(([key]) => !SENSITIVE_SETTINGS_KEYS.has(key))
+  ) as Partial<T>;
+};
+
+export const hasSensitiveSettings = (settings: unknown): boolean => {
+  if (!settings || typeof settings !== 'object') {
+    return false;
+  }
+
+  return Object.keys(settings).some((key) => SENSITIVE_SETTINGS_KEYS.has(key));
+};
 
 /**
  * Get user-specific storage key
@@ -54,7 +75,12 @@ export const loadFromStorage = (userId?: string): StorageData | null => {
  */
 export const saveSettingsToStorage = (settings: unknown): void => {
   try {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    if (!settings || typeof settings !== 'object') {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      return;
+    }
+
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(omitSensitiveSettings(settings as Record<string, unknown>)));
   } catch (error) {
     console.error('Failed to save settings to localStorage:', error);
   }

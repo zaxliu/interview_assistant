@@ -5,23 +5,11 @@ import { zhCN as t } from '@/i18n/zhCN';
 
 export const SettingsWarning: React.FC = () => {
   const {
-    aiApiKey,
-    feishuAppId,
-    feishuAppSecret,
     feishuUserAccessToken,
   } = useSettingsStore();
 
   const missingItems: string[] = [];
 
-  if (!aiApiKey) {
-    missingItems.push('AI API Key');
-  }
-  if (!feishuAppId) {
-    missingItems.push('飞书 App ID');
-  }
-  if (!feishuAppSecret) {
-    missingItems.push('飞书 App Secret');
-  }
   if (!feishuUserAccessToken) {
     missingItems.push('飞书登录');
   }
