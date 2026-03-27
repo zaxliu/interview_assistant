@@ -54,8 +54,45 @@ Notes:
 
 - Docker compose now starts a built-in `wintalent-proxy` sidecar automatically.
 - Docker compose also starts a built-in `metrics` sidecar for `/usage-admin`.
+- Local Docker uses the automatic [docker-compose.override.yml](/Users/lewis/Documents/code/interview_assitant/docker-compose.override.yml) file to expose `http://localhost:3000`.
 - If you need custom proxy target, set `DOCKER_WINTALENT_PROXY_URL` in `.env`.
 - If you previously set `VITE_WINTALENT_PROXY_URL=http://127.0.0.1:8787` in `.env`, it can cause `502 Bad Gateway` in Docker (because `127.0.0.1` points to the nginx container itself, not your host).
+
+### Production Docker With HTTPS
+
+Use the production compose override when the container's nginx should terminate TLS itself.
+
+1. Copy and configure environment variables on the server:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys and production values
+   ```
+
+2. Ensure the server certificate directory contains these files:
+   - `server.crt`
+   - `server.key`
+
+3. Set these production variables in `.env`:
+   ```bash
+   NGINX_SERVER_NAME=interview.example.com
+   NGINX_CERT_DIR=/absolute/path/to/cert-directory
+   ```
+
+4. Start the production stack:
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+   ```
+
+5. Validate:
+   - `http://<your-domain>` redirects to `https://<your-domain>`
+   - `https://<your-domain>` serves the app with the mounted certificate
+
+Notes:
+
+- Local `docker compose up --build` stays on HTTP and does not require certificate files.
+- The production nginx template reads `/etc/nginx/certs/server.crt` and `/etc/nginx/certs/server.key` from the mounted host directory.
+- If your certificate files use different names, map or symlink them on the host to `server.crt` and `server.key`.
+- After certificate rotation on the host, restart the `interview-assistant` container to load the new files.
 
 ### Transfer Packaging
 
@@ -80,6 +117,7 @@ What gets packed:
 
 - Frontend and server source under `src/`, `public/`, and `scripts/`
 - Build and Docker files such as `Dockerfile`, `docker-compose.yml`, `.env.example`, `nginx.conf.template`
+- Production-only deployment files such as `docker-compose.prod.yml` and `nginx.https.conf.template`
 - Node and TypeScript config files required to rebuild the app
 
 What is intentionally excluded:
@@ -120,6 +158,13 @@ docker compose up --build
 | `VITE_AI_BASE_URL` | AI provider base URL, including OpenAI-compatible prefix such as `/v1` | `https://api.openai.com/v1` |
 | `VITE_WINTALENT_PROXY_URL` | Wintalent backend proxy base URL | `http://127.0.0.1:8787` |
 | `VITE_METRICS_PROXY_URL` | Metrics backend proxy base URL | `http://127.0.0.1:8788` |
+| `NGINX_SERVER_NAME` | nginx `server_name`; set to your production domain for HTTPS deployments | `localhost` |
+
+Production-only variables:
+
+| Variable | Description |
+|----------|-------------|
+| `NGINX_CERT_DIR` | Host directory mounted into the nginx container; must contain `server.crt` and `server.key` |
 
 **Note**: The AI provider URL is configured server-side via environment variables, not in browser settings. It should point to the OpenAI-compatible API root, for example `https://api.openai.com/v1` or `https://api.openai-proxy.org/v1`. API keys are stored in browser localStorage and sent with each request.
 
@@ -228,7 +273,8 @@ The app uses built-in CORS proxies for both local development and Docker deploym
 | Environment | AI API | Feishu API | Wintalent API |
 |-------------|--------|------------|---------------|
 | Local (`npm run dev`) | Vite proxy → `VITE_AI_BASE_URL` | Vite proxy → Feishu | Vite proxy → `VITE_WINTALENT_PROXY_URL` / `VITE_METRICS_PROXY_URL` |
-| Docker | nginx proxy → `VITE_AI_BASE_URL` | nginx proxy → Feishu | nginx proxy → `VITE_WINTALENT_PROXY_URL` / `VITE_METRICS_PROXY_URL` |
+| Docker (local) | nginx proxy → `VITE_AI_BASE_URL` | nginx proxy → Feishu | nginx proxy → `VITE_WINTALENT_PROXY_URL` / `VITE_METRICS_PROXY_URL` |
+| Docker (production HTTPS) | nginx TLS termination + proxy → `VITE_AI_BASE_URL` | nginx TLS termination + proxy → Feishu | nginx TLS termination + proxy → `VITE_WINTALENT_PROXY_URL` / `VITE_METRICS_PROXY_URL` |
 
 ### Tech Stack
 

@@ -1,0 +1,4 @@
+services:
+  interview-assistant:
+    ports:
+      - "3000:80"

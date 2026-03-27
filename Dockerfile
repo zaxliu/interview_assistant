@@ -21,9 +21,10 @@ RUN npm run build
 # Stage 2: Serve with nginx
 FROM nginx:stable
 
-# Copy template - nginx image automatically processes templates in /etc/nginx/templates/
-# using envsubst when the container starts
-COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+# Copy HTTP/HTTPS templates. The custom entrypoint selects one of them and places
+# it under /etc/nginx/templates before handing off to the nginx image entrypoint.
+COPY nginx.conf.template /opt/interview-assistant/nginx/http.conf.template
+COPY nginx.https.conf.template /opt/interview-assistant/nginx/https.conf.template
 COPY docker-entrypoint.sh /usr/local/bin/app-entrypoint.sh
 RUN chmod +x /usr/local/bin/app-entrypoint.sh
 

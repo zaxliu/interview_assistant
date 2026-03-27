@@ -1,0 +1,12 @@
+services:
+  interview-assistant:
+    environment:
+      - NGINX_ENABLE_TLS=1
+      - NGINX_SERVER_NAME=${NGINX_SERVER_NAME:?NGINX_SERVER_NAME is required for production HTTPS}
+      - NGINX_TLS_CERT_PATH=/etc/nginx/certs/server.crt
+      - NGINX_TLS_KEY_PATH=/etc/nginx/certs/server.key
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ${NGINX_CERT_DIR:?NGINX_CERT_DIR must point to the host certificate directory}:/etc/nginx/certs:ro

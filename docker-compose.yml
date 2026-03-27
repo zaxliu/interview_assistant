@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   wintalent-proxy:
     image: node:18-alpine
@@ -43,12 +42,11 @@ services:
       - VITE_AI_BASE_URL=${VITE_AI_BASE_URL:-https://api.openai.com}
       - VITE_WINTALENT_PROXY_URL=${DOCKER_WINTALENT_PROXY_URL:-http://wintalent-proxy:8787}
       - VITE_METRICS_PROXY_URL=${DOCKER_METRICS_PROXY_URL:-http://metrics:8788}
+      - NGINX_SERVER_NAME=${NGINX_SERVER_NAME:-localhost}
       - HTTP_PROXY=${DOCKER_HTTP_PROXY:-http://host.docker.internal:7890}
       - HTTPS_PROXY=${DOCKER_HTTPS_PROXY:-http://host.docker.internal:7890}
       - ALL_PROXY=${DOCKER_ALL_PROXY:-http://host.docker.internal:7890}
       - NO_PROXY=${DOCKER_NO_PROXY:-localhost,127.0.0.1,host.docker.internal}
-    ports:
-      - "3000:80"
     restart: unless-stopped
 
 volumes:
