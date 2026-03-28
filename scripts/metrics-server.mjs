@@ -567,6 +567,9 @@ const summarizeAi = (events) => {
   };
 };
 
+const getAiFailureEvents = (events) =>
+  events.filter((event) => (event.model || EVENTS_WITH_AI.has(event.eventName)) && event.success === false);
+
 const buildBucketKey = (isoString, interval) => {
   const date = new Date(isoString);
   if (interval === 'hour') {
@@ -609,6 +612,19 @@ const filterErrorEvents = (events, searchParams) => {
   const fingerprint = clampString(searchParams.get('fingerprint'), 300);
 
   return getErrorEvents(events).filter((event) => {
+    if (feature && event.feature !== feature) return false;
+    if (errorCategory && event.errorCategory !== errorCategory) return false;
+    if (fingerprint && event.fingerprint !== fingerprint) return false;
+    return true;
+  });
+};
+
+const filterAiFailureEvents = (events, searchParams) => {
+  const feature = clampString(searchParams.get('feature'), 80);
+  const errorCategory = clampString(searchParams.get('errorCategory'), 40);
+  const fingerprint = clampString(searchParams.get('fingerprint'), 300);
+
+  return getAiFailureEvents(events).filter((event) => {
     if (feature && event.feature !== feature) return false;
     if (errorCategory && event.errorCategory !== errorCategory) return false;
     if (fingerprint && event.fingerprint !== fingerprint) return false;
@@ -875,6 +891,23 @@ const server = createServer(async (req, res) => {
       sendJson(res, 200, {
         range: { from: range.from, to: range.to },
         errors: summarizeErrors(errorEvents),
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/api/metrics/errors/ai-failures') {
+      const user = requireAdmin(req, res);
+      if (!user) {
+        return;
+      }
+
+      const events = await loadEvents();
+      const range = filterEventsByRange(events, requestUrl.searchParams);
+      const aiFailures = filterAiFailureEvents(range.events, requestUrl.searchParams)
+        .sort((left, right) => (right.occurredAt || right.receivedAt).localeCompare(left.occurredAt || left.receivedAt));
+      sendJson(res, 200, {
+        range: { from: range.from, to: range.to },
+        events: aiFailures,
       });
       return;
     }

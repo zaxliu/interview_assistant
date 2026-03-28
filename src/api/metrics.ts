@@ -190,6 +190,28 @@ export const getMetricsErrors = (
   }>(`/api/metrics/errors?${params.toString()}`);
 };
 
+export const getMetricsAiFailures = (
+  from: string,
+  to: string,
+  filters?: {
+    feature?: string;
+    errorCategory?: string;
+    fingerprint?: string;
+  }
+) => {
+  const params = new URLSearchParams({
+    from,
+    to,
+  });
+  if (filters?.feature) params.set('feature', filters.feature);
+  if (filters?.errorCategory) params.set('errorCategory', filters.errorCategory);
+  if (filters?.fingerprint) params.set('fingerprint', filters.fingerprint);
+
+  return fetchJson<RangeResponse & {
+    events: MetricsErrorEvent[];
+  }>(`/api/metrics/errors/ai-failures?${params.toString()}`);
+};
+
 export const getMetricsErrorDetail = (id: string) =>
   fetchJson<{
     error: MetricsErrorEvent;

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   getMetricsAdminMe,
   getMetricsAi,
+  getMetricsAiFailures,
   getMetricsErrorDetail,
   getMetricsErrors,
   getMetricsFunnel,
@@ -258,6 +259,7 @@ const AiPanel = ({
 );
 
 const ErrorPanel = ({
+  aiFailures,
   errors,
   selectedError,
   errorDetail,
@@ -271,6 +273,7 @@ const ErrorPanel = ({
   onSearchTermChange,
   onSelect,
 }: {
+  aiFailures: MetricsErrorEvent[];
   errors: MetricsErrorSummary[];
   selectedError: string | null;
   errorDetail: { error: MetricsErrorEvent; related: MetricsErrorEvent[] } | null;
@@ -323,6 +326,61 @@ const ErrorPanel = ({
           <div className="flex items-center justify-end text-xs text-gray-500">
             共 {formatNumber(errors.length)} 条聚合错误
           </div>
+        </div>
+      </CardBody>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-medium text-gray-900">AI 失败事件</h2>
+          <span className="text-xs text-gray-500">原始失败事件，可与上方 AI 失败次数直接对应</span>
+        </div>
+      </CardHeader>
+      <CardBody className="px-0">
+        <div className="max-h-[32vh] overflow-auto">
+          <table className="min-w-[860px] w-full text-sm">
+            <thead className="text-left text-gray-500">
+              <tr>
+                <th className="px-4 pb-3">时间</th>
+                <th className="pb-3 pr-4">模型</th>
+                <th className="pb-3 pr-4">功能</th>
+                <th className="pb-3 pr-4">事件</th>
+                <th className="pb-3 pr-4">错误</th>
+              </tr>
+            </thead>
+            <tbody>
+              {aiFailures.length === 0 && (
+                <tr>
+                  <td className="px-4 py-6 text-gray-500" colSpan={5}>当前筛选条件下暂无 AI 失败事件。</td>
+                </tr>
+              )}
+              {aiFailures.map((item) => (
+                <tr
+                  key={item.id}
+                  className={`border-t border-gray-100 text-gray-700 cursor-pointer transition-colors ${
+                    selectedError === item.id ? 'bg-amber-50/80' : 'hover:bg-gray-50'
+                  }`}
+                  onClick={() => onSelect(item.id)}
+                >
+                  <td className="px-4 py-3 align-top text-xs text-gray-500">{formatDateTime(item.occurredAt || item.receivedAt)}</td>
+                  <td className="py-3 pr-4 align-top text-xs text-gray-700">{item.model || '-'}</td>
+                  <td className="py-3 pr-4 align-top text-xs text-gray-600">{item.feature || '-'}</td>
+                  <td className="py-3 pr-4 align-top text-xs text-gray-600">{item.eventName || '-'}</td>
+                  <td className="py-3 pr-4 align-top">
+                    <div className="max-w-[420px] space-y-1">
+                      <div className="line-clamp-2 font-medium text-gray-900" title={item.errorMessage || item.errorCode || item.fingerprint}>
+                        {item.errorMessage || item.errorCode || item.fingerprint || '-'}
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        {item.page || '-'} · {item.errorCategory || '-'}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </CardBody>
     </Card>
@@ -505,6 +563,7 @@ export default function UsageAdminPage() {
     byModel: MetricsAiModelSummary[];
   } | null>(null);
   const [errors, setErrors] = useState<MetricsErrorSummary[]>([]);
+  const [aiFailures, setAiFailures] = useState<MetricsErrorEvent[]>([]);
   const [selectedErrorId, setSelectedErrorId] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<{ error: MetricsErrorEvent; related: MetricsErrorEvent[] } | null>(null);
   const [featureFilter, setFeatureFilter] = useState('');
@@ -530,6 +589,23 @@ export default function UsageAdminPage() {
     });
   }, [errors, searchTerm]);
 
+  const filteredAiFailures = useMemo(() => {
+    const keyword = searchTerm.trim().toLowerCase();
+    return aiFailures.filter((item) => {
+      if (!keyword) return true;
+      const scope = [
+        item.errorMessage,
+        item.errorCode,
+        item.page,
+        item.model,
+        item.eventName,
+        item.errorCategory,
+        item.fingerprint,
+      ].join(' ').toLowerCase();
+      return scope.includes(keyword);
+    });
+  }, [aiFailures, searchTerm]);
+
   const featureOptions = useMemo(
     () => Array.from(new Set(errors.map((item) => item.feature).filter(Boolean))) as string[],
     [errors]
@@ -554,12 +630,16 @@ export default function UsageAdminPage() {
 
         setAdminUser(me.user);
 
-        const [overviewResponse, funnelResponse, timeseriesResponse, aiResponse, errorsResponse] = await Promise.all([
+        const [overviewResponse, funnelResponse, timeseriesResponse, aiResponse, errorsResponse, aiFailuresResponse] = await Promise.all([
           getMetricsOverview(range.from, range.to),
           getMetricsFunnel(range.from, range.to),
           getMetricsTimeseries(range.from, range.to),
           getMetricsAi(range.from, range.to),
           getMetricsErrors(range.from, range.to, {
+            feature: featureFilter || undefined,
+            errorCategory: categoryFilter || undefined,
+          }),
+          getMetricsAiFailures(range.from, range.to, {
             feature: featureFilter || undefined,
             errorCategory: categoryFilter || undefined,
           }),
@@ -574,10 +654,12 @@ export default function UsageAdminPage() {
         setTimeseries(timeseriesResponse.timeseries);
         setAiSummary(aiResponse.ai);
         setErrors(errorsResponse.errors);
+        setAiFailures(aiFailuresResponse.events);
         setSelectedErrorId((current) => {
-          const currentStillExists = errorsResponse.errors.some((item) => item.latestEventId === current);
+          const currentStillExists = errorsResponse.errors.some((item) => item.latestEventId === current)
+            || aiFailuresResponse.events.some((item) => item.id === current);
           if (currentStillExists) return current;
-          return errorsResponse.errors[0]?.latestEventId || null;
+          return aiFailuresResponse.events[0]?.id || errorsResponse.errors[0]?.latestEventId || null;
         });
         setAuthState('ready');
       } catch (error) {
@@ -720,6 +802,7 @@ export default function UsageAdminPage() {
       <AiPanel totals={aiSummary.totals} byModel={aiSummary.byModel} />
 
       <ErrorPanel
+        aiFailures={filteredAiFailures}
         errors={filteredErrors}
         selectedError={selectedErrorId}
         errorDetail={errorDetail}
