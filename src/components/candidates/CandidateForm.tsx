@@ -6,7 +6,12 @@ import { usePDFParser } from '@/hooks/usePDFParser';
 import { useResumeProcessor } from '@/hooks/useResumeProcessor';
 import { deletePDF, storePDF } from '@/utils/pdfStorage';
 import { debugDownloadPDFPageAsImage } from '@/api/pdf';
-import { downloadWintalentResumePDF, fetchWintalentCandidateData, fetchWintalentResumeText } from '@/api/wintalent';
+import {
+  downloadWintalentResumePDF,
+  fetchWintalentCandidateData,
+  fetchWintalentResumeText,
+  isWintalentResumeUnavailableMessage,
+} from '@/api/wintalent';
 import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea } from '@/components/ui';
 import { ResumeHighlightsPanel } from './ResumeHighlightsPanel';
 import { HistoricalInterviewReviewsPanel } from './HistoricalInterviewReviewsPanel';
@@ -92,6 +97,9 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const hasResumeContent = Boolean(
     resumeText.trim() || resumeRawText.trim() || resumeFilename.trim()
   );
+  const displayedResumeError = wintalentError && isWintalentResumeUnavailableMessage(wintalentError)
+    ? `${wintalentError} 您可以手动上传之前已经获取的简历PDF。`
+    : (wintalentError || pdfError || resumeProcessingError);
   const canAutoImportFromLink = Boolean(
     candidate?.id &&
     !hasResumeContent &&
@@ -510,29 +518,43 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : '从 Wintalent 导入简历失败';
+      const isResumeUnavailable = isWintalentResumeUnavailableMessage(message);
       setWintalentError(message);
-      reportError({
-        error,
-        feature: 'resume_import',
-        errorCategory: 'wintalent',
-        requestContext: {
-          endpoint: '/api/wintalent/download',
-          method: 'POST',
-          provider: 'wintalent',
-          operation: 'import_wintalent_resume',
-        },
-        reproContext: {
-          route: window.location.pathname,
-          positionId,
-          candidateId: candidate?.id,
-          useAIParsing: useAIParsing && canUseAI,
-          viewMode: 'pdf',
-        },
-        inputSnapshot: {
-          wintalentLink: link,
-          method: 'wintalent',
-        },
-      });
+      if (isResumeUnavailable) {
+        trackEvent({
+          eventName: 'wintalent_resume_unavailable_detected',
+          feature: 'resume_import',
+          success: true,
+          details: {
+            method: 'wintalent',
+            trigger,
+            action: 'filtered',
+          },
+        });
+      } else {
+        reportError({
+          error,
+          feature: 'resume_import',
+          errorCategory: 'wintalent',
+          requestContext: {
+            endpoint: '/api/wintalent/download',
+            method: 'POST',
+            provider: 'wintalent',
+            operation: 'import_wintalent_resume',
+          },
+          reproContext: {
+            route: window.location.pathname,
+            positionId,
+            candidateId: candidate?.id,
+            useAIParsing: useAIParsing && canUseAI,
+            viewMode: 'pdf',
+          },
+          inputSnapshot: {
+            wintalentLink: link,
+            method: 'wintalent',
+          },
+        });
+      }
       trackEvent({
         eventName: 'resume_import_failed',
         feature: 'resume_import',
@@ -541,6 +563,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
         details: {
           method: 'wintalent',
           trigger,
+          reason: isResumeUnavailable ? 'resume_unavailable' : 'error',
         },
       });
     } finally {
@@ -688,9 +711,9 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
           </div>
 
           {/* Error display */}
-          {(pdfError || resumeProcessingError || wintalentError) && (
+          {displayedResumeError && (
             <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-              {wintalentError || pdfError || resumeProcessingError}
+              {displayedResumeError}
             </div>
           )}
 

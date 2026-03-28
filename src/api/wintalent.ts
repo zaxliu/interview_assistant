@@ -52,17 +52,40 @@ const extractNoOriginalResumePermissionMessage = (text: string): string | null =
   return null;
 };
 
-const extractResumeUnavailableMessage = (text: string): string | null => {
-  if (!text) return null;
-  const normalized = text.replace(/\s+/g, '');
-  if (normalized.includes(WINTALENT_RESUME_UNAVAILABLE_MESSAGE.replace(/\s+/g, ''))) {
-    return WINTALENT_RESUME_UNAVAILABLE_MESSAGE;
-  }
-  if (normalized.includes(WINTALENT_RESUME_UNAVAILABLE_KEYWORD.replace(/\s+/g, ''))) {
-    return WINTALENT_RESUME_UNAVAILABLE_MESSAGE;
-  }
-  return null;
+const decodeHtmlEntities = (value: string): string => (
+  value
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+);
+
+const stripHtml = (value: string): string => (
+  decodeHtmlEntities(value)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+);
+
+export const isWintalentResumeUnavailableMessage = (text: string): boolean => {
+  if (!text) return false;
+  const candidates = [
+    text,
+    decodeHtmlEntities(text),
+    stripHtml(text),
+  ].map((value) => value.replace(/\s+/g, ''));
+
+  return (
+    candidates.some((value) => value.includes(WINTALENT_RESUME_UNAVAILABLE_MESSAGE.replace(/\s+/g, ''))) ||
+    candidates.some((value) => value.includes(WINTALENT_RESUME_UNAVAILABLE_KEYWORD.replace(/\s+/g, '')))
+  );
 };
+
+const extractResumeUnavailableMessage = (text: string): string | null => (
+  isWintalentResumeUnavailableMessage(text) ? WINTALENT_RESUME_UNAVAILABLE_MESSAGE : null
+);
 
 const decodeRfc5987 = (value: string): string => {
   const cleaned = value.trim().replace(/^UTF-8''/i, '');

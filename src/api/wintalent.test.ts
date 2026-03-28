@@ -7,6 +7,7 @@ import {
   fetchWintalentCandidateData,
   fetchWintalentPositionJD,
   fetchWintalentResumeText,
+  isWintalentResumeUnavailableMessage,
   isWintalentInterviewLink,
 } from './wintalent';
 
@@ -169,6 +170,14 @@ describe('downloadWintalentResumePDF', () => {
     await expect(
       downloadWintalentResumePDF('https://www.wintalent.cn/wt/Horizon/kurl?k=abc')
     ).rejects.toThrow('当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!');
+  });
+
+  it('recognizes resume-unavailable text even when wrapped by html tags', () => {
+    expect(
+      isWintalentResumeUnavailableMessage(
+        '<div class="tips">当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!</div>'
+      )
+    ).toBe(true);
   });
 });
 

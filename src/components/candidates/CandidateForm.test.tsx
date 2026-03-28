@@ -6,6 +6,10 @@ import { usePositionStore } from '@/store/positionStore';
 const parseFromFile = vi.fn();
 const parseFromUrl = vi.fn();
 const processResume = vi.fn();
+const { trackEvent, reportError } = vi.hoisted(() => ({
+  trackEvent: vi.fn(),
+  reportError: vi.fn(),
+}));
 const { downloadWintalentResumePDF, fetchWintalentCandidateData, fetchWintalentResumeText, deletePDF } = vi.hoisted(() => ({
   downloadWintalentResumePDF: vi.fn(),
   fetchWintalentCandidateData: vi.fn(),
@@ -46,6 +50,14 @@ vi.mock('@/api/wintalent', () => ({
   fetchWintalentCandidateData,
   fetchWintalentResumeText,
   isWintalentInterviewLink: (url: string | undefined) => Boolean(url?.includes('wintalent.cn')),
+  isWintalentResumeUnavailableMessage: (message: string | undefined) =>
+    Boolean(message?.includes('当前简历已流转到其他环节或已被删除')),
+}));
+
+vi.mock('@/lib/analytics', () => ({
+  trackEvent,
+  reportError,
+  usageFromAIUsage: (usage: unknown) => usage,
 }));
 
 describe('CandidateForm', () => {
@@ -255,9 +267,23 @@ describe('CandidateForm', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤!')
+        screen.getByText(
+          '当前简历已流转到其他环节或已被删除，不能查看，已经帮您自动过滤! 您可以手动上传之前已经获取的简历PDF。'
+        )
       ).toBeInTheDocument();
     });
+    expect(trackEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'wintalent_resume_unavailable_detected',
+        feature: 'resume_import',
+        success: true,
+        details: expect.objectContaining({
+          method: 'wintalent',
+          action: 'filtered',
+        }),
+      })
+    );
+    expect(reportError).not.toHaveBeenCalled();
   });
 
   it('keeps an explicitly cleared normalized resume instead of restoring raw OCR text', async () => {

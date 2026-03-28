@@ -55,11 +55,16 @@ function formatFetchError(url, error) {
 
 function extractResumeUnavailableMessage(rawText) {
   if (!rawText) return null;
-  const text = String(rawText);
-  if (text.includes(WINTALENT_RESUME_UNAVAILABLE_MESSAGE)) {
+  const candidates = [
+    String(rawText),
+    decodeHtmlEntities(String(rawText)),
+    stripHtml(String(rawText)),
+  ].map((value) => value.replace(/\s+/g, ''));
+
+  if (candidates.some((value) => value.includes(WINTALENT_RESUME_UNAVAILABLE_MESSAGE.replace(/\s+/g, '')))) {
     return WINTALENT_RESUME_UNAVAILABLE_MESSAGE;
   }
-  if (text.includes(WINTALENT_RESUME_UNAVAILABLE_KEYWORD)) {
+  if (candidates.some((value) => value.includes(WINTALENT_RESUME_UNAVAILABLE_KEYWORD.replace(/\s+/g, '')))) {
     return WINTALENT_RESUME_UNAVAILABLE_MESSAGE;
   }
   return null;
@@ -419,6 +424,10 @@ async function resolveCreateTokenEndpoint(jar, showResumeUrl, entryResponse) {
   if (cookieValue) return cookieValue;
 
   const entryHtml = entryResponse ? await entryResponse.clone().text().catch(() => '') : '';
+  const entryResumeUnavailableMessage = extractResumeUnavailableMessage(entryHtml);
+  if (entryResumeUnavailableMessage) {
+    throw new Error(entryResumeUnavailableMessage);
+  }
   const fromEntry = extractCreateTokenUrlFromHtml(entryHtml);
   if (fromEntry) return fromEntry;
 
@@ -431,6 +440,10 @@ async function resolveCreateTokenEndpoint(jar, showResumeUrl, entryResponse) {
   if (refreshedCookieValue) return refreshedCookieValue;
 
   const showResumeHtml = await showResumeEntry.res.text().catch(() => '');
+  const showResumeResumeUnavailableMessage = extractResumeUnavailableMessage(showResumeHtml);
+  if (showResumeResumeUnavailableMessage) {
+    throw new Error(showResumeResumeUnavailableMessage);
+  }
   return extractCreateTokenUrlFromHtml(showResumeHtml);
 }
 
