@@ -70,6 +70,30 @@ function extractResumeUnavailableMessage(rawText) {
   return null;
 }
 
+function extractResumeUnavailableMessageFromUrl(rawUrl) {
+  if (!rawUrl) return null;
+
+  try {
+    const url = new URL(String(rawUrl), ORIGIN);
+    const msg = url.searchParams.get('msg') || '';
+    const tipType = url.searchParams.get('tipType') || '';
+    const pathname = url.pathname || '';
+
+    const messageFromQuery = extractResumeUnavailableMessage(msg);
+    if (messageFromQuery) {
+      return messageFromQuery;
+    }
+
+    if (pathname.endsWith('/interviewer/interviewPlatform/pc/jsp/loginTips.html') && tipType === '10') {
+      return WINTALENT_RESUME_UNAVAILABLE_MESSAGE;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 class CookieJar {
   constructor() {
     this.cookies = [];
@@ -963,7 +987,12 @@ async function resolveBaseFlow(interviewUrl, lanType = 1) {
   const entry = await requestWithJar(jar, interviewUrl, { followRedirects: 8 });
   const showResumeUrl = extractShowResumeUrl(entry.history, entry.url);
   const entryText = await entry.res.clone().text().catch(() => '');
-  const resumeUnavailableMessage = extractResumeUnavailableMessage(entryText);
+  const resumeUnavailableMessage =
+    extractResumeUnavailableMessage(entryText)
+    || extractResumeUnavailableMessageFromUrl(entry.url)
+    || entry.history
+      .map((item) => extractResumeUnavailableMessageFromUrl(item.url))
+      .find(Boolean);
 
   if (!showResumeUrl.includes('/showResume.html')) {
     if (resumeUnavailableMessage) {
