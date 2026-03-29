@@ -10,7 +10,7 @@ ARCHIVE_NAME="interview_assitant.tar.gz"
 mkdir -p "${DEST_DIR}"
 
 docker pull "${TRANSFER_IMAGE}"
-docker create --name "${CONTAINER_NAME}" "${TRANSFER_IMAGE}" >/dev/null
+docker create --name "${CONTAINER_NAME}" "${TRANSFER_IMAGE}" /__transfer_extract__ >/dev/null
 trap 'docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true' EXIT
 
 docker cp "${CONTAINER_NAME}:/payload/${ARCHIVE_NAME}" "${DEST_DIR}/${ARCHIVE_NAME}"
