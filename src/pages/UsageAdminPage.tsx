@@ -70,6 +70,8 @@ const RangeSelector = ({
   onChange: (next: { from: string; to: string }) => void;
 }) => {
   const presets = [
+    { label: '1天', days: 1 },
+    { label: '3天', days: 3 },
     { label: '7天', days: 7 },
     { label: '30天', days: 30 },
     { label: '90天', days: 90 },
