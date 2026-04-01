@@ -38,7 +38,6 @@ describe('downloadWintalentResumePDF', () => {
   });
 
   it('downloads PDF and parses UTF-8 filename from content-disposition', async () => {
-    const blob = new Blob(['%PDF-1.7'], { type: 'application/pdf' });
     const headers = new Headers({
       'content-type': 'application/pdf',
       'content-disposition': "inline; filename*=UTF-8''%E7%AE%80%E5%8E%86.pdf",
@@ -49,7 +48,7 @@ describe('downloadWintalentResumePDF', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
-        new Response(blob, {
+        new Response('%PDF-1.7', {
           status: 200,
           headers,
         })
