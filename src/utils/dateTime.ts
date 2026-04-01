@@ -56,6 +56,11 @@ export const formatInterviewTimeForInput = (value?: string): string => {
     return '';
   }
 
+  const shanghaiParts = getDatePartsInTimeZone(date, SHANGHAI_TIME_ZONE);
+  if (shanghaiParts) {
+    return `${shanghaiParts.year}-${shanghaiParts.month}-${shanghaiParts.day}T${shanghaiParts.hour}:${shanghaiParts.minute}`;
+  }
+
   return formatLocalDateTime(date);
 };
 
@@ -64,6 +69,16 @@ export const normalizeInterviewTimeForSave = (value?: string): string | undefine
   if (!trimmed) return undefined;
 
   const normalized = DATETIME_SPACE_PATTERN.test(trimmed) ? trimmed.replace(' ', 'T') : trimmed;
+  if (DATETIME_LOCAL_PATTERN.test(normalized)) {
+    const [datePart, timePart] = normalized.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour, minute] = timePart.split(':').map(Number);
+    if ([year, month, day, hour, minute].every(Number.isFinite)) {
+      const utcMs = Date.UTC(year, month - 1, day, hour - 8, minute, 0, 0);
+      return new Date(utcMs).toISOString();
+    }
+  }
+
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) {
     return trimmed;
