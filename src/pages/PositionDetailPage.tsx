@@ -158,145 +158,150 @@ export default function PositionDetailPage() {
         </div>
       )}
 
-      {position.criteria.length > 0 && (
-        <div className="bg-white p-3 rounded-lg border border-gray-200">
-          <h3 className="text-sm font-medium text-gray-700 mb-1">增量职位要求</h3>
-          <ul className="text-sm text-gray-600 list-disc list-inside">
-            {position.criteria.map((criterion) => (
-              <li key={criterion}>{criterion}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-medium text-gray-700">AI 指引（岗位记忆）</h3>
-            <p className="text-xs text-gray-500 mt-1">
-              基于岗位反馈事件沉淀为结构化记忆，再渲染成问题与面评指引。
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => void handleRefreshMemory()} isLoading={isRefreshingMemory}>
-              刷新岗位记忆
-            </Button>
-            <button
-              type="button"
-              onClick={() => setIsGuidanceExpanded((value) => !value)}
-              className="text-xs text-blue-600 hover:text-blue-800 shrink-0"
-            >
-              {isGuidanceExpanded ? '收起' : '展开'}
-            </button>
-          </div>
-        </div>
-
-        {isGuidanceExpanded && (
-          <div className="space-y-3">
-            {refreshStatus && (
-              <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                {refreshStatus}
-              </div>
-            )}
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <h4 className="text-xs font-semibold text-slate-700">问题记忆指引</h4>
-                  {lastQuestionRefreshAt && (
-                    <span className="text-[11px] text-slate-500">
-                      样本 {position.generationMemory?.sampleSize || 0} · 更新于 {new Date(lastQuestionRefreshAt).toLocaleString()}
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsQuestionGuidanceExpanded((value) => !value)}
-                  className="text-xs text-blue-600 hover:text-blue-800 shrink-0"
-                  aria-label={isQuestionGuidanceExpanded ? '收起问题记忆指引' : '展开问题记忆指引'}
-                >
-                  {isQuestionGuidanceExpanded ? '收起' : '展开'}
-                </button>
-              </div>
-              {isQuestionDirty && (
-                <p className="mt-2 text-[11px] text-amber-700">
-                  等待下次刷新：问题记忆有新的反馈事件待合并。
-                  待合并事件 {pendingQuestionEventCount}，候选人 {pendingQuestionCandidateCount}。
-                </p>
-              )}
-              {isQuestionGuidanceExpanded && (
-                <>
-                  <label className="mt-2 block text-[11px] font-medium text-slate-600" htmlFor="question-guidance-editor">
-                    问题记忆指引
-                  </label>
-                  <Textarea
-                    id="question-guidance-editor"
-                    aria-label="问题记忆指引"
-                    value={questionGuidanceDraft}
-                    onChange={(event) => setQuestionGuidanceDraft(event.target.value)}
-                    autoResize
-                    rows={2}
-                    className="mt-2 min-h-[64px] border-slate-200 bg-white text-xs leading-5 text-slate-700"
-                  />
-                  <div className="mt-2 flex justify-end">
-                    <Button variant="secondary" size="sm" onClick={() => handleSaveGuidance('question_generation')}>
-                      保存问题指引
-                    </Button>
-                  </div>
-                </>
-              )}
-              {renderUsage(manualRefreshUsage.question, '问题记忆更新 Token')}
-            </div>
-
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <h4 className="text-xs font-semibold text-slate-700">面评记忆指引</h4>
-                  {lastSummaryRefreshAt && (
-                    <span className="text-[11px] text-slate-500">
-                      更新于 {new Date(lastSummaryRefreshAt).toLocaleString()}
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsSummaryGuidanceExpanded((value) => !value)}
-                  className="text-xs text-blue-600 hover:text-blue-800 shrink-0"
-                  aria-label={isSummaryGuidanceExpanded ? '收起面评记忆指引' : '展开面评记忆指引'}
-                >
-                  {isSummaryGuidanceExpanded ? '收起' : '展开'}
-                </button>
-              </div>
-              {isSummaryDirty && (
-                <p className="mt-2 text-[11px] text-amber-700">
-                  等待下次刷新：面评记忆有新的反馈事件待合并。
-                  待合并事件 {pendingSummaryEventCount}，候选人 {pendingSummaryCandidateCount}。
-                </p>
-              )}
-              {isSummaryGuidanceExpanded && (
-                <>
-                  <label className="mt-2 block text-[11px] font-medium text-slate-600" htmlFor="summary-guidance-editor">
-                    面评记忆指引
-                  </label>
-                  <Textarea
-                    id="summary-guidance-editor"
-                    aria-label="面评记忆指引"
-                    value={summaryGuidanceDraft}
-                    onChange={(event) => setSummaryGuidanceDraft(event.target.value)}
-                    autoResize
-                    rows={2}
-                    className="mt-2 min-h-[64px] border-slate-200 bg-white text-xs leading-5 text-slate-700"
-                  />
-                  <div className="mt-2 flex justify-end">
-                    <Button variant="secondary" size="sm" onClick={() => handleSaveGuidance('summary_generation')}>
-                      保存面评指引
-                    </Button>
-                  </div>
-                </>
-              )}
-              {renderUsage(manualRefreshUsage.summary, '面评记忆更新 Token')}
-            </div>
+      <div
+        data-testid="position-guidance-layout"
+        className="space-y-4"
+      >
+        {position.criteria.length > 0 && (
+          <div className="bg-white p-3 rounded-lg border border-gray-200">
+            <h3 className="text-sm font-medium text-gray-700 mb-1">增量职位要求</h3>
+            <ul className="text-sm text-gray-600 list-disc list-inside">
+              {position.criteria.map((criterion) => (
+                <li key={criterion}>{criterion}</li>
+              ))}
+            </ul>
           </div>
         )}
+
+        <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-medium text-gray-700">AI 指引（岗位记忆）</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                基于岗位反馈事件沉淀为结构化记忆，再渲染成问题与面评指引。
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => void handleRefreshMemory()} isLoading={isRefreshingMemory}>
+                刷新岗位记忆
+              </Button>
+              <button
+                type="button"
+                onClick={() => setIsGuidanceExpanded((value) => !value)}
+                className="text-xs text-blue-600 hover:text-blue-800 shrink-0"
+              >
+                {isGuidanceExpanded ? '收起' : '展开'}
+              </button>
+            </div>
+          </div>
+
+          {isGuidanceExpanded && (
+            <div className="space-y-3">
+              {refreshStatus && (
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                  {refreshStatus}
+                </div>
+              )}
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-700">问题记忆指引</h4>
+                    {lastQuestionRefreshAt && (
+                      <span className="text-[11px] text-slate-500">
+                        样本 {position.generationMemory?.sampleSize || 0} · 更新于 {new Date(lastQuestionRefreshAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsQuestionGuidanceExpanded((value) => !value)}
+                    className="text-xs text-blue-600 hover:text-blue-800 shrink-0"
+                    aria-label={isQuestionGuidanceExpanded ? '收起问题记忆指引' : '展开问题记忆指引'}
+                  >
+                    {isQuestionGuidanceExpanded ? '收起' : '展开'}
+                  </button>
+                </div>
+                {isQuestionDirty && (
+                  <p className="mt-2 text-[11px] text-amber-700">
+                    等待下次刷新：问题记忆有新的反馈事件待合并。
+                    待合并事件 {pendingQuestionEventCount}，候选人 {pendingQuestionCandidateCount}。
+                  </p>
+                )}
+                {isQuestionGuidanceExpanded && (
+                  <>
+                    <label className="mt-2 block text-[11px] font-medium text-slate-600" htmlFor="question-guidance-editor">
+                      问题记忆指引
+                    </label>
+                    <Textarea
+                      id="question-guidance-editor"
+                      aria-label="问题记忆指引"
+                      value={questionGuidanceDraft}
+                      onChange={(event) => setQuestionGuidanceDraft(event.target.value)}
+                      autoResize
+                      rows={2}
+                      className="mt-2 min-h-[64px] border-slate-200 bg-white text-xs leading-5 text-slate-700"
+                    />
+                    <div className="mt-2 flex justify-end">
+                      <Button variant="secondary" size="sm" onClick={() => handleSaveGuidance('question_generation')}>
+                        保存问题指引
+                      </Button>
+                    </div>
+                  </>
+                )}
+                {renderUsage(manualRefreshUsage.question, '问题记忆更新 Token')}
+              </div>
+
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-700">面评记忆指引</h4>
+                    {lastSummaryRefreshAt && (
+                      <span className="text-[11px] text-slate-500">
+                        更新于 {new Date(lastSummaryRefreshAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSummaryGuidanceExpanded((value) => !value)}
+                    className="text-xs text-blue-600 hover:text-blue-800 shrink-0"
+                    aria-label={isSummaryGuidanceExpanded ? '收起面评记忆指引' : '展开面评记忆指引'}
+                  >
+                    {isSummaryGuidanceExpanded ? '收起' : '展开'}
+                  </button>
+                </div>
+                {isSummaryDirty && (
+                  <p className="mt-2 text-[11px] text-amber-700">
+                    等待下次刷新：面评记忆有新的反馈事件待合并。
+                    待合并事件 {pendingSummaryEventCount}，候选人 {pendingSummaryCandidateCount}。
+                  </p>
+                )}
+                {isSummaryGuidanceExpanded && (
+                  <>
+                    <label className="mt-2 block text-[11px] font-medium text-slate-600" htmlFor="summary-guidance-editor">
+                      面评记忆指引
+                    </label>
+                    <Textarea
+                      id="summary-guidance-editor"
+                      aria-label="面评记忆指引"
+                      value={summaryGuidanceDraft}
+                      onChange={(event) => setSummaryGuidanceDraft(event.target.value)}
+                      autoResize
+                      rows={2}
+                      className="mt-2 min-h-[64px] border-slate-200 bg-white text-xs leading-5 text-slate-700"
+                    />
+                    <div className="mt-2 flex justify-end">
+                      <Button variant="secondary" size="sm" onClick={() => handleSaveGuidance('summary_generation')}>
+                        保存面评指引
+                      </Button>
+                    </div>
+                  </>
+                )}
+                {renderUsage(manualRefreshUsage.summary, '面评记忆更新 Token')}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <CandidateList
