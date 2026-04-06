@@ -5,6 +5,7 @@ import {
   getMetricsAiFailures,
   getMetricsErrorDetail,
   getMetricsErrors,
+  getMetricsEventsByFeature,
   getMetricsFeedback,
   getMetricsFunnel,
   getMetricsOverview,
@@ -15,6 +16,7 @@ import {
   type MetricsAiModelSummary,
   type MetricsErrorEvent,
   type MetricsErrorSummary,
+  type MetricsEventByFeature,
   type MetricsFeedbackSummary,
   type MetricsFunnelStep,
   type MetricsOverview,
@@ -149,6 +151,100 @@ const FunnelPanel = ({ funnel }: { funnel: MetricsFunnelStep[] }) => {
             </div>
           ))}
         </div>
+      </CardBody>
+    </Card>
+  );
+};
+
+const FEATURE_LABELS: Record<string, string> = {
+  lifecycle: '生命周期',
+  candidate: '候选人管理',
+  feedback_loop: '反馈闭环',
+  feedback_guidance: '反馈指引',
+  calendar_sync: '日历同步',
+  feishu_export: '飞书导出',
+  feishu_oauth: '飞书登录',
+  resume_import: '简历导入',
+  resume_pdf_parse: '简历解析',
+  question_generation: '问题生成',
+  summary_generation: '总结生成',
+  meeting_notes_extraction: '会议纪要提取',
+  global_error_boundary: '全局错误',
+};
+
+const FEATURE_COLORS: Record<string, { bar: string; failBar: string }> = {
+  lifecycle: { bar: 'bg-sky-500', failBar: 'bg-sky-300' },
+  candidate: { bar: 'bg-violet-500', failBar: 'bg-violet-300' },
+  calendar_sync: { bar: 'bg-teal-500', failBar: 'bg-teal-300' },
+  feishu_export: { bar: 'bg-indigo-500', failBar: 'bg-indigo-300' },
+  feishu_oauth: { bar: 'bg-blue-500', failBar: 'bg-blue-300' },
+  resume_import: { bar: 'bg-amber-500', failBar: 'bg-amber-300' },
+  resume_pdf_parse: { bar: 'bg-orange-500', failBar: 'bg-orange-300' },
+  question_generation: { bar: 'bg-emerald-500', failBar: 'bg-emerald-300' },
+  summary_generation: { bar: 'bg-green-500', failBar: 'bg-green-300' },
+  meeting_notes_extraction: { bar: 'bg-cyan-500', failBar: 'bg-cyan-300' },
+  feedback_loop: { bar: 'bg-rose-500', failBar: 'bg-rose-300' },
+  feedback_guidance: { bar: 'bg-pink-500', failBar: 'bg-pink-300' },
+  global_error_boundary: { bar: 'bg-red-500', failBar: 'bg-red-300' },
+};
+
+const DEFAULT_FEATURE_COLOR = { bar: 'bg-gray-500', failBar: 'bg-gray-300' };
+
+const EventCategoryPanel = ({ byFeature }: { byFeature: MetricsEventByFeature[] }) => {
+  const maxValue = Math.max(...byFeature.map((item) => item.totalEvents), 1);
+  const totalEvents = byFeature.reduce((sum, item) => sum + item.totalEvents, 0);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-medium text-gray-900">功能模块事件分布</h2>
+          <span className="text-xs text-gray-500">共 {formatNumber(totalEvents)} 个事件</span>
+        </div>
+      </CardHeader>
+      <CardBody>
+        {byFeature.length === 0 ? (
+          <div className="text-sm text-gray-500">当前时间范围内暂无数据。</div>
+        ) : (
+          <div className="space-y-3">
+            {byFeature.map((item) => {
+              const colors = FEATURE_COLORS[item.feature] || DEFAULT_FEATURE_COLOR;
+              const successWidth = Math.max(4, (item.totalSuccesses / maxValue) * 100);
+              const failWidth = (item.totalFailures / maxValue) * 100;
+              const failRate = item.totalEvents > 0 ? item.totalFailures / item.totalEvents : 0;
+
+              return (
+                <div key={item.feature}>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="text-gray-700">
+                      {FEATURE_LABELS[item.feature] || item.feature}
+                    </span>
+                    <span className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>{formatNumber(item.totalEvents)}</span>
+                      {item.totalFailures > 0 && (
+                        <span className="text-red-500">
+                          {formatNumber(item.totalFailures)} 失败 ({formatPercent(failRate)})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex h-2 gap-px rounded-full bg-gray-100 overflow-hidden">
+                    <div
+                      className={`h-2 rounded-l-full ${colors.bar}`}
+                      style={{ width: `${successWidth}%` }}
+                    />
+                    {item.totalFailures > 0 && (
+                      <div
+                        className={`h-2 rounded-r-full ${colors.failBar}`}
+                        style={{ width: `${failWidth}%` }}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </CardBody>
     </Card>
   );
@@ -568,7 +664,7 @@ const ErrorPanel = ({
               </DetailSection>
             )}
             {errorDetail.error.inputSnapshot && (
-              <DetailSection title="输入快照（已脱敏）">
+              <DetailSection title="输入快照（按规则脱敏）">
                 <pre className="overflow-auto rounded-lg bg-gray-50 p-3 text-xs leading-5 text-gray-700 whitespace-pre-wrap">
                   {JSON.stringify(errorDetail.error.inputSnapshot, null, 2)}
                 </pre>
@@ -630,6 +726,7 @@ export default function UsageAdminPage() {
     byModel: MetricsAiModelSummary[];
   } | null>(null);
   const [feedbackSummary, setFeedbackSummary] = useState<MetricsFeedbackSummary | null>(null);
+  const [eventsByFeature, setEventsByFeature] = useState<MetricsEventByFeature[]>([]);
   const [errors, setErrors] = useState<MetricsErrorSummary[]>([]);
   const [aiFailures, setAiFailures] = useState<MetricsErrorEvent[]>([]);
   const [selectedErrorId, setSelectedErrorId] = useState<string | null>(null);
@@ -712,6 +809,7 @@ export default function UsageAdminPage() {
             feature: featureFilter || undefined,
             errorCategory: categoryFilter || undefined,
           }),
+          getMetricsEventsByFeature(range.from, range.to),
         ]);
 
         if (cancelled) {
@@ -719,7 +817,7 @@ export default function UsageAdminPage() {
         }
 
         // Extract successful results, set null for failed ones
-        const [overviewResult, funnelResult, timeseriesResult, aiResult, feedbackResult, errorsResult, aiFailuresResult] = results;
+        const [overviewResult, funnelResult, timeseriesResult, aiResult, feedbackResult, errorsResult, aiFailuresResult, eventsByFeatureResult] = results;
 
         if (overviewResult.status === 'fulfilled') {
           setOverview(overviewResult.value.overview);
@@ -744,6 +842,9 @@ export default function UsageAdminPage() {
         }
         if (aiFailuresResult.status === 'fulfilled') {
           setAiFailures(aiFailuresResult.value.events);
+        }
+        if (eventsByFeatureResult.status === 'fulfilled') {
+          setEventsByFeature(eventsByFeatureResult.value.byFeature);
         }
 
         setSelectedErrorId((current) => {
@@ -886,6 +987,7 @@ export default function UsageAdminPage() {
       </Card>
 
       <OverviewCards overview={overview} />
+      <EventCategoryPanel byFeature={eventsByFeature} />
 
       <div className="grid gap-4 xl:grid-cols-[0.9fr,1.1fr]">
         <FunnelPanel funnel={funnel} />
