@@ -78,9 +78,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const [meetingNotesUsage, setMeetingNotesUsage] = useState<AIUsage | undefined>(
     candidate.aiUsage?.meetingNotesExtraction
   );
-  const [questionMemoryRefreshUsage, setQuestionMemoryRefreshUsage] = useState<AIUsage | undefined>(
-    position.generationMemoryState?.lastQuestionRefreshUsage
-  );
+  const [questionMemoryRefreshUsage, setQuestionMemoryRefreshUsage] = useState<AIUsage | undefined>(undefined);
   const [questionMemoryRefreshStatus, setQuestionMemoryRefreshStatus] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const snapshotButtonRef = useRef<HTMLButtonElement>(null);
@@ -178,12 +176,10 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   useEffect(() => {
     setQuestionGenerationUsage(candidate.aiUsage?.questionGeneration);
     setMeetingNotesUsage(candidate.aiUsage?.meetingNotesExtraction);
-    setQuestionMemoryRefreshUsage(position.generationMemoryState?.lastQuestionRefreshUsage);
   }, [
     candidate.aiUsage?.meetingNotesExtraction,
     candidate.aiUsage?.questionGeneration,
     candidate.id,
-    position.generationMemoryState?.lastQuestionRefreshUsage,
   ]);
 
   useEffect(() => {

@@ -96,9 +96,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
   const [summaryUsage, setSummaryUsage] = useState<AIUsage | undefined>(
     candidate.interviewResult?.aiUsage?.summaryGeneration
   );
-  const [summaryMemoryRefreshUsage, setSummaryMemoryRefreshUsage] = useState<AIUsage | undefined>(
-    position.generationMemoryState?.lastSummaryRefreshUsage
-  );
+  const [summaryMemoryRefreshUsage, setSummaryMemoryRefreshUsage] = useState<AIUsage | undefined>(undefined);
   const [summaryMemoryRefreshStatus, setSummaryMemoryRefreshStatus] = useState<string | null>(null);
   const [wintalentAutofillLoading, setWintalentAutofillLoading] = useState(false);
   const [wintalentAutofillError, setWintalentAutofillError] = useState<string | null>(null);
@@ -268,9 +266,8 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     setConcerns(candidate.interviewResult?.additional_info?.concerns || []);
     setFollowUps(candidate.interviewResult?.additional_info?.follow_up_questions || []);
     setSummaryUsage(candidate.interviewResult?.aiUsage?.summaryGeneration);
-    setSummaryMemoryRefreshUsage(position.generationMemoryState?.lastSummaryRefreshUsage);
     setSaveStatus('saved');
-  }, [candidate.id, candidate.interviewTime, position.generationMemoryState?.lastSummaryRefreshUsage]);
+  }, [candidate.id, candidate.interviewTime]);
 
   useEffect(() => {
     lastRewriteSignatureRef.current = '';

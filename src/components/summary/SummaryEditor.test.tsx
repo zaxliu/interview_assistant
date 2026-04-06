@@ -145,6 +145,8 @@ describe('SummaryEditor', () => {
 
     render(<SummaryEditor position={position} candidate={candidate} autoGenerate />);
 
+    expect(screen.queryByText(/面评记忆更新 Token/)).not.toBeInTheDocument();
+
     await waitFor(() => {
       expect(screen.getByText('正在更新岗位面评记忆...')).toBeInTheDocument();
     });

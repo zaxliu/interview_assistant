@@ -260,6 +260,8 @@ describe('InterviewPanel', () => {
       </MemoryRouter>
     );
 
+    expect(screen.queryByText(/问题记忆更新 Token/)).not.toBeInTheDocument();
+
     fireEvent.click(await screen.findByRole('button', { name: '生成面试问题' }));
 
     expect(screen.getByText('正在更新岗位问题记忆...')).toBeInTheDocument();

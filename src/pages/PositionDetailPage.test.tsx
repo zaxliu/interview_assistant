@@ -80,7 +80,8 @@ describe('PositionDetailPage', () => {
     expect(screen.queryByText('当前生成逻辑')).not.toBeInTheDocument();
     expect(screen.getByText(/等待下次刷新/)).toBeInTheDocument();
     expect(screen.getByText(/待合并事件 3，候选人 2/)).toBeInTheDocument();
-    expect(screen.getByText(/问题记忆更新/)).toBeInTheDocument();
+    expect(screen.queryByText(/问题记忆更新 Token/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/面评记忆更新 Token/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '刷新岗位记忆' }));
 

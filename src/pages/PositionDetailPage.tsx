@@ -244,7 +244,7 @@ export default function PositionDetailPage() {
                   </div>
                 </>
               )}
-              {renderUsage(manualRefreshUsage.question || position.generationMemoryState?.lastQuestionRefreshUsage, '问题记忆更新 Token')}
+              {renderUsage(manualRefreshUsage.question, '问题记忆更新 Token')}
             </div>
 
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -293,7 +293,7 @@ export default function PositionDetailPage() {
                   </div>
                 </>
               )}
-              {renderUsage(manualRefreshUsage.summary || position.generationMemoryState?.lastSummaryRefreshUsage, '面评记忆更新 Token')}
+              {renderUsage(manualRefreshUsage.summary, '面评记忆更新 Token')}
             </div>
           </div>
         )}
