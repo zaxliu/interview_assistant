@@ -63,4 +63,41 @@ describe('positionStore', () => {
     expect(updated?.status).toBe('completed');
     expect(updated?.interviewResult?.summary.suggested_level).toBe('P7');
   });
+
+  it('records feedback events and derives position guidance', () => {
+    const position = usePositionStore.getState().addPosition({
+      title: 'ML Engineer',
+      team: 'AI',
+      description: 'Build AI systems',
+      criteria: [],
+      source: 'manual',
+    });
+    const candidate = usePositionStore.getState().addCandidate(position.id, {
+      name: 'Carla',
+      status: 'in_progress',
+    });
+
+    usePositionStore.getState().recordFeedbackEvent(position.id, {
+      type: 'question_asked',
+      candidateId: candidate.id,
+      questionId: 'q-1',
+      details: {
+        source: 'resume',
+        evaluationDimension: '专业能力',
+      },
+    });
+    usePositionStore.getState().recordFeedbackEvent(position.id, {
+      type: 'summary_rewritten',
+      candidateId: candidate.id,
+      details: {
+        preferences: ['强调证据', '精简篇幅'],
+        rewriteIntensity: 'medium',
+      },
+    });
+
+    const updated = usePositionStore.getState().getPosition(position.id);
+    expect(updated?.feedbackEvents?.length).toBe(2);
+    expect(updated?.generationGuidance?.questionGuidance).toContain('专业能力');
+    expect(updated?.generationGuidance?.summaryGuidance).toContain('强调证据');
+  });
 });

@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
-import { extractMeetingNotesInsights, generateQuestions, generateSummary } from '@/api/ai';
+import { analyzeSummaryRewrite, extractMeetingNotesInsights, generateQuestions, generateSummary } from '@/api/ai';
 import { useSettingsStore } from '@/store/settingsStore';
 import type { Question, InterviewResult, CodingChallenge, HistoricalInterviewReview } from '@/types';
-import type { AIResultWithUsage, MeetingNotesExtractionResult } from '@/api/ai';
+import type { AIResultWithUsage, MeetingNotesExtractionResult, SummaryRewriteInsight } from '@/api/ai';
 import { reportError } from '@/lib/analytics';
 
 export const useAI = () => {
@@ -16,7 +16,8 @@ export const useAI = () => {
       jobDescription: string,
       resumeText: string,
       criteria: string[],
-      historicalInterviewReviews?: HistoricalInterviewReview[]
+      historicalInterviewReviews?: HistoricalInterviewReview[],
+      guidance?: string
     ): Promise<AIResultWithUsage<Question[]>> => {
       if (!aiApiKey) {
         setError('未配置 AI API Key');
@@ -32,7 +33,8 @@ export const useAI = () => {
           jobDescription,
           resumeText,
           criteria,
-          historicalInterviewReviews
+          historicalInterviewReviews,
+          guidance
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : '生成面试问题失败';
@@ -76,7 +78,8 @@ export const useAI = () => {
       positionTitle: string,
       quickNotes?: string,
       meetingNotesContext?: string,
-      codingChallenges?: CodingChallenge[]
+      codingChallenges?: CodingChallenge[],
+      guidance?: string
     ): Promise<AIResultWithUsage<InterviewResult> | null> => {
       if (!aiApiKey) {
         setError('未配置 AI API Key');
@@ -96,7 +99,8 @@ export const useAI = () => {
           positionTitle,
           quickNotes,
           meetingNotesContext,
-          codingChallenges
+          codingChallenges,
+          guidance
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : '生成面试总结失败';
@@ -128,6 +132,28 @@ export const useAI = () => {
         return null;
       } finally {
         setIsLoading(false);
+      }
+    },
+    [aiApiKey, aiModel]
+  );
+
+  const analyzeInterviewSummaryRewrite = useCallback(
+    async (
+      generatedSummaryDraft: InterviewResult,
+      finalSummary: InterviewResult
+    ): Promise<AIResultWithUsage<SummaryRewriteInsight> | null> => {
+      if (!aiApiKey) {
+        return null;
+      }
+
+      try {
+        return await analyzeSummaryRewrite(
+          { apiKey: aiApiKey, model: aiModel },
+          generatedSummaryDraft,
+          finalSummary
+        );
+      } catch {
+        return null;
       }
     },
     [aiApiKey, aiModel]
@@ -188,6 +214,7 @@ export const useAI = () => {
     error,
     generateInterviewQuestions,
     generateInterviewSummary,
+    analyzeInterviewSummaryRewrite,
     extractInterviewNotesInsights,
   };
 };

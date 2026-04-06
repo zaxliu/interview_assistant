@@ -54,6 +54,11 @@ export interface MeetingNotesExtractionResult {
   newQAs: ExtractedNewQA[];
 }
 
+export interface SummaryRewriteInsight {
+  rewriteIntensity: 'low' | 'medium' | 'high';
+  preferences: string[];
+}
+
 const normalizeQuestionSource = (source?: string): QuestionSource => {
   if (source === 'resume' || source === 'jd' || source === 'coding') {
     return source;
@@ -510,7 +515,8 @@ export const generateQuestions = async (
   jobDescription: string,
   resumeText: string,
   criteria: string[],
-  historicalInterviewReviews: HistoricalInterviewReview[] = []
+  historicalInterviewReviews: HistoricalInterviewReview[] = [],
+  guidance?: string
 ): Promise<AIResultWithUsage<Question[]>> => {
   const criteriaSection = criteria.length > 0
     ? criteria.map((criterion) => `- ${criterion}`).join('\n')
@@ -529,7 +535,11 @@ export const generateQuestions = async (
       .join('\n\n')
     : '无历史面评';
 
-  const prompt = `你是一位经验丰富的面试官。请根据以下信息生成面试问题。
+  const guidanceSection = guidance?.trim()
+    ? `\n## 岗位历史反馈指引（请优先遵守）\n${guidance.trim()}\n`
+    : '';
+
+  const prompt = `你是一位经验丰富的面试官。请根据以下信息生成面试问题。${guidanceSection}
 
 ## 职位描述
 ${jobDescription}
@@ -975,7 +985,8 @@ export const generateSummary = async (
   positionTitle: string,
   quickNotes?: string,
   meetingNotesContext?: string,
-  codingChallenges?: CodingChallenge[]
+  codingChallenges?: CodingChallenge[],
+  guidance?: string
 ): Promise<AIResultWithUsage<InterviewResult>> => {
   // Only include questions that were actually asked
   const askedQuestions = questions.filter(q => q.status === 'asked');
@@ -1016,7 +1027,11 @@ export const generateSummary = async (
       }).join('\n')}\n`
     : '';
 
-  const prompt = `请根据以下面试记录生成结构化的面试评估结果。
+  const guidanceSection = guidance?.trim()
+    ? `\n岗位历史反馈指引（请优先遵守）：\n${guidance.trim()}\n`
+    : '';
+
+  const prompt = `请根据以下面试记录生成结构化的面试评估结果。${guidanceSection}
 
 ## 候选人信息
 - 姓名：${candidateName}
@@ -1183,6 +1198,67 @@ ${quickNotesSection}${meetingNotesSection}${codingChallengesSection}${skippedTop
         },
       },
       usage: extractAIUsage(data),
+    };
+  }
+};
+
+export const analyzeSummaryRewrite = async (
+  config: AIServiceConfig,
+  generatedSummaryDraft: InterviewResult,
+  finalSummary: InterviewResult
+): Promise<AIResultWithUsage<SummaryRewriteInsight>> => {
+  const prompt = `你是面试评语质量分析助手。请比较 AI 初稿和用户终稿，输出改写偏好。
+
+AI 初稿：
+${JSON.stringify(generatedSummaryDraft)}
+
+用户终稿：
+${JSON.stringify(finalSummary)}
+
+请输出 JSON：
+{
+  "rewrite_intensity": "low|medium|high",
+  "preferences": ["偏好1","偏好2"]
+}
+
+规则：
+- rewrite_intensity 表示改写程度
+- preferences 提炼用户稳定偏好，最多 6 条
+- 只返回 JSON`;
+
+  const response = await requestAICompletionContent(
+    config,
+    '你擅长比较两版面评并提炼可操作偏好。必须返回严格 JSON。',
+    prompt
+  );
+
+  try {
+    const parsed = parseModelJson<{
+      rewrite_intensity?: string;
+      preferences?: string[];
+    }>(response.data);
+    const rewriteIntensity = parsed.rewrite_intensity === 'high' || parsed.rewrite_intensity === 'medium'
+      ? parsed.rewrite_intensity
+      : 'low';
+    const preferences = Array.isArray(parsed.preferences)
+      ? parsed.preferences.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
+      : [];
+
+    return {
+      data: {
+        rewriteIntensity,
+        preferences,
+      },
+      usage: response.usage,
+    };
+  } catch (error) {
+    console.error('Failed to parse summary rewrite insight:', response.data, error);
+    return {
+      data: {
+        rewriteIntensity: 'low',
+        preferences: [],
+      },
+      usage: response.usage,
     };
   }
 };

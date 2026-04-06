@@ -53,6 +53,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     addQuestion,
     updateCandidate,
     updateQuestion,
+    recordFeedbackEvent,
   } = usePositionStore();
 
   const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
@@ -228,17 +229,44 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       position.description,
       resumeContent,
       position.criteria,
-      candidate.historicalInterviewReviews
+      candidate.historicalInterviewReviews,
+      position.generationGuidance?.questionGuidance
     );
 
     if (generated.data.length > 0) {
-      setQuestions(position.id, candidate.id, generated.data);
+      const batchId = `qbatch-${Date.now()}`;
+      setQuestions(
+        position.id,
+        candidate.id,
+        generated.data.map((item) => ({
+          ...item,
+          aiBatchId: batchId,
+          originalText: item.text,
+        }))
+      );
       if (generated.usage) {
         setQuestionGenerationUsage(generated.usage);
         updateCandidate(position.id, candidate.id, {
           aiUsage: {
             ...candidate.aiUsage,
             questionGeneration: generated.usage,
+          },
+          lastQuestionBatchId: batchId,
+        });
+      } else {
+        updateCandidate(position.id, candidate.id, {
+          lastQuestionBatchId: batchId,
+        });
+      }
+      if (position.generationGuidance?.questionGuidance) {
+        trackEvent({
+          eventName: 'guidance_applied_to_question_generation',
+          feature: 'feedback_guidance',
+          success: true,
+          model: aiModel,
+          details: {
+            positionId: position.id,
+            candidateId: candidate.id,
           },
         });
       }
@@ -251,6 +279,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         ...usageFromAIUsage(generated.usage),
         details: {
           questions: generated.data.length,
+          guidanceApplied: Boolean(position.generationGuidance?.questionGuidance),
         },
       });
       return;
@@ -351,6 +380,17 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
           notes: mergedNotes,
           status: 'asked',
         });
+        if (question.isAIGenerated) {
+          recordFeedbackEvent(position.id, {
+            type: 'question_asked',
+            candidateId: candidate.id,
+            questionId: question.id,
+            details: {
+              source: question.source,
+              evaluationDimension: question.evaluationDimension || '',
+            },
+          });
+        }
         updatedExistingCount += 1;
       });
 
@@ -362,15 +402,26 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
           return;
         }
 
-        addQuestion(position.id, candidate.id, {
+        const newQuestionId = addQuestion(position.id, candidate.id, {
           text: qa.question,
           source: qa.source,
           evaluationDimension: qa.evaluationDimension,
           context: '',
           isAIGenerated: true,
+          aiBatchId: candidate.lastQuestionBatchId,
+          originalText: qa.question,
           notes: buildImportedNotes(qa.answer),
           status: 'asked',
           category: qa.source,
+        });
+        recordFeedbackEvent(position.id, {
+          type: 'question_asked',
+          candidateId: candidate.id,
+          questionId: newQuestionId,
+          details: {
+            source: qa.source,
+            evaluationDimension: qa.evaluationDimension,
+          },
         });
         existingNormalizedSet.add(normalized);
         addedNewCount += 1;

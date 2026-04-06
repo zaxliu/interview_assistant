@@ -33,6 +33,8 @@ export interface Position {
   createdAt: string;
   source: 'calendar' | 'manual';
   candidates: Candidate[];
+  feedbackEvents?: FeedbackEvent[];
+  generationGuidance?: GenerationGuidance;
   userId?: string; // Owner of this position
 }
 
@@ -91,7 +93,31 @@ export interface Candidate {
   codingChallenges?: CodingChallenge[];
   interviewResult?: InterviewResult;
   aiUsage?: CandidateAIUsage;
+  lastQuestionBatchId?: string;
+  lastGeneratedSummaryDraft?: InterviewResult;
   userId?: string; // Owner of this candidate
+}
+
+export interface GenerationGuidance {
+  questionGuidance: string;
+  summaryGuidance: string;
+  updatedAt: string;
+  sampleSize: number;
+}
+
+export type FeedbackEventType =
+  | 'question_asked'
+  | 'question_deleted'
+  | 'question_edited'
+  | 'summary_rewritten';
+
+export interface FeedbackEvent {
+  id: string;
+  type: FeedbackEventType;
+  createdAt: string;
+  candidateId: string;
+  questionId?: string;
+  details?: Record<string, string | number | boolean | string[]>;
 }
 
 // Question source type
@@ -109,6 +135,8 @@ export interface Question {
   context?: string;  // The text from resume/JD that this question is based on (for highlighting in PDF)
   historicalReviewSummary?: string;
   isAIGenerated: boolean;
+  aiBatchId?: string;
+  originalText?: string;
   notes?: string;
   status: 'asked' | 'skipped' | 'not_reached';
   // Keep category for backward compatibility, will be deprecated
@@ -150,6 +178,7 @@ export interface InterviewResult {
   };
   aiUsage?: {
     summaryGeneration?: AIUsage;
+    summaryRewriteAnalysis?: AIUsage;
   };
 }
 

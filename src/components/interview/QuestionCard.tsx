@@ -29,7 +29,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   isActive,
   autoEdit,
 }) => {
-  const { updateQuestion, deleteQuestion } = usePositionStore();
+  const { updateQuestion, deleteQuestion, recordFeedbackEvent } = usePositionStore();
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(question.text);
   const [notesDraft, setNotesDraft] = useState(question.notes || '');
@@ -68,6 +68,16 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   const handleSaveEdit = () => {
     if (editText.trim() && editText.trim() !== question.text) {
       updateQuestion(positionId, candidateId, question.id, { text: editText.trim() });
+      if (question.isAIGenerated) {
+        recordFeedbackEvent(positionId, {
+          type: 'question_edited',
+          candidateId,
+          questionId: question.id,
+          details: {
+            editPattern: editText.trim().length < question.text.length ? '缩短题干' : '扩展题干',
+          },
+        });
+      }
     }
     setIsEditing(false);
   };
@@ -113,6 +123,17 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   const handleNotesChange = (notes: string) => {
     if (notes.trim() && question.status === 'not_reached') {
       updateQuestion(positionId, candidateId, question.id, { status: 'asked' });
+      if (question.isAIGenerated) {
+        recordFeedbackEvent(positionId, {
+          type: 'question_asked',
+          candidateId,
+          questionId: question.id,
+          details: {
+            source: question.source,
+            evaluationDimension: question.evaluationDimension || '',
+          },
+        });
+      }
     }
     setNotesDraft(notes);
   };
@@ -125,11 +146,33 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
     updateQuestion(positionId, candidateId, question.id, {
       status: nextStatus as 'asked' | 'skipped' | 'not_reached'
     });
+    if (question.isAIGenerated && nextStatus === 'asked') {
+      recordFeedbackEvent(positionId, {
+        type: 'question_asked',
+        candidateId,
+        questionId: question.id,
+        details: {
+          source: question.source,
+          evaluationDimension: question.evaluationDimension || '',
+        },
+      });
+    }
   };
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm('确认删除这个问题吗？')) {
+      if (question.isAIGenerated) {
+        recordFeedbackEvent(positionId, {
+          type: 'question_deleted',
+          candidateId,
+          questionId: question.id,
+          details: {
+            source: question.source,
+            evaluationDimension: question.evaluationDimension || '',
+          },
+        });
+      }
       deleteQuestion(positionId, candidateId, question.id);
     }
   };

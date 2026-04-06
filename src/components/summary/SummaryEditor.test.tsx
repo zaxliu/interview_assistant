@@ -14,6 +14,7 @@ vi.mock('@/hooks/useAI', () => ({
     isLoading: false,
     error: null,
     generateInterviewSummary,
+    analyzeInterviewSummaryRewrite: vi.fn(),
   }),
 }));
 
@@ -141,6 +142,7 @@ describe('SummaryEditor', () => {
       position.title,
       undefined,
       candidate.meetingNotesContext,
+      undefined,
       undefined
     );
     expect(screen.getByText(/AI 总结生成 Token/)).toBeInTheDocument();

@@ -91,6 +91,36 @@ export interface MetricsTimeseriesPoint {
   outputTokens: number;
 }
 
+export interface MetricsFeedbackByPosition {
+  positionId: string;
+  questionAsked: number;
+  questionEdited: number;
+  questionDeleted: number;
+  summaryRewritten: number;
+  guidanceGenerated: number;
+  guidanceAppliedQuestion: number;
+  guidanceAppliedSummary: number;
+  questionAdoptionRate: number;
+  questionRewriteRate: number;
+}
+
+export interface MetricsFeedbackSummary {
+  totals: {
+    events: number;
+    questionAsked: number;
+    questionEdited: number;
+    questionDeleted: number;
+    summaryRewritten: number;
+    guidanceGenerated: number;
+    guidanceAppliedQuestion: number;
+    guidanceAppliedSummary: number;
+    questionAdoptionRate: number;
+    questionRewriteRate: number;
+    guidanceHitRate: number;
+  };
+  byPosition: MetricsFeedbackByPosition[];
+}
+
 interface RangeResponse {
   range: {
     from: string;
@@ -167,6 +197,9 @@ export const getMetricsTimeseries = (from: string, to: string, interval: 'day' |
     interval: 'day' | 'hour';
     timeseries: MetricsTimeseriesPoint[];
   }>(withRange('/api/metrics/dashboard/timeseries', from, to, interval));
+
+export const getMetricsFeedback = (from: string, to: string) =>
+  fetchJson<RangeResponse & { feedback: MetricsFeedbackSummary }>(withRange('/api/metrics/dashboard/feedback', from, to));
 
 export const getMetricsErrors = (
   from: string,

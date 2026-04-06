@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import type { Position, Candidate, Question, InterviewResult, CodingChallenge } from '@/types';
+import type { Position, Candidate, Question, InterviewResult, CodingChallenge, FeedbackEvent } from '@/types';
 import { saveToStorage, loadFromStorage } from '@/utils/storage';
 import { trackEvent } from '@/lib/analytics';
+import { synthesizeGenerationGuidance } from '@/lib/guidance';
 
 interface PositionState {
   positions: Position[];
@@ -17,7 +18,7 @@ interface PositionState {
   updateCandidate: (positionId: string, candidateId: string, updates: Partial<Candidate>) => void;
   deleteCandidate: (positionId: string, candidateId: string) => void;
   getCandidate: (positionId: string, candidateId: string) => Candidate | undefined;
-  addQuestion: (positionId: string, candidateId: string, question: Omit<Question, 'id'>) => void;
+  addQuestion: (positionId: string, candidateId: string, question: Omit<Question, 'id'>) => string;
   insertQuestion: (positionId: string, candidateId: string, index: number, question: Omit<Question, 'id'>) => string;
   updateQuestion: (positionId: string, candidateId: string, questionId: string, updates: Partial<Question>) => void;
   deleteQuestion: (positionId: string, candidateId: string, questionId: string) => void;
@@ -27,11 +28,41 @@ interface PositionState {
   deleteCodingChallenge: (positionId: string, candidateId: string, challengeId: string) => void;
   setInterviewResult: (positionId: string, candidateId: string, result: InterviewResult) => void;
   completeInterview: (positionId: string, candidateId: string, result: InterviewResult) => void;
+  recordFeedbackEvent: (
+    positionId: string,
+    event: Omit<FeedbackEvent, 'id' | 'createdAt'>
+  ) => void;
+  refreshPositionGuidance: (positionId: string) => void;
   loadFromStorage: () => void;
   saveToStorage: () => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
+
+const shouldSkipDuplicateFeedback = (
+  existingEvents: FeedbackEvent[] | undefined,
+  nextEvent: Omit<FeedbackEvent, 'id' | 'createdAt'>
+): boolean => {
+  if (!existingEvents?.length) {
+    return false;
+  }
+
+  if (nextEvent.type === 'question_asked' || nextEvent.type === 'question_edited') {
+    // Guard: question_asked/question_edited MUST have questionId for proper deduplication
+    if (!nextEvent.questionId) {
+      console.warn(`[positionStore] ${nextEvent.type} event missing questionId — cannot dedupe properly`, nextEvent);
+      return false;
+    }
+    return existingEvents.some((event) => (
+      event.type === nextEvent.type &&
+      event.candidateId === nextEvent.candidateId &&
+      event.questionId &&
+      event.questionId === nextEvent.questionId
+    ));
+  }
+
+  return false;
+};
 
 const persistPositions = (positions: Position[], currentUserId: string | null) => {
   saveToStorage({ positions, settings: {} }, currentUserId || undefined);
@@ -195,6 +226,8 @@ export const usePositionStore = create<PositionState>((set, get) => ({
       persistPositions(positions, state.currentUserId);
       return { positions };
     });
+
+    return question.id;
   },
 
   insertQuestion: (positionId, candidateId, index, questionData) => {
@@ -311,6 +344,75 @@ export const usePositionStore = create<PositionState>((set, get) => ({
         interviewResult: result,
         status: 'completed',
       }));
+      persistPositions(positions, state.currentUserId);
+      return { positions };
+    });
+  },
+
+  recordFeedbackEvent: (positionId, eventData) => {
+    set((state) => {
+      const positions = state.positions.map((position) => {
+        if (position.id !== positionId) {
+          return position;
+        }
+
+        if (shouldSkipDuplicateFeedback(position.feedbackEvents, eventData)) {
+          return position;
+        }
+
+        const feedbackEvents = [
+          ...(position.feedbackEvents || []),
+          {
+            ...eventData,
+            id: generateId(),
+            createdAt: new Date().toISOString(),
+          },
+        ].slice(-500);
+        trackEvent({
+          eventName: eventData.type,
+          feature: 'feedback_loop',
+          success: true,
+          details: {
+            positionId,
+            candidateId: eventData.candidateId,
+            questionId: eventData.questionId || '',
+            ...eventData.details,
+          },
+        });
+        const generationGuidance = synthesizeGenerationGuidance(feedbackEvents);
+        trackEvent({
+          eventName: 'guidance_generated',
+          feature: 'feedback_guidance',
+          success: true,
+          details: {
+            positionId,
+            sampleSize: generationGuidance.sampleSize,
+          },
+        });
+
+        return {
+          ...position,
+          feedbackEvents,
+          generationGuidance,
+        };
+      });
+      persistPositions(positions, state.currentUserId);
+      return { positions };
+    });
+  },
+
+  refreshPositionGuidance: (positionId) => {
+    set((state) => {
+      const positions = state.positions.map((position) => {
+        if (position.id !== positionId) {
+          return position;
+        }
+        const generationGuidance = synthesizeGenerationGuidance(position.feedbackEvents || []);
+        return {
+          ...position,
+          generationGuidance,
+        };
+      });
       persistPositions(positions, state.currentUserId);
       return { positions };
     });

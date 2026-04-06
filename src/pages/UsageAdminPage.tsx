@@ -5,6 +5,7 @@ import {
   getMetricsAiFailures,
   getMetricsErrorDetail,
   getMetricsErrors,
+  getMetricsFeedback,
   getMetricsFunnel,
   getMetricsOverview,
   getMetricsTimeseries,
@@ -14,6 +15,7 @@ import {
   type MetricsAiModelSummary,
   type MetricsErrorEvent,
   type MetricsErrorSummary,
+  type MetricsFeedbackSummary,
   type MetricsFunnelStep,
   type MetricsOverview,
   type MetricsTimeseriesPoint,
@@ -254,6 +256,71 @@ const AiPanel = ({
           </tbody>
         </table>
       </div>
+    </CardBody>
+  </Card>
+);
+
+const FeedbackPanel = ({ feedback }: { feedback: MetricsFeedbackSummary | null }) => (
+  <Card>
+    <CardHeader>
+      <h2 className="text-sm font-medium text-gray-900">反馈闭环看板</h2>
+    </CardHeader>
+    <CardBody className="space-y-4">
+      {!feedback ? (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          反馈闭环数据加载失败，请稍后重试。
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-3 md:grid-cols-4 text-sm">
+            <div>
+              <div className="text-gray-500">问题采纳率</div>
+              <div className="mt-1 font-semibold text-gray-900">{formatPercent(feedback.totals.questionAdoptionRate)}</div>
+            </div>
+            <div>
+              <div className="text-gray-500">问题改写率</div>
+              <div className="mt-1 font-semibold text-gray-900">{formatPercent(feedback.totals.questionRewriteRate)}</div>
+            </div>
+            <div>
+              <div className="text-gray-500">面评改写事件</div>
+              <div className="mt-1 font-semibold text-gray-900">{formatNumber(feedback.totals.summaryRewritten)}</div>
+            </div>
+            <div>
+              <div className="text-gray-500">指引命中率</div>
+              <div className="mt-1 font-semibold text-gray-900">{formatPercent(feedback.totals.guidanceHitRate)}</div>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-left text-gray-500">
+                <tr>
+                  <th className="pb-2 pr-4">岗位</th>
+                  <th className="pb-2 pr-4 text-right">采纳率</th>
+                  <th className="pb-2 pr-4 text-right">改写率</th>
+                  <th className="pb-2 pr-4 text-right">面评改写</th>
+                  <th className="pb-2 pr-0 text-right">指引生成</th>
+                </tr>
+              </thead>
+              <tbody>
+                {feedback.byPosition.length === 0 && (
+                  <tr>
+                    <td className="py-2 text-gray-500" colSpan={5}>暂无反馈闭环数据。</td>
+                  </tr>
+                )}
+                {feedback.byPosition.map((item) => (
+                  <tr key={item.positionId} className="border-t border-gray-100 text-gray-700">
+                    <td className="py-2 pr-4 font-medium">{item.positionId}</td>
+                    <td className="py-2 pr-4 text-right">{formatPercent(item.questionAdoptionRate)}</td>
+                    <td className="py-2 pr-4 text-right">{formatPercent(item.questionRewriteRate)}</td>
+                    <td className="py-2 pr-4 text-right">{formatNumber(item.summaryRewritten)}</td>
+                    <td className="py-2 pr-0 text-right">{formatNumber(item.guidanceGenerated)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </CardBody>
   </Card>
 );
@@ -562,6 +629,7 @@ export default function UsageAdminPage() {
     };
     byModel: MetricsAiModelSummary[];
   } | null>(null);
+  const [feedbackSummary, setFeedbackSummary] = useState<MetricsFeedbackSummary | null>(null);
   const [errors, setErrors] = useState<MetricsErrorSummary[]>([]);
   const [aiFailures, setAiFailures] = useState<MetricsErrorEvent[]>([]);
   const [selectedErrorId, setSelectedErrorId] = useState<string | null>(null);
@@ -630,11 +698,12 @@ export default function UsageAdminPage() {
 
         setAdminUser(me.user);
 
-        const [overviewResponse, funnelResponse, timeseriesResponse, aiResponse, errorsResponse, aiFailuresResponse] = await Promise.all([
+        const results = await Promise.allSettled([
           getMetricsOverview(range.from, range.to),
           getMetricsFunnel(range.from, range.to),
           getMetricsTimeseries(range.from, range.to),
           getMetricsAi(range.from, range.to),
+          getMetricsFeedback(range.from, range.to),
           getMetricsErrors(range.from, range.to, {
             feature: featureFilter || undefined,
             errorCategory: categoryFilter || undefined,
@@ -649,17 +718,41 @@ export default function UsageAdminPage() {
           return;
         }
 
-        setOverview(overviewResponse.overview);
-        setFunnel(funnelResponse.funnel);
-        setTimeseries(timeseriesResponse.timeseries);
-        setAiSummary(aiResponse.ai);
-        setErrors(errorsResponse.errors);
-        setAiFailures(aiFailuresResponse.events);
+        // Extract successful results, set null for failed ones
+        const [overviewResult, funnelResult, timeseriesResult, aiResult, feedbackResult, errorsResult, aiFailuresResult] = results;
+
+        if (overviewResult.status === 'fulfilled') {
+          setOverview(overviewResult.value.overview);
+        }
+        if (funnelResult.status === 'fulfilled') {
+          setFunnel(funnelResult.value.funnel);
+        }
+        if (timeseriesResult.status === 'fulfilled') {
+          setTimeseries(timeseriesResult.value.timeseries);
+        }
+        if (aiResult.status === 'fulfilled') {
+          setAiSummary(aiResult.value.ai);
+        }
+        if (feedbackResult.status === 'fulfilled') {
+          setFeedbackSummary(feedbackResult.value.feedback);
+        } else {
+          // Feedback fetch failed — set null so panel can show error state
+          setFeedbackSummary(null);
+        }
+        if (errorsResult.status === 'fulfilled') {
+          setErrors(errorsResult.value.errors);
+        }
+        if (aiFailuresResult.status === 'fulfilled') {
+          setAiFailures(aiFailuresResult.value.events);
+        }
+
         setSelectedErrorId((current) => {
-          const currentStillExists = errorsResponse.errors.some((item) => item.latestEventId === current)
-            || aiFailuresResponse.events.some((item) => item.id === current);
+          const errorsData = errorsResult.status === 'fulfilled' ? errorsResult.value.errors : [];
+          const aiFailuresData = aiFailuresResult.status === 'fulfilled' ? aiFailuresResult.value.events : [];
+          const currentStillExists = errorsData.some((item) => item.latestEventId === current)
+            || aiFailuresData.some((item) => item.id === current);
           if (currentStillExists) return current;
-          return aiFailuresResponse.events[0]?.id || errorsResponse.errors[0]?.latestEventId || null;
+          return aiFailuresData[0]?.id || errorsData[0]?.latestEventId || null;
         });
         setAuthState('ready');
       } catch (error) {
@@ -800,6 +893,7 @@ export default function UsageAdminPage() {
       </div>
 
       <AiPanel totals={aiSummary.totals} byModel={aiSummary.byModel} />
+      <FeedbackPanel feedback={feedbackSummary} />
 
       <ErrorPanel
         aiFailures={filteredAiFailures}

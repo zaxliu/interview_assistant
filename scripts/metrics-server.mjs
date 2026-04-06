@@ -52,6 +52,15 @@ const EVENTS_WITH_AI = new Set([
   'summary_generation_succeeded',
   'summary_generation_failed',
 ]);
+const FEEDBACK_EVENT_NAMES = new Set([
+  'question_asked',
+  'question_deleted',
+  'question_edited',
+  'summary_rewritten',
+  'guidance_generated',
+  'guidance_applied_to_question_generation',
+  'guidance_applied_to_summary_generation',
+]);
 const FUNNEL_STEPS = [
   'app_opened',
   'feishu_login_succeeded',
@@ -603,6 +612,107 @@ const summarizeTimeseries = (events, interval) => {
   return Array.from(buckets.values()).sort((left, right) => left.bucket.localeCompare(right.bucket));
 };
 
+const summarizeFeedback = (events) => {
+  const feedbackEvents = events.filter((event) => FEEDBACK_EVENT_NAMES.has(event.eventName));
+  const byPosition = new Map();
+  let questionAsked = 0;
+  let questionEdited = 0;
+  let questionDeleted = 0;
+  let summaryRewritten = 0;
+  let guidanceGenerated = 0;
+  let guidanceAppliedQuestion = 0;
+  let guidanceAppliedSummary = 0;
+
+  feedbackEvents.forEach((event) => {
+    const positionId = typeof event.details?.positionId === 'string' ? event.details.positionId : 'unknown';
+    const current = byPosition.get(positionId) || {
+      positionId,
+      questionAsked: 0,
+      questionEdited: 0,
+      questionDeleted: 0,
+      summaryRewritten: 0,
+      guidanceGenerated: 0,
+      guidanceAppliedQuestion: 0,
+      guidanceAppliedSummary: 0,
+    };
+
+    switch (event.eventName) {
+      case 'question_asked':
+        questionAsked += 1;
+        current.questionAsked += 1;
+        break;
+      case 'question_edited':
+        questionEdited += 1;
+        current.questionEdited += 1;
+        break;
+      case 'question_deleted':
+        questionDeleted += 1;
+        current.questionDeleted += 1;
+        break;
+      case 'summary_rewritten':
+        summaryRewritten += 1;
+        current.summaryRewritten += 1;
+        break;
+      case 'guidance_generated':
+        guidanceGenerated += 1;
+        current.guidanceGenerated += 1;
+        break;
+      case 'guidance_applied_to_question_generation':
+        guidanceAppliedQuestion += 1;
+        current.guidanceAppliedQuestion += 1;
+        break;
+      case 'guidance_applied_to_summary_generation':
+        guidanceAppliedSummary += 1;
+        current.guidanceAppliedSummary += 1;
+        break;
+      default:
+        break;
+    }
+    byPosition.set(positionId, current);
+  });
+
+  // Count total generation requests as the denominator for guidance hit rate
+  const questionGenSucceeded = events.filter((e) => e.eventName === 'question_generation_succeeded').length;
+  const summaryGenSucceeded = events.filter((e) => e.eventName === 'summary_generation_succeeded').length;
+  const totalGenerationRequests = questionGenSucceeded + summaryGenSucceeded;
+
+  const questionBase = questionAsked + questionDeleted;
+  const questionAdoptionRate = questionBase ? Number((questionAsked / questionBase).toFixed(4)) : 0;
+  const questionRewriteRate = questionAsked ? Number((questionEdited / questionAsked).toFixed(4)) : 0;
+  const guidanceApplyBase = guidanceAppliedQuestion + guidanceAppliedSummary;
+  const guidanceHitRate = totalGenerationRequests
+    ? Number((guidanceApplyBase / totalGenerationRequests).toFixed(4))
+    : 0;
+
+  const byPositionRows = Array.from(byPosition.values())
+    .map((row) => {
+      const rowQuestionBase = row.questionAsked + row.questionDeleted;
+      return {
+        ...row,
+        questionAdoptionRate: rowQuestionBase ? Number((row.questionAsked / rowQuestionBase).toFixed(4)) : 0,
+        questionRewriteRate: row.questionAsked ? Number((row.questionEdited / row.questionAsked).toFixed(4)) : 0,
+      };
+    })
+    .sort((a, b) => (b.questionAsked + b.summaryRewritten) - (a.questionAsked + a.summaryRewritten));
+
+  return {
+    totals: {
+      events: feedbackEvents.length,
+      questionAsked,
+      questionEdited,
+      questionDeleted,
+      summaryRewritten,
+      guidanceGenerated,
+      guidanceAppliedQuestion,
+      guidanceAppliedSummary,
+      questionAdoptionRate,
+      questionRewriteRate,
+      guidanceHitRate,
+    },
+    byPosition: byPositionRows,
+  };
+};
+
 const getErrorEvents = (events) =>
   events.filter((event) => event.eventType === 'error' || event.success === false);
 
@@ -877,6 +987,14 @@ const server = createServer(async (req, res) => {
         });
         return;
       }
+
+      if (req.method === 'GET' && requestUrl.pathname === '/api/metrics/dashboard/feedback') {
+        sendJson(res, 200, {
+          range: { from: range.from, to: range.to },
+          feedback: summarizeFeedback(range.events),
+        });
+        return;
+      }
     }
 
     if (req.method === 'GET' && requestUrl.pathname === '/api/metrics/errors') {
@@ -956,6 +1074,7 @@ server.listen(config.port, config.host, () => {
   console.log('  GET  /api/metrics/dashboard/funnel');
   console.log('  GET  /api/metrics/dashboard/ai');
   console.log('  GET  /api/metrics/dashboard/timeseries');
+  console.log('  GET  /api/metrics/dashboard/feedback');
   console.log('  GET  /api/metrics/errors');
   console.log('  GET  /api/metrics/errors/:id');
 });
