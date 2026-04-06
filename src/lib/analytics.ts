@@ -153,7 +153,15 @@ const sanitizeTextValue = (value: string): string => {
   return truncateText(trimmed);
 };
 
-const sanitizeUnknownValue = (value: unknown, key?: string): string | number | boolean | undefined => {
+const shouldPreserveFullInputSnapshotValue = (key: string | undefined, errorCategory: ErrorCategory | undefined): boolean => (
+  errorCategory === 'wintalent' && key === 'wintalentLink'
+);
+
+const sanitizeUnknownValue = (
+  value: unknown,
+  key?: string,
+  options?: { preserveFullValue?: boolean }
+): string | number | boolean | undefined => {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value !== 'string') return undefined;
@@ -163,6 +171,10 @@ const sanitizeUnknownValue = (value: unknown, key?: string): string | number | b
 
   const trimmed = value.trim();
   if (!trimmed) return undefined;
+
+  if (options?.preserveFullValue) {
+    return sanitizeTextValue(trimmed);
+  }
 
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     try {
@@ -179,14 +191,17 @@ const sanitizeUnknownValue = (value: unknown, key?: string): string | number | b
 
 const sanitizeRecord = (
   value: Record<string, unknown> | undefined,
-  maxEntries: number = 20
+  maxEntries: number = 20,
+  options?: { errorCategory?: ErrorCategory }
 ): Record<string, string | number | boolean> | undefined => {
   if (!value) return undefined;
 
   const entries = Object.entries(value)
     .slice(0, maxEntries)
     .map(([key, entryValue]) => {
-      const sanitized = sanitizeUnknownValue(entryValue, key);
+      const sanitized = sanitizeUnknownValue(entryValue, key, {
+        preserveFullValue: shouldPreserveFullInputSnapshotValue(key, options?.errorCategory),
+      });
       return sanitized === undefined ? null : [key, sanitized] as const;
     })
     .filter((entry): entry is readonly [string, string | number | boolean] => Boolean(entry));
@@ -373,7 +388,7 @@ export const reportError = ({
     ...reproContext,
     ...reproContext?.extra,
   } as Record<string, unknown> | undefined, 24);
-  const sanitizedInputSnapshot = sanitizeRecord(inputSnapshot, 20);
+  const sanitizedInputSnapshot = sanitizeRecord(inputSnapshot, 20, { errorCategory });
   const normalizedMessage = truncateText(serialized.message || 'Unknown error', 1000);
 
   trackEvent({

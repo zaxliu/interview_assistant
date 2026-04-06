@@ -48,7 +48,7 @@ describe('analytics', () => {
     });
   });
 
-  it('reports structured error payloads with sanitized snapshots', async () => {
+  it('preserves full wintalent links for wintalent error snapshots', async () => {
     const sendBeacon = vi.fn(() => true);
     Object.defineProperty(window.navigator, 'sendBeacon', {
       configurable: true,
@@ -94,9 +94,39 @@ describe('analytics', () => {
       httpStatus: 401,
     });
     expect(payload.inputSnapshot).toMatchObject({
-      wintalentLink: 'https://example.com/path?[redacted]',
+      wintalentLink: 'https://example.com/path?k=secret-token',
       accessToken: '[redacted]',
     });
     expect(payload.breadcrumbs).toHaveLength(1);
+  });
+
+  it('continues to sanitize non-wintalent urls in error snapshots', async () => {
+    const sendBeacon = vi.fn(() => true);
+    Object.defineProperty(window.navigator, 'sendBeacon', {
+      configurable: true,
+      value: sendBeacon,
+    });
+
+    reportError({
+      error: new Error('Request failed with status 500'),
+      feature: 'resume_import',
+      errorCategory: 'network',
+      inputSnapshot: {
+        resumeUrl: 'https://example.com/path?k=secret-token',
+        wintalentLink: 'https://example.com/wintalent?token=secret',
+      },
+    });
+
+    const lastCall = sendBeacon.mock.calls[sendBeacon.mock.calls.length - 1] as unknown as [string, Blob] | undefined;
+    expect(lastCall).toBeTruthy();
+    const blob = lastCall?.[1];
+    expect(blob).toBeTruthy();
+    const rawBody = await blob!.text();
+    const payload = JSON.parse(rawBody);
+
+    expect(payload.inputSnapshot).toMatchObject({
+      resumeUrl: 'https://example.com/path?[redacted]',
+      wintalentLink: 'https://example.com/wintalent?[redacted]',
+    });
   });
 });
