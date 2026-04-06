@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useFeishuOAuth } from '@/hooks/useFeishuOAuth';
 import { useSettingsStore } from '@/store/settingsStore';
 import { Button } from '@/components/ui';
@@ -7,25 +7,29 @@ import { zhCN as t } from '@/i18n/zhCN';
 export const UserLoginBanner: React.FC = () => {
   const { feishuAppId, feishuAppSecret } = useSettingsStore();
   const { isAuthenticated, user, startOAuth, logout } = useFeishuOAuth();
+  const [isAvatarBroken, setIsAvatarBroken] = useState(false);
 
   const canLogin = feishuAppId && feishuAppSecret;
 
-  if (isAuthenticated && user) {
-    // Logged in: show avatar, name, and logout button
+  if (isAuthenticated) {
+    const displayName = user?.name || '飞书已连接';
+    const shouldShowAvatar = Boolean(user?.avatarUrl) && !isAvatarBroken;
+
     return (
       <div className="flex items-center gap-2">
-        {user.avatarUrl ? (
+        {shouldShowAvatar ? (
           <img
-            src={user.avatarUrl}
-            alt={user.name}
+            src={user?.avatarUrl}
+            alt={displayName}
             className="w-7 h-7 rounded-full"
+            onError={() => setIsAvatarBroken(true)}
           />
         ) : (
           <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-medium">
-            {user.name.charAt(0).toUpperCase()}
+            {displayName.charAt(0).toUpperCase()}
           </div>
         )}
-        <span className="text-sm text-gray-700 hidden sm:inline">{user.name}</span>
+        <span className="text-sm text-gray-700 hidden sm:inline">{displayName}</span>
         <Button variant="ghost" size="sm" onClick={logout}>
           {t.common.logout}
         </Button>
