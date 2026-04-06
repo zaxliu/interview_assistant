@@ -52,3 +52,6 @@ wintalent_resume.headers.txt
 
 # Local env backups
 .env.backup-*
+
+# Local git worktrees
+.worktrees/
