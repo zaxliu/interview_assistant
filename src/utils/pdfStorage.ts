@@ -45,12 +45,12 @@ export const storePDF = async (
   candidateId: string,
   file: File
 ): Promise<void> => {
-  console.log('[pdfStorage] Storing PDF for candidate:', candidateId, 'file:', file.name, 'size:', file.size);
+  console.warn('[pdfStorage] Storing PDF for candidate:', candidateId, 'file:', file.name, 'size:', file.size);
 
   const db = await openDB();
 
   const arrayBuffer = await file.arrayBuffer();
-  console.log('[pdfStorage] ArrayBuffer created, size:', arrayBuffer.byteLength);
+  console.warn('[pdfStorage] ArrayBuffer created, size:', arrayBuffer.byteLength);
 
   const record: PDFRecord = {
     candidateId,
@@ -65,7 +65,7 @@ export const storePDF = async (
     const request = store.put(record);
 
     request.onsuccess = () => {
-      console.log('[pdfStorage] PDF stored successfully for candidate:', candidateId);
+      console.warn('[pdfStorage] PDF stored successfully for candidate:', candidateId);
       resolve();
     };
 
@@ -82,7 +82,7 @@ export const storePDF = async (
 export const getPDF = async (
   candidateId: string
 ): Promise<{ data: ArrayBuffer; filename: string } | null> => {
-  console.log('[pdfStorage] Getting PDF for candidate:', candidateId);
+  console.warn('[pdfStorage] Getting PDF for candidate:', candidateId);
   const db = await openDB();
 
   return new Promise((resolve, reject) => {
@@ -93,10 +93,10 @@ export const getPDF = async (
     request.onsuccess = () => {
       const record = request.result as PDFRecord | undefined;
       if (record) {
-        console.log('[pdfStorage] PDF found for candidate:', candidateId, 'filename:', record.filename, 'size:', record.fileData.byteLength);
+        console.warn('[pdfStorage] PDF found for candidate:', candidateId, 'filename:', record.filename, 'size:', record.fileData.byteLength);
         resolve({ data: record.fileData, filename: record.filename });
       } else {
-        console.log('[pdfStorage] No PDF found for candidate:', candidateId);
+        console.warn('[pdfStorage] No PDF found for candidate:', candidateId);
         resolve(null);
       }
     };
@@ -112,7 +112,7 @@ export const getPDF = async (
  * Delete PDF file from IndexedDB
  */
 export const deletePDF = async (candidateId: string): Promise<void> => {
-  console.log('[pdfStorage] Deleting PDF for candidate:', candidateId);
+  console.warn('[pdfStorage] Deleting PDF for candidate:', candidateId);
   const db = await openDB();
 
   return new Promise((resolve, reject) => {
@@ -121,7 +121,7 @@ export const deletePDF = async (candidateId: string): Promise<void> => {
     const request = store.delete(candidateId);
 
     request.onsuccess = () => {
-      console.log('[pdfStorage] PDF deleted successfully');
+      console.warn('[pdfStorage] PDF deleted successfully');
       resolve();
     };
 
@@ -145,7 +145,7 @@ export const listAllPDFs = async (): Promise<string[]> => {
 
     request.onsuccess = () => {
       const keys = request.result as string[];
-      console.log('[pdfStorage] All stored PDFs:', keys);
+      console.warn('[pdfStorage] All stored PDFs:', keys);
       resolve(keys);
     };
 
@@ -174,7 +174,7 @@ if (typeof window !== 'undefined') {
           throw new Error('PDF was not stored correctly');
         }
         await deletePDF(testId);
-        console.log('[pdfStorage] Test passed! PDF storage is working correctly.');
+        console.warn('[pdfStorage] Test passed! PDF storage is working correctly.');
         return true;
       } catch (error) {
         console.error('[pdfStorage] Test failed:', error);
@@ -182,6 +182,6 @@ if (typeof window !== 'undefined') {
       }
     },
   };
-  console.log('[pdfStorage] Debug functions available at window.debugPDFStorage');
-  console.log('[pdfStorage] Available methods: listAll(), get(id), delete(id), test()');
+  console.warn('[pdfStorage] Debug functions available at window.debugPDFStorage');
+  console.warn('[pdfStorage] Available methods: listAll(), get(id), delete(id), test()');
 }

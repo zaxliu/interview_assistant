@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => {
             proxy.on('proxyReq', (proxyReq, req) => {
               // Log large requests for debugging
               if (req.headers['content-length'] && parseInt(req.headers['content-length']) > 1000000) {
-                console.log(`[Proxy] Large request: ${Math.round(parseInt(req.headers['content-length']) / 1024)}KB`);
+                console.warn(`[Proxy] Large request: ${Math.round(parseInt(req.headers['content-length']) / 1024)}KB`);
               }
             });
           },

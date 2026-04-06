@@ -125,8 +125,7 @@ describe('CandidateForm', () => {
     });
   });
 
-  it('alerts user and skips resume processing when resume URL content fetch fails', async () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+  it('shows inline error and skips resume processing when resume URL content fetch fails', async () => {
     parseFromUrl.mockResolvedValue({ text: '' });
 
     render(<CandidateForm positionId="position-1" onSave={() => undefined} onCancel={() => undefined} />);
@@ -142,11 +141,9 @@ describe('CandidateForm', () => {
         true,
         { maxPages: 5 }
       );
-      expect(alertSpy).toHaveBeenCalledWith('简历链接内容获取失败，请检查链接是否可访问且为 PDF 直链。');
+      expect(screen.getByText('简历链接内容获取失败，请检查链接是否可访问且为 PDF 直链。')).toBeInTheDocument();
       expect(processResume).not.toHaveBeenCalled();
     });
-
-    alertSpy.mockRestore();
   });
 
   it('shows calendar links when they exist on the candidate', () => {

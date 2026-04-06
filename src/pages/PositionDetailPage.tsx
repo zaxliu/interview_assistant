@@ -44,34 +44,39 @@ export default function PositionDetailPage() {
     );
   };
 
-  if (!positionId || !position) {
-    return <Navigate to="/404" replace />;
-  }
-
-  const questionGuidance = getGenerationGuidancePrompt(position, 'question_generation');
-  const summaryGuidance = getGenerationGuidancePrompt(position, 'summary_generation');
+  const questionGuidance = position
+    ? getGenerationGuidancePrompt(position, 'question_generation')
+    : '';
+  const summaryGuidance = position
+    ? getGenerationGuidancePrompt(position, 'summary_generation')
+    : '';
   const [questionGuidanceDraft, setQuestionGuidanceDraft] = useState(questionGuidance);
   const [summaryGuidanceDraft, setSummaryGuidanceDraft] = useState(summaryGuidance);
-  const isQuestionDirty = position.generationMemoryState?.dirtyScopes.includes('question_generation');
-  const isSummaryDirty = position.generationMemoryState?.dirtyScopes.includes('summary_generation');
-  const lastQuestionRefreshAt = position.generationMemoryState?.lastQuestionRefreshAt;
-  const lastSummaryRefreshAt = position.generationMemoryState?.lastSummaryRefreshAt;
-  const pendingQuestionEventCount = position.generationMemoryState?.pendingQuestionEventCount || 0;
-  const pendingQuestionCandidateCount = position.generationMemoryState?.pendingQuestionCandidateCount || 0;
-  const pendingSummaryEventCount = position.generationMemoryState?.pendingSummaryEventCount || 0;
-  const pendingSummaryCandidateCount = position.generationMemoryState?.pendingSummaryCandidateCount || 0;
+  const isQuestionDirty = position?.generationMemoryState?.dirtyScopes.includes('question_generation');
+  const isSummaryDirty = position?.generationMemoryState?.dirtyScopes.includes('summary_generation');
+  const lastQuestionRefreshAt = position?.generationMemoryState?.lastQuestionRefreshAt;
+  const lastSummaryRefreshAt = position?.generationMemoryState?.lastSummaryRefreshAt;
+  const pendingQuestionEventCount = position?.generationMemoryState?.pendingQuestionEventCount || 0;
+  const pendingQuestionCandidateCount = position?.generationMemoryState?.pendingQuestionCandidateCount || 0;
+  const pendingSummaryEventCount = position?.generationMemoryState?.pendingSummaryEventCount || 0;
+  const pendingSummaryCandidateCount = position?.generationMemoryState?.pendingSummaryCandidateCount || 0;
+  const criteriaText = position ? position.criteria.join('\n') : '';
 
   useEffect(() => {
-    setCriteriaDraft(position.criteria.join('\n'));
-  }, [position.criteria, position.id]);
+    setCriteriaDraft(criteriaText);
+  }, [criteriaText, position?.id]);
 
   useEffect(() => {
     setQuestionGuidanceDraft(questionGuidance);
-  }, [questionGuidance, position.id]);
+  }, [questionGuidance, position?.id]);
 
   useEffect(() => {
     setSummaryGuidanceDraft(summaryGuidance);
-  }, [summaryGuidance, position.id]);
+  }, [summaryGuidance, position?.id]);
+
+  if (!positionId || !position) {
+    return <Navigate to="/404" replace />;
+  }
 
   const handleRefreshMemory = async () => {
     setIsRefreshingMemory(true);

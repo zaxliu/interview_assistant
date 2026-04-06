@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PositionDetailPage from './PositionDetailPage';
 import { usePositionStore } from '@/store/positionStore';
@@ -10,6 +10,7 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
     ...actual,
+    Navigate: () => <div>not-found</div>,
     useNavigate: () => navigate,
     useParams: () => ({ positionId: 'position-1' }),
   };
@@ -281,5 +282,39 @@ describe('PositionDetailPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '收起面评记忆指引' }));
     expect(screen.queryByLabelText('面评记忆指引')).not.toBeInTheDocument();
+  });
+
+  it('recovers cleanly when the matching position appears after an initial 404 render', async () => {
+    render(<PositionDetailPage />);
+
+    expect(screen.queryByText('AI 指引（岗位记忆）')).not.toBeInTheDocument();
+
+    act(() => {
+      usePositionStore.setState({
+        positions: [
+          {
+            id: 'position-1',
+            title: 'Backend Engineer',
+            criteria: ['系统设计'],
+            createdAt: '2026-04-06T00:00:00.000Z',
+            source: 'manual',
+            candidates: [],
+            generationMemory: {
+              questionMemoryItems: [],
+              summaryMemoryItems: [],
+              questionGuidancePrompt: '旧问题指引',
+              summaryGuidancePrompt: '旧面评指引',
+              updatedAt: '2026-04-06T09:00:00.000Z',
+              sampleSize: 5,
+              version: 1,
+            },
+          },
+        ],
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('AI 指引（岗位记忆）')).toBeInTheDocument();
+    });
   });
 });

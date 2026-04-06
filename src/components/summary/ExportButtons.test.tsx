@@ -157,7 +157,7 @@ describe('ExportButtons', () => {
     fireEvent.click(screen.getByRole('button', { name: '导出到飞书' }));
 
     await waitFor(() => {
-      expect(window.alert).toHaveBeenCalledWith('导出到飞书失败：boom');
+      expect(screen.getByText('导出到飞书失败：boom')).toBeInTheDocument();
     });
     expect(screen.getByRole('link', { name: 'https://feishu.cn/docx/doc-ok' })).toBeInTheDocument();
   });

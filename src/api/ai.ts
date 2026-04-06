@@ -797,7 +797,7 @@ export const processResumeText = async (
   config: AIServiceConfig,
   rawText: string
 ): Promise<AIResultWithUsage<ResumeProcessingResult>> => {
-  console.log('[ResumeProcessing] Start', {
+  console.warn('[ResumeProcessing] Start', {
     model: config.model,
     rawTextLength: rawText.length,
     rawTextPreview: previewDebugText(rawText, 300),
@@ -877,7 +877,7 @@ ${rawText}`,
     const attempt = prompts[index];
 
     try {
-      console.log('[ResumeProcessing] Request attempt', {
+      console.warn('[ResumeProcessing] Request attempt', {
         model: config.model,
         attempt: attempt.label,
       });
@@ -918,7 +918,7 @@ ${rawText}`,
       const content = extractCompletionContent(data, '{}');
       const usage = extractAIUsage(data);
 
-      console.log('[ResumeProcessing] Model response', {
+      console.warn('[ResumeProcessing] Model response', {
         model: config.model,
         attempt: attempt.label,
         usage,
@@ -930,7 +930,7 @@ ${rawText}`,
       const normalizedMarkdown = normalizeMarkdownText(parsed.markdown || rawText);
       const sanitizedHighlights = sanitizeResumeHighlights(parsed.highlights) || emptyResumeHighlights();
 
-      console.log('[ResumeProcessing] Parsed result', {
+      console.warn('[ResumeProcessing] Parsed result', {
         attempt: attempt.label,
         markdownLength: normalizedMarkdown.length,
         markdownPreview: previewDebugText(normalizedMarkdown, 300),

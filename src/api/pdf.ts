@@ -9,9 +9,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsVe
 const CMAP_URL = `https://unpkg.com/pdfjs-dist@${pdfjsVersion}/cmaps/`;
 const STANDARD_FONT_DATA_URL = `https://unpkg.com/pdfjs-dist@${pdfjsVersion}/standard_fonts/`;
 
-console.log('[PDF Config] Version:', pdfjsVersion);
-console.log('[PDF Config] CMap URL:', CMAP_URL);
-console.log('[PDF Config] Font URL:', STANDARD_FONT_DATA_URL);
+console.warn('[PDF Config] Version:', pdfjsVersion);
+console.warn('[PDF Config] CMap URL:', CMAP_URL);
+console.warn('[PDF Config] Font URL:', STANDARD_FONT_DATA_URL);
 
 interface AIParseConfig {
   apiKey: string;
@@ -185,7 +185,7 @@ export const debugDownloadPDFPageAsImage = async (
   link.download = `pdf_page_${pageIndex + 1}.jpg`;
   link.click();
 
-  console.log(`[Debug] Downloaded page ${pageIndex + 1} as image (${Math.round(dataUrl.length / 1024)}KB)`);
+  console.warn(`[Debug] Downloaded page ${pageIndex + 1} as image (${Math.round(dataUrl.length / 1024)}KB)`);
 };
 
 /**
@@ -246,7 +246,7 @@ export const parsePDFWithAI = async (
   }).promise;
   const pagesToProcess = Math.min(pdf.numPages, maxPages);
 
-  console.log(`[AI PDF Parse] Processing ${pagesToProcess} of ${pdf.numPages} pages with scale ${scale}`);
+  console.warn(`[AI PDF Parse] Processing ${pagesToProcess} of ${pdf.numPages} pages with scale ${scale}`);
 
   // Report initial progress
   onProgress?.(0, pagesToProcess);
@@ -258,7 +258,7 @@ export const parsePDFWithAI = async (
   for (let i = 1; i <= pagesToProcess; i++) {
     const page = await pdf.getPage(i);
     const imageBase64 = await pdfPageToImage(page, scale);
-    console.log(`[AI PDF Parse] Page ${i} converted to image, size: ${Math.round(imageBase64.length / 1024)}KB`);
+    console.warn(`[AI PDF Parse] Page ${i} converted to image, size: ${Math.round(imageBase64.length / 1024)}KB`);
 
     // Process each page separately to avoid token limits
     const pagePrompt = extractStructured
@@ -333,7 +333,7 @@ export const parsePDFWithAI = async (
       } else {
         pageTexts.push(`--- 第 ${i} 页 ---\n${pageText}`);
       }
-      console.log(`[AI PDF Parse] Page ${i} extracted: ${pageText.length} chars, finish_reason: ${finishReason}`);
+      console.warn(`[AI PDF Parse] Page ${i} extracted: ${pageText.length} chars, finish_reason: ${finishReason}`);
 
       // Report progress after each page
       onProgress?.(i, pagesToProcess);
@@ -350,7 +350,7 @@ export const parsePDFWithAI = async (
   }
 
   const fullText = pageTexts.join('\n\n');
-  console.log(`[AI PDF Parse] Total extracted: ${fullText.length} characters from ${pageTexts.length} pages`);
+  console.warn(`[AI PDF Parse] Total extracted: ${fullText.length} characters from ${pageTexts.length} pages`);
 
   return {
     text: fullText,
@@ -371,7 +371,7 @@ export const parsePDFFromFileWithAI = async (
     onProgress?: (current: number, total: number) => void;
   }
 ): Promise<AITextParseResult> => {
-  console.log(`[AI PDF Parse] Using image-based extraction for model: ${config.model}`);
+  console.warn(`[AI PDF Parse] Using image-based extraction for model: ${config.model}`);
   const arrayBuffer = await file.arrayBuffer();
   return parsePDFWithAI(arrayBuffer, config, options);
 };
@@ -415,13 +415,13 @@ export const parsePDFSmart = async (
 
   // If we got good results, return them
   if (standardText.length >= minTextLength) {
-    console.log(`[Smart PDF Parse] Standard extraction successful (${standardText.length} chars)`);
+    console.warn(`[Smart PDF Parse] Standard extraction successful (${standardText.length} chars)`);
     return { text: standardText, method: 'standard' };
   }
 
   // If standard extraction failed or returned too little text, try AI
   if (config) {
-    console.log(`[Smart PDF Parse] Standard extraction poor (${standardText.length} chars), trying AI...`);
+    console.warn(`[Smart PDF Parse] Standard extraction poor (${standardText.length} chars), trying AI...`);
     try {
       const aiResult = await parsePDFWithAI(arrayBuffer, config, options);
       return { text: aiResult.text, method: 'ai' };

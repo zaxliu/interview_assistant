@@ -75,6 +75,7 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
   const [copySuccess, setCopySuccess] = useState(false);
   const [latestDocUrl, setLatestDocUrl] = useState<string | null>(null);
   const [latestExportMessage, setLatestExportMessage] = useState<string | null>(null);
+  const [latestExportError, setLatestExportError] = useState<string | null>(null);
   const [copyDocUrlSuccess, setCopyDocUrlSuccess] = useState(false);
 
   const handleFeishuExport = async () => {
@@ -83,6 +84,7 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
     if (response.success && response.docUrl) {
       setLatestDocUrl(response.docUrl);
       setLatestExportMessage(response.message);
+      setLatestExportError(null);
       setCopyDocUrlSuccess(false);
       trackEvent({
         eventName: 'feishu_export_succeeded',
@@ -92,6 +94,7 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
       });
       window.open(response.docUrl, '_blank');
     } else if (!response.success) {
+      setLatestExportError(`导出到飞书失败：${response.message}`);
       reportError({
         error: response.message,
         feature: 'feishu_export',
@@ -118,7 +121,6 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
         durationMs: Date.now() - startedAt,
         errorCode: response.message,
       });
-      alert(`导出到飞书失败：${response.message}`);
     }
   };
 
@@ -189,6 +191,12 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
                 {latestExportMessage}
               </div>
             )}
+          </div>
+        )}
+
+        {latestExportError && (
+          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {latestExportError}
           </div>
         )}
       </div>

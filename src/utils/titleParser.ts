@@ -10,7 +10,7 @@ import type { ParsedTitle } from '@/types';
 export const parseEventTitle = (title: string): ParsedTitle | null => {
   if (!title) return null;
 
-  console.log('Parsing title:', title);
+  console.warn('Parsing title:', title);
 
   // Must start with 面试安排
   if (!title.startsWith('面试安排')) {
@@ -23,7 +23,7 @@ export const parseEventTitle = (title: string): ParsedTitle | null => {
   const withTeamMatch = title.match(withTeamRegex);
 
   if (withTeamMatch) {
-    console.log('Matched with team:', withTeamMatch);
+    console.warn('Matched with team:', withTeamMatch);
     return {
       candidateName: withTeamMatch[1].trim(),
       team: withTeamMatch[2].trim(),
@@ -36,7 +36,7 @@ export const parseEventTitle = (title: string): ParsedTitle | null => {
   const withoutTeamMatch = title.match(withoutTeamRegex);
 
   if (withoutTeamMatch) {
-    console.log('Matched without team:', withoutTeamMatch);
+    console.warn('Matched without team:', withoutTeamMatch);
     return {
       candidateName: withoutTeamMatch[1].trim(),
       team: '',
@@ -44,7 +44,7 @@ export const parseEventTitle = (title: string): ParsedTitle | null => {
     };
   }
 
-  console.log('No match for title:', title);
+  console.warn('No match for title:', title);
   return null;
 };
 

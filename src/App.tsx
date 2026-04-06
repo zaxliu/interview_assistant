@@ -277,7 +277,7 @@ const AppShell = () => {
     }
 
     clearCurrentUser();
-  }, [clearCurrentUser, feishuUser?.id, loadForUser]);
+  }, [clearCurrentUser, feishuUser?.id, loadForUser, loadSettings]);
 
   useEffect(() => {
     if (!location.pathname.endsWith('/interview')) {

@@ -232,7 +232,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const handleGenerateQuestions = async () => {
     const resumeContent = getPreferredResumeText(candidate);
     if (!position.description || !resumeContent) {
-      alert('请先补充岗位描述与候选人简历');
+      setQuestionMemoryRefreshStatus('请先补充岗位描述与候选人简历');
       return;
     }
     const startedAt = Date.now();

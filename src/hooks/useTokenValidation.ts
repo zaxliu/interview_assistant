@@ -18,7 +18,7 @@ export const useTokenValidation = () => {
     try {
       const success = await refreshTokenIfNeeded();
       if (!success) {
-        console.log('Token validation failed, user logged out');
+        console.warn('Token validation failed, user logged out');
       }
     } catch (error) {
       console.error('Token validation error:', error);

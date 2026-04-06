@@ -42,7 +42,7 @@ export const useFeishuOAuth = () => {
     try {
       const user = await getUserInfo(accessToken);
       setFeishuUser(user);
-      console.log('User info fetched:', user);
+      console.warn('User info fetched:', user);
     } catch (error) {
       console.error('Failed to fetch user info:', error);
     } finally {
@@ -72,7 +72,7 @@ export const useFeishuOAuth = () => {
 
     // Exchange code for token
     const redirectUri = getFeishuOAuthRedirectUri();
-    console.log('Exchanging OAuth code for token...');
+    console.warn('Exchanging OAuth code for token...');
     exchangeCodeForToken(code, feishuAppId, feishuAppSecret, redirectUri)
       .then(async (tokens) => {
         setFeishuUserAccessToken(tokens.accessToken);
@@ -91,7 +91,7 @@ export const useFeishuOAuth = () => {
         } else {
           window.location.assign(returnTo);
         }
-        console.log('OAuth login successful!');
+        console.warn('OAuth login successful!');
       })
       .catch((error) => {
         console.error('OAuth error:', error);
@@ -118,7 +118,6 @@ export const useFeishuOAuth = () => {
             returnTo,
           },
         });
-        alert(`飞书 OAuth 失败：${message}`);
         if (returnTo === window.location.pathname) {
           window.history.replaceState({}, '', returnTo);
         } else {
@@ -148,20 +147,20 @@ export const useFeishuOAuth = () => {
   // Start OAuth flow
   const startOAuth = useCallback((returnTo?: string) => {
     if (!feishuAppId) {
-      alert('请先填写飞书 App ID');
+      console.error('Missing Feishu App ID before starting OAuth');
       return;
     }
 
     const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const normalizedReturnTo = normalizeFeishuOAuthReturnTo(returnTo || currentPath);
     const redirectUri = getFeishuOAuthRedirectUri();
-    console.log('Starting OAuth with redirect_uri:', redirectUri);
-    console.log('Make sure this exact URL is configured in Feishu app settings');
+    console.warn('Starting OAuth with redirect_uri:', redirectUri);
+    console.warn('Make sure this exact URL is configured in Feishu app settings');
 
     // Include return path in state
     const state = buildFeishuOAuthState(normalizedReturnTo);
     const authUrl = getOAuthAuthorizationUrl(feishuAppId, redirectUri, state);
-    console.log('Authorization URL:', authUrl);
+    console.warn('Authorization URL:', authUrl);
 
     window.location.href = authUrl;
   }, [feishuAppId]);

@@ -86,6 +86,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const [wintalentQueued, setWintalentQueued] = useState(false);
   const [wintalentLoading, setWintalentLoading] = useState(false);
   const [wintalentError, setWintalentError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'saving' | 'unsaved'>(
     candidate ? 'saved' : 'idle'
   );
@@ -99,7 +100,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   );
   const displayedResumeError = wintalentError && isWintalentResumeUnavailableMessage(wintalentError)
     ? `${wintalentError} 您可以手动上传之前已经获取的简历PDF。`
-    : (wintalentError || pdfError || resumeProcessingError);
+    : (formError || wintalentError || pdfError || resumeProcessingError);
   const canAutoImportFromLink = Boolean(
     candidate?.id &&
     !hasResumeContent &&
@@ -123,13 +124,13 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   };
 
   const applyProcessedResume = useCallback(async (rawText: string) => {
-    console.log('[CandidateForm] applyProcessedResume start', {
+    console.warn('[CandidateForm] applyProcessedResume start', {
       rawTextLength: rawText.length,
       rawTextPreview: previewDebugText(rawText),
     });
     setResumeRawText(rawText);
     const processed = await processResume(rawText);
-    console.log('[CandidateForm] applyProcessedResume result', {
+    console.warn('[CandidateForm] applyProcessedResume result', {
       markdownLength: processed.markdown.length,
       markdownPreview: previewDebugText(processed.markdown),
       highlights: {
@@ -176,6 +177,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     setResumeFilename(candidate?.resumeFilename || '');
     setPendingPdfFile(null);
     setNeedsPdfPersist(false);
+    setFormError(null);
     setWintalentTrigger(null);
     setWintalentQueued(false);
     setSaveStatus(candidate ? 'saved' : 'idle');
@@ -300,9 +302,10 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       const startedAt = Date.now();
+      setFormError(null);
       // Check file type
       if (!file.name.toLowerCase().endsWith('.pdf')) {
-        alert('请上传 PDF 文件。如果你拿到的是 ZIP，请先解压后再上传 PDF。');
+        setFormError('请上传 PDF 文件。如果你拿到的是 ZIP，请先解压后再上传 PDF。');
         return;
       }
       setResumeFilename(file.name);
@@ -368,6 +371,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
   const handleUrlParse = async () => {
     if (resumeUrl) {
       const startedAt = Date.now();
+      setFormError(null);
       setResumeViewerMode('pdf');
       // Use AI parsing if enabled and available, otherwise standard
       const result = await parseFromUrl(resumeUrl, useAIParsing && canUseAI, { maxPages: 5 });
@@ -405,7 +409,7 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
             method: 'url',
           },
         });
-        alert('简历链接内容获取失败，请检查链接是否可访问且为 PDF 直链。');
+        setFormError('简历链接内容获取失败，请检查链接是否可访问且为 PDF 直链。');
         return;
       }
       const processed = await applyProcessedResume(result.text);
@@ -617,13 +621,14 @@ export const CandidateForm: React.FC<CandidateFormProps> = ({
 
   const handleSubmit = async () => {
     try {
+      setFormError(null);
       const savedCandidateId = await persistCandidate();
       if (savedCandidateId) {
         onSave(savedCandidateId);
       }
     } catch (error) {
       console.error('[CandidateForm] Error saving candidate:', error);
-      alert('保存候选人失败，请重试。');
+      setFormError('保存候选人失败，请重试。');
     }
   };
 

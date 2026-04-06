@@ -48,8 +48,8 @@ export const exchangeCodeForToken = async (
   // Use proxy endpoint
   const url = '/api/feishu/authen/v2/oauth/token';
 
-  console.log('Exchanging code for token at:', url);
-  console.log('Request params:', { grant_type: 'authorization_code', redirect_uri: redirectUri, client_id: appId });
+  console.warn('Exchanging code for token at:', url);
+  console.warn('Request params:', { grant_type: 'authorization_code', redirect_uri: redirectUri, client_id: appId });
 
   const response = await fetch(url, {
     method: 'POST',
@@ -72,7 +72,7 @@ export const exchangeCodeForToken = async (
   }
 
   const data = await response.json();
-  console.log('Token exchange response:', data);
+  console.warn('Token exchange response:', data);
 
   if (data.code !== 0) {
     const errorMsg = data.msg || '获取 access token 失败';
@@ -160,7 +160,7 @@ export const getUserInfo = async (
   }
 
   const data = await response.json();
-  console.log('User info response:', data);
+  console.warn('User info response:', data);
 
   if (data.code !== 0) {
     throw new Error(data.msg || '获取用户信息失败');
@@ -255,7 +255,7 @@ export const getCalendarEvents = async (
   // Get ALL calendars
   const calendarsUrl = '/api/feishu/calendar/v4/calendars';
 
-  console.log('Fetching ALL calendars from:', calendarsUrl);
+  console.warn('Fetching ALL calendars from:', calendarsUrl);
 
   const calendarsResponse = await fetch(calendarsUrl, {
     method: 'GET',
@@ -275,16 +275,16 @@ export const getCalendarEvents = async (
   }
 
   const calendars = calendarsData.data?.calendar_list || [];
-  console.log(`Found ${calendars.length} calendars to search:`);
+  console.warn(`Found ${calendars.length} calendars to search:`);
   calendars.forEach((cal: Record<string, unknown>) => {
-    console.log(`  - ${cal.summary} (${cal.type})`);
+    console.warn(`  - ${cal.summary} (${cal.type})`);
   });
 
   // Convert dates to Unix timestamp in SECONDS (Feishu API expects seconds)
   const startTime = Math.floor(startDate.getTime() / 1000);
   const endTime = Math.floor(endDate.getTime() / 1000);
 
-  console.log('Time range:', {
+  console.warn('Time range:', {
     start: new Date(startTime * 1000).toISOString(),
     end: new Date(endTime * 1000).toISOString(),
   });
@@ -298,7 +298,7 @@ export const getCalendarEvents = async (
 
     const url = `/api/feishu/calendar/v4/calendars/${calendarId}/events?start_time=${startTime}&end_time=${endTime}`;
 
-    console.log(`Fetching events from calendar: ${calendarName}...`);
+    console.warn(`Fetching events from calendar: ${calendarName}...`);
 
     try {
       const response = await fetch(url, {
@@ -310,19 +310,19 @@ export const getCalendarEvents = async (
       });
 
       if (!response.ok) {
-        console.log(`  Failed to fetch from ${calendarName}: ${response.status}`);
+        console.warn(`  Failed to fetch from ${calendarName}: ${response.status}`);
         continue;
       }
 
       const data = await response.json();
 
       if (data.code !== 0) {
-        console.log(`  Error from ${calendarName}: ${data.msg}`);
+        console.warn(`  Error from ${calendarName}: ${data.msg}`);
         continue;
       }
 
       const events = data.data?.items || [];
-      console.log(`  Found ${events.length} events in ${calendarName}`);
+      console.warn(`  Found ${events.length} events in ${calendarName}`);
 
       // Add calendar info to each event
       events.forEach((event: Record<string, unknown>) => {
@@ -332,11 +332,11 @@ export const getCalendarEvents = async (
 
       allEvents.push(...events);
     } catch (err) {
-      console.log(`  Error fetching from ${calendarName}:`, err);
+      console.warn(`  Error fetching from ${calendarName}:`, err);
     }
   }
 
-  console.log(`Total events from all calendars: ${allEvents.length}`);
+  console.warn(`Total events from all calendars: ${allEvents.length}`);
 
   // Sort events by start time
   const sortedEvents = [...allEvents].sort((a, b) => {
@@ -346,7 +346,7 @@ export const getCalendarEvents = async (
   });
 
   // Log ALL events with details
-  console.log('=== ALL EVENTS FROM ALL CALENDARS (sorted by time) ===');
+  console.warn('=== ALL EVENTS FROM ALL CALENDARS (sorted by time) ===');
   sortedEvents.forEach((event: Record<string, unknown>, index: number) => {
     const summary = event.summary as string || '(no title)';
     const status = event.status as string || 'unknown';
@@ -378,31 +378,31 @@ export const getCalendarEvents = async (
     if (isCancelled) prefix = '❌ ';
     else if (isInterview) prefix = '🔴 ';
 
-    console.log(`${index + 1}. [${dateStr}${endStr}] ${prefix}${summary}`);
-    console.log(`   Calendar: ${calendarName} | Status: ${status}`);
+    console.warn(`${index + 1}. [${dateStr}${endStr}] ${prefix}${summary}`);
+    console.warn(`   Calendar: ${calendarName} | Status: ${status}`);
     if (organizer?.display_name) {
-      console.log(`   Organizer: ${organizer.display_name}`);
+      console.warn(`   Organizer: ${organizer.display_name}`);
     } else {
-      console.log(`   Organizer: (system/none)`);
+      console.warn(`   Organizer: (system/none)`);
     }
     if (location?.name) {
-      console.log(`   Location: ${location.name}`);
+      console.warn(`   Location: ${location.name}`);
     }
     if (description) {
-      console.log(`   Description: ${description.substring(0, 200)}${description.length > 200 ? '...' : ''}`);
+      console.warn(`   Description: ${description.substring(0, 200)}${description.length > 200 ? '...' : ''}`);
     }
     if (isInterview) {
-      console.log(`   FULL DETAILS:`, JSON.stringify(event, null, 2));
+      console.warn(`   FULL DETAILS:`, JSON.stringify(event, null, 2));
     }
   });
-  console.log('=== END OF ALL EVENTS ===');
+  console.warn('=== END OF ALL EVENTS ===');
 
   // Filter out cancelled events
   const activeEvents = sortedEvents.filter((event: Record<string, unknown>) => {
     const status = event.status as string;
     return status !== 'cancelled';
   });
-  console.log(`Found ${activeEvents.length} active events (excluding cancelled)`);
+  console.warn(`Found ${activeEvents.length} active events (excluding cancelled)`);
 
   const events: CalendarEvent[] = activeEvents.map((event: Record<string, unknown>) => {
     const title = event.summary as string || '';
@@ -411,7 +411,7 @@ export const getCalendarEvents = async (
     const parsedTitle = parsed || undefined;
 
     if (isInterview) {
-      console.log(`Interview event found: "${title}" -> parsed:`, parsedTitle);
+      console.warn(`Interview event found: "${title}" -> parsed:`, parsedTitle);
     }
 
     // Extract timestamp from start_time/end_time objects and convert to ISO string

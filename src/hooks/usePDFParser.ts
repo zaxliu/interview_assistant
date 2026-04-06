@@ -43,7 +43,7 @@ export const usePDFParser = () => {
       let usage: AIUsage | undefined;
 
       if (useAI && aiApiKey) {
-        console.log('[usePDFParser] Using AI parsing for file');
+        console.warn('[usePDFParser] Using AI parsing for file');
         const result = await parsePDFFromFileWithAI(
           file,
           { apiKey: aiApiKey, model: aiModel },
@@ -57,7 +57,7 @@ export const usePDFParser = () => {
         extractedText = result.text;
         usage = result.usage;
       } else {
-        console.log('[usePDFParser] Using standard parsing for file');
+        console.warn('[usePDFParser] Using standard parsing for file');
         extractedText = await parsePDFFromFile(file);
       }
 
@@ -105,7 +105,7 @@ export const usePDFParser = () => {
       let usage: AIUsage | undefined;
 
       if (useAI && aiApiKey) {
-        console.log('[usePDFParser] Using AI parsing for URL');
+        console.warn('[usePDFParser] Using AI parsing for URL');
         const result = await parsePDFFromUrlWithAI(
           url,
           { apiKey: aiApiKey, model: aiModel },
@@ -119,7 +119,7 @@ export const usePDFParser = () => {
         extractedText = result.text;
         usage = result.usage;
       } else {
-        console.log('[usePDFParser] Using standard parsing for URL');
+        console.warn('[usePDFParser] Using standard parsing for URL');
         extractedText = await parsePDFFromUrl(url);
       }
 

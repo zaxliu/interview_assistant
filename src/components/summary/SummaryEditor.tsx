@@ -232,16 +232,15 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     candidate.codingChallenges,
     candidate.id,
     candidate.interviewResult?.aiUsage,
+    candidate.status,
     candidate.meetingNotesContext,
     candidate.name,
     candidate.questions,
     candidate.quickNotes,
     ensureGenerationMemoryFresh,
     generateInterviewSummary,
-    position.description,
-    position.id,
-    position.title,
     preferredResumeText,
+    position,
     setInterviewResult,
     updateCandidate,
   ]);
@@ -267,7 +266,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     setFollowUps(candidate.interviewResult?.additional_info?.follow_up_questions || []);
     setSummaryUsage(candidate.interviewResult?.aiUsage?.summaryGeneration);
     setSaveStatus('saved');
-  }, [candidate.id, candidate.interviewTime]);
+  }, [candidate.id, candidate.interviewResult, candidate.interviewTime]);
 
   useEffect(() => {
     lastRewriteSignatureRef.current = '';
