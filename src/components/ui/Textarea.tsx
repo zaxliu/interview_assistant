@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useLayoutEffect, useCallback } from 'react';
 
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
@@ -19,23 +19,21 @@ export const Textarea: React.FC<TextareaProps> = ({
   const textareaId = id || label?.toLowerCase().replace(/\s+/g, '-');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const adjustHeight = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (textarea && autoResize) {
-      textarea.style.height = 'auto';
-      textarea.style.height = `${textarea.scrollHeight}px`;
+  const adjustHeight = useCallback((textarea: HTMLTextAreaElement | null) => {
+    if (!textarea || !autoResize) {
+      return;
     }
+
+    textarea.style.height = '0px';
+    textarea.style.height = `${textarea.scrollHeight}px`;
   }, [autoResize]);
 
-  // Adjust height on mount and when value changes
-  useEffect(() => {
-    adjustHeight();
+  useLayoutEffect(() => {
+    adjustHeight(textareaRef.current);
   }, [value, adjustHeight]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (autoResize) {
-      adjustHeight();
-    }
+    adjustHeight(e.currentTarget);
     onChange?.(e);
   };
 

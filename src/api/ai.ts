@@ -7,6 +7,9 @@ import type {
   ResumeHighlights,
   AIUsage,
   HistoricalInterviewReview,
+  GenerationMemoryItem,
+  MemoryEvidencePacket,
+  MemoryRefreshScope,
 } from '@/types';
 import { emptyResumeHighlights, normalizeMarkdownText, sanitizeResumeHighlights } from '@/utils/resume';
 
@@ -58,6 +61,95 @@ export interface SummaryRewriteInsight {
   rewriteIntensity: 'low' | 'medium' | 'high';
   preferences: string[];
 }
+
+export interface SynthesizePositionMemoryResult {
+  memoryItems: GenerationMemoryItem[];
+  guidancePrompt: string;
+  updatedAt: string;
+  sampleSize: number;
+  version: number;
+}
+
+interface RawSynthesizePositionMemoryResult {
+  memoryItems?: Array<Partial<GenerationMemoryItem> & { instruction?: unknown }>;
+  guidancePrompt?: unknown;
+}
+
+const normalizeMemoryKind = (kind: unknown): GenerationMemoryItem['kind'] => {
+  if (kind === 'avoid' || kind === 'preserve' || kind === 'prioritize') {
+    return kind;
+  }
+  return 'prefer';
+};
+
+const QUESTION_MEMORY_FALLBACK =
+  '【岗位记忆-问题】暂无足够反馈，优先覆盖专业能力、通用素质、适配度并控制问题去重。';
+const SUMMARY_MEMORY_FALLBACK =
+  '【岗位记忆-面评】暂无足够反馈，重点输出可验证证据、核心优势与风险、明确录用结论。';
+
+const buildGuidancePromptFromItems = (
+  scope: MemoryRefreshScope,
+  memoryItems: GenerationMemoryItem[]
+): string => {
+  if (!memoryItems.length) {
+    return scope === 'question_generation' ? QUESTION_MEMORY_FALLBACK : SUMMARY_MEMORY_FALLBACK;
+  }
+
+  const title = scope === 'question_generation' ? '【岗位记忆-问题】' : '【岗位记忆-面评】';
+  return `${title}\n${memoryItems.slice(0, 8).map((item) => `- ${item.instruction}`).join('\n')}`;
+};
+
+const normalizeSynthesizePositionMemoryResult = (
+  scope: MemoryRefreshScope,
+  rawResult: RawSynthesizePositionMemoryResult,
+  existingMemoryItems: GenerationMemoryItem[],
+  evidencePackets: MemoryEvidencePacket[],
+  nowIso: string
+): SynthesizePositionMemoryResult => {
+  const normalizedItems = (Array.isArray(rawResult.memoryItems) ? rawResult.memoryItems : [])
+    .map((item, index) => {
+      const instruction = typeof item.instruction === 'string' ? item.instruction.trim() : '';
+      if (!instruction) {
+        return null;
+      }
+
+      return {
+        id: typeof item.id === 'string' && item.id.trim() ? item.id : `${scope}-memory-${index + 1}`,
+        scope,
+        kind: normalizeMemoryKind(item.kind),
+        instruction,
+        rationale: typeof item.rationale === 'string' && item.rationale.trim()
+          ? item.rationale.trim()
+          : '根据近期岗位反馈提炼',
+        evidenceCount: typeof item.evidenceCount === 'number' && item.evidenceCount > 0
+          ? Math.round(item.evidenceCount)
+          : 1,
+        confidence: typeof item.confidence === 'number'
+          ? Math.min(1, Math.max(0, item.confidence))
+          : 0.7,
+        lastSeenAt: typeof item.lastSeenAt === 'string' && item.lastSeenAt.trim()
+          ? item.lastSeenAt
+          : nowIso,
+      } satisfies GenerationMemoryItem;
+    })
+    .filter((item): item is GenerationMemoryItem => Boolean(item));
+
+  const memoryItems = normalizedItems;
+  if (!memoryItems.length && existingMemoryItems.length > 0) {
+    throw new Error('AI 返回了空的岗位记忆结果');
+  }
+  const guidancePrompt = typeof rawResult.guidancePrompt === 'string' && rawResult.guidancePrompt.trim()
+    ? rawResult.guidancePrompt.trim()
+    : buildGuidancePromptFromItems(scope, memoryItems);
+
+  return {
+    memoryItems,
+    guidancePrompt,
+    updatedAt: nowIso,
+    sampleSize: new Set(evidencePackets.map((packet) => packet.candidateId)).size,
+    version: 1,
+  };
+};
 
 const normalizeQuestionSource = (source?: string): QuestionSource => {
   if (source === 'resume' || source === 'jd' || source === 'coding') {
@@ -425,6 +517,55 @@ const mergeAIUsage = (base?: AIUsage, extra?: AIUsage): AIUsage | undefined => {
     input: (base?.input || 0) + (extra?.input || 0),
     cached: (base?.cached || 0) + (extra?.cached || 0),
     output: (base?.output || 0) + (extra?.output || 0),
+  };
+};
+
+export const synthesizePositionMemory = async (
+  config: AIServiceConfig,
+  scope: MemoryRefreshScope,
+  existingMemoryItems: GenerationMemoryItem[] = [],
+  evidencePackets: MemoryEvidencePacket[] = [],
+  nowIso: string = new Date().toISOString()
+): Promise<AIResultWithUsage<SynthesizePositionMemoryResult>> => {
+  const scopeLabel = scope === 'question_generation' ? '问题生成' : '面评生成';
+  const systemPrompt = '你负责维护岗位级生成记忆。你会根据历史 memory items 和最新 evidence，输出稳定、可执行、可复用的结构化 memory items 与 guidance prompt。只返回 JSON。';
+  const userPrompt = `请为岗位 ${scopeLabel} 刷新记忆。
+
+目标：
+- 合并重复偏好
+- 忽略一次性噪音
+- 保留仍然有效的高置信旧记忆
+- 如有新证据冲突，按新证据调整
+- 输出简洁、可执行的 instruction
+
+返回 JSON 对象，格式：
+{
+  "memoryItems": [
+    {
+      "kind": "prefer|avoid|preserve|prioritize",
+      "instruction": "简洁可执行的偏好",
+      "rationale": "为什么形成这条记忆",
+      "evidenceCount": 3,
+      "confidence": 0.82,
+      "lastSeenAt": "${nowIso}"
+    }
+  ],
+  "guidancePrompt": "渲染好的 guidance prompt"
+}
+
+已有 memory items:
+${JSON.stringify(existingMemoryItems, null, 2)}
+
+最新 evidence packets:
+${JSON.stringify(evidencePackets, null, 2)}
+`;
+
+  const completion = await requestAICompletionContent(config, systemPrompt, userPrompt);
+  const rawResult = parseModelJson<RawSynthesizePositionMemoryResult>(completion.data);
+
+  return {
+    data: normalizeSynthesizePositionMemoryResult(scope, rawResult, existingMemoryItems, evidencePackets, nowIso),
+    usage: completion.usage,
   };
 };
 

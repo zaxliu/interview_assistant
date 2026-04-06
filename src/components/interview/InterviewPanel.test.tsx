@@ -5,15 +5,19 @@ import { InterviewPanel } from './InterviewPanel';
 import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useInterviewUIStore } from '@/store/interviewUIStore';
-import type { Candidate, Position } from '@/types';
+import type { Candidate, MemoryRefreshScope, Position } from '@/types';
 
 const {
+  ensureGenerationMemoryFreshMock,
   extractInterviewNotesInsightsMock,
   getFeishuDocRawContentFromLinkMock,
+  generateInterviewQuestionsMock,
   getPDFMock,
 } = vi.hoisted(() => ({
+  ensureGenerationMemoryFreshMock: vi.fn(),
   extractInterviewNotesInsightsMock: vi.fn(),
   getFeishuDocRawContentFromLinkMock: vi.fn(),
+  generateInterviewQuestionsMock: vi.fn(),
   getPDFMock: vi.fn(async () => ({
     data: new ArrayBuffer(8),
     filename: 'resume.pdf',
@@ -23,7 +27,8 @@ const {
 vi.mock('@/hooks/useAI', () => ({
   useAI: () => ({
     isLoading: false,
-    generateInterviewQuestions: vi.fn(),
+    ensureGenerationMemoryFresh: ensureGenerationMemoryFreshMock,
+    generateInterviewQuestions: generateInterviewQuestionsMock,
     extractInterviewNotesInsights: extractInterviewNotesInsightsMock,
   }),
 }));
@@ -64,10 +69,20 @@ const buildPosition = (candidate: Candidate): Position => ({
   candidates: [candidate],
 });
 
+const createDeferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+};
+
 describe('InterviewPanel', () => {
   beforeEach(() => {
     localStorage.clear();
     extractInterviewNotesInsightsMock.mockReset();
+    ensureGenerationMemoryFreshMock.mockReset();
+    generateInterviewQuestionsMock.mockReset();
     getFeishuDocRawContentFromLinkMock.mockReset();
     getPDFMock.mockReset();
     getPDFMock.mockResolvedValue({
@@ -211,5 +226,114 @@ describe('InterviewPanel', () => {
       undefined,
       undefined
     );
+  });
+
+  it('shows a visible memory refresh step and separate token usage before question generation', async () => {
+    const candidate = buildCandidate();
+    const position = {
+      ...buildPosition(candidate),
+      description: 'Build platform infrastructure',
+      generationMemory: {
+        questionMemoryItems: [],
+        summaryMemoryItems: [],
+        questionGuidancePrompt: '优先追问架构取舍',
+        summaryGuidancePrompt: '',
+        updatedAt: '2026-04-06T09:00:00.000Z',
+        sampleSize: 3,
+        version: 1,
+      },
+    };
+
+    const refreshDeferred = createDeferred<{
+      refreshed: boolean;
+      usage: { input: number; cached: number; output: number };
+    }>();
+    ensureGenerationMemoryFreshMock.mockReturnValue(refreshDeferred.promise);
+    generateInterviewQuestionsMock.mockResolvedValue({
+      data: [],
+      usage: { input: 28, cached: 4, output: 16 },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterviewPanel position={position} candidate={candidate} />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '生成面试问题' }));
+
+    expect(screen.getByText('正在更新岗位问题记忆...')).toBeInTheDocument();
+    expect(generateInterviewQuestionsMock).not.toHaveBeenCalled();
+
+    refreshDeferred.resolve({
+      refreshed: true,
+      usage: { input: 17, cached: 2, output: 7 },
+    });
+
+    await waitFor(() => {
+      expect(ensureGenerationMemoryFreshMock).toHaveBeenCalledWith('position-1', 'question_generation');
+      expect(generateInterviewQuestionsMock).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('正在更新岗位问题记忆...')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(/问题记忆更新 Token/)).toBeInTheDocument();
+    expect(screen.getByText(/AI 问题生成 Token/)).toBeInTheDocument();
+  });
+
+  it('shows refresh failure and does not inject fallback guidance for a new position', async () => {
+    const candidate = buildCandidate();
+    const position = {
+      ...buildPosition(candidate),
+      description: 'Build platform infrastructure',
+    };
+
+    ensureGenerationMemoryFreshMock.mockResolvedValue({
+      refreshed: false,
+      error: '未配置 AI API Key',
+    });
+    generateInterviewQuestionsMock.mockResolvedValue({
+      data: [],
+      usage: { input: 20, cached: 0, output: 10 },
+    });
+
+    render(
+      <MemoryRouter>
+        <InterviewPanel position={position} candidate={candidate} />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '生成面试问题' }));
+
+    await waitFor(() => {
+      expect(generateInterviewQuestionsMock).toHaveBeenCalled();
+    });
+
+    expect(screen.getByText('岗位问题记忆刷新失败：未配置 AI API Key，继续使用当前指引。')).toBeInTheDocument();
+    expect(generateInterviewQuestionsMock.mock.calls[0][4]).toBeUndefined();
+  });
+
+  it('shows pending question memory event counts near the header when question memory is dirty', async () => {
+    const candidate = buildCandidate();
+    const dirtyScopes: MemoryRefreshScope[] = ['question_generation'];
+    const position = {
+      ...buildPosition(candidate),
+      generationMemoryState: {
+        dirtyScopes,
+        pendingQuestionEventCount: 4,
+        pendingSummaryEventCount: 0,
+        pendingQuestionCandidateCount: 2,
+        pendingSummaryCandidateCount: 0,
+      },
+    };
+
+    render(
+      <MemoryRouter>
+        <InterviewPanel position={position} candidate={candidate} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/待合并事件 4，候选人 2/)).toBeInTheDocument();
   });
 });

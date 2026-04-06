@@ -91,6 +91,13 @@ export interface MetricsTimeseriesPoint {
   outputTokens: number;
 }
 
+export interface MetricsEventByFeature {
+  feature: string;
+  totalEvents: number;
+  totalSuccesses: number;
+  totalFailures: number;
+}
+
 export interface MetricsFeedbackByPosition {
   positionId: string;
   questionAsked: number;
@@ -200,6 +207,9 @@ export const getMetricsTimeseries = (from: string, to: string, interval: 'day' |
 
 export const getMetricsFeedback = (from: string, to: string) =>
   fetchJson<RangeResponse & { feedback: MetricsFeedbackSummary }>(withRange('/api/metrics/dashboard/feedback', from, to));
+
+export const getMetricsEventsByFeature = (from: string, to: string) =>
+  fetchJson<RangeResponse & { byFeature: MetricsEventByFeature[] }>(withRange('/api/metrics/dashboard/events-by-feature', from, to));
 
 export const getMetricsErrors = (
   from: string,

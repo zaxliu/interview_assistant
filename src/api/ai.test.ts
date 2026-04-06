@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { extractMeetingNotesInsights, generateQuestions, processResumeText } from './ai';
+import { extractMeetingNotesInsights, generateQuestions, processResumeText, synthesizePositionMemory } from './ai';
 
 describe('ai api parsing', () => {
   beforeEach(() => {
@@ -39,6 +39,102 @@ describe('ai api parsing', () => {
       context: '项目A',
       isAIGenerated: true,
     });
+  });
+
+  it('synthesizes position memory through fetch and returns the API usage', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content:
+                '{"memoryItems":[{"scope":"question_generation","kind":"prioritize","instruction":"优先追问候选人在推荐系统里的召回链路设计","rationale":"编辑问题反馈：更具体 / resume / 专业能力","evidenceCount":1,"confidence":0.88,"lastSeenAt":"2026-04-06T08:00:00.000Z"}],"guidancePrompt":"【岗位记忆-问题】\\n- 优先追问候选人在推荐系统里的召回链路设计（证据 1，置信度 0.88）","updatedAt":"2026-04-06T08:00:00.000Z","sampleSize":1,"version":1}',
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 42,
+          completion_tokens: 18,
+          prompt_tokens_details: {
+            cached_tokens: 6,
+          },
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await synthesizePositionMemory(
+      { apiKey: 'key', model: 'model' },
+      'question_generation',
+      [],
+      [
+        {
+          scope: 'question_generation',
+          eventType: 'question_edited',
+          candidateId: 'candidate-1',
+          createdAt: '2026-04-06T08:00:00.000Z',
+          summary: '编辑问题反馈：更具体 / resume / 专业能力',
+          payload: {
+            candidateId: 'candidate-1',
+            source: 'resume',
+            evaluationDimension: '专业能力',
+            editPattern: '更具体',
+            originalText: '请介绍一下项目',
+            editedText: '请具体介绍一下你在推荐系统里的召回链路设计',
+          },
+        },
+      ]
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.usage).toEqual({
+      input: 42,
+      cached: 6,
+      output: 18,
+    });
+    expect(result.data.guidancePrompt).toContain('岗位记忆-问题');
+    expect(result.data.memoryItems[0].scope).toBe('question_generation');
+    expect(result.data.memoryItems[0].kind).toBe('prioritize');
+    expect(result.data.memoryItems[0].instruction).toContain('召回链路设计');
+  });
+
+  it('rejects empty synthesized memory when the scope already has existing items', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '{"memoryItems":[],"guidancePrompt":""}',
+              },
+            },
+          ],
+        }),
+      })
+    );
+
+    await expect(
+      synthesizePositionMemory(
+        { apiKey: 'key', model: 'model' },
+        'summary_generation',
+        [
+          {
+            id: 'memory-1',
+            scope: 'summary_generation',
+            kind: 'prefer',
+            instruction: '结论先行',
+            rationale: '已有稳定偏好',
+            evidenceCount: 3,
+            confidence: 0.9,
+            lastSeenAt: '2026-04-06T08:00:00.000Z',
+          },
+        ],
+        []
+      )
+    ).rejects.toThrow('AI 返回了空的岗位记忆结果');
   });
 
   it('returns an empty array when the response is invalid JSON', async () => {

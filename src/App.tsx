@@ -83,11 +83,13 @@ const AppHeader = () => {
   const navigate = useNavigate();
   const params = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const getPosition = usePositionStore((state) => state.getPosition);
+  const positions = usePositionStore((state) => state.positions);
   const isAuthenticated = useFeishuOAuth().isAuthenticated;
   const hasPdf = useInterviewUIStore((state) => state.hasPdf);
 
-  const selectedPosition = params.positionId ? getPosition(params.positionId) : null;
+  const selectedPosition = params.positionId
+    ? positions.find((position) => position.id === params.positionId) || null
+    : null;
   const selectedCandidate = selectedPosition?.candidates.find(
     (candidate) => candidate.id === params.candidateId
   );

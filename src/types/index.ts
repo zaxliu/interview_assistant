@@ -35,6 +35,8 @@ export interface Position {
   candidates: Candidate[];
   feedbackEvents?: FeedbackEvent[];
   generationGuidance?: GenerationGuidance;
+  generationMemory?: GenerationMemory;
+  generationMemoryState?: GenerationMemoryState;
   userId?: string; // Owner of this position
 }
 
@@ -103,6 +105,51 @@ export interface GenerationGuidance {
   summaryGuidance: string;
   updatedAt: string;
   sampleSize: number;
+}
+
+export type MemoryRefreshScope = 'question_generation' | 'summary_generation';
+
+export interface GenerationMemoryItem {
+  id: string;
+  scope: MemoryRefreshScope;
+  kind: 'prefer' | 'avoid' | 'preserve' | 'prioritize';
+  instruction: string;
+  rationale: string;
+  evidenceCount: number;
+  confidence: number;
+  lastSeenAt: string;
+}
+
+export interface GenerationMemory {
+  questionMemoryItems: GenerationMemoryItem[];
+  summaryMemoryItems: GenerationMemoryItem[];
+  questionGuidancePrompt: string;
+  summaryGuidancePrompt: string;
+  updatedAt: string;
+  sampleSize: number;
+  version: number;
+}
+
+export interface GenerationMemoryState {
+  dirtyScopes: MemoryRefreshScope[];
+  lastQuestionRefreshAt?: string;
+  lastSummaryRefreshAt?: string;
+  pendingQuestionEventCount: number;
+  pendingSummaryEventCount: number;
+  pendingQuestionCandidateCount: number;
+  pendingSummaryCandidateCount: number;
+  lastQuestionRefreshUsage?: AIUsage;
+  lastSummaryRefreshUsage?: AIUsage;
+  lastManualRefreshAt?: string;
+}
+
+export interface MemoryEvidencePacket {
+  scope: MemoryRefreshScope;
+  eventType: string;
+  candidateId: string;
+  createdAt: string;
+  summary: string;
+  payload: Record<string, unknown>;
 }
 
 export type FeedbackEventType =

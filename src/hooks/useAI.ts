@@ -1,15 +1,25 @@
 import { useState, useCallback } from 'react';
 import { analyzeSummaryRewrite, extractMeetingNotesInsights, generateQuestions, generateSummary } from '@/api/ai';
 import { useSettingsStore } from '@/store/settingsStore';
-import type { Question, InterviewResult, CodingChallenge, HistoricalInterviewReview } from '@/types';
+import { usePositionStore } from '@/store/positionStore';
+import type {
+  Question,
+  InterviewResult,
+  CodingChallenge,
+  HistoricalInterviewReview,
+  MemoryRefreshScope,
+} from '@/types';
 import type { AIResultWithUsage, MeetingNotesExtractionResult, SummaryRewriteInsight } from '@/api/ai';
 import { reportError } from '@/lib/analytics';
+import type { GenerationMemoryRefreshResult, ManualGenerationMemoryRefreshResult } from '@/lib/generationMemory';
 
 export const useAI = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { aiApiKey, aiModel } = useSettingsStore();
+  const refreshGenerationMemoryState = usePositionStore((state) => state.refreshGenerationMemory);
+  const ensureGenerationMemoryFreshState = usePositionStore((state) => state.ensureGenerationMemoryFresh);
 
   const generateInterviewQuestions = useCallback(
     async (
@@ -209,6 +219,20 @@ export const useAI = () => {
     [aiApiKey, aiModel]
   );
 
+  const ensureGenerationMemoryFresh = useCallback(
+    async (positionId: string, scope: MemoryRefreshScope): Promise<GenerationMemoryRefreshResult> => {
+      return ensureGenerationMemoryFreshState(positionId, scope);
+    },
+    [ensureGenerationMemoryFreshState]
+  );
+
+  const refreshGenerationMemory = useCallback(
+    async (positionId: string): Promise<ManualGenerationMemoryRefreshResult> => {
+      return refreshGenerationMemoryState(positionId) as Promise<ManualGenerationMemoryRefreshResult>;
+    },
+    [refreshGenerationMemoryState]
+  );
+
   return {
     isLoading,
     error,
@@ -216,5 +240,7 @@ export const useAI = () => {
     generateInterviewSummary,
     analyzeInterviewSummaryRewrite,
     extractInterviewNotesInsights,
+    ensureGenerationMemoryFresh,
+    refreshGenerationMemory,
   };
 };

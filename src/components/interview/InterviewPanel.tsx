@@ -14,6 +14,7 @@ import { getPreferredResumeText } from '@/utils/resume';
 import { ResumeHighlightsPanel } from '@/components/candidates/ResumeHighlightsPanel';
 import { HistoricalInterviewReviewsPanel } from '@/components/candidates/HistoricalInterviewReviewsPanel';
 import { getFeishuDocRawContentFromLink } from '@/api/feishu';
+import { getInjectedGenerationGuidancePrompt } from '@/lib/generationMemory';
 import { zhCN as t } from '@/i18n/zhCN';
 import { trackEvent, usageFromAIUsage } from '@/lib/analytics';
 
@@ -47,7 +48,12 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   showPdfViewer: showPdfViewerProp = true,
 }) => {
   const navigate = useNavigate();
-  const { isLoading: aiLoading, generateInterviewQuestions, extractInterviewNotesInsights } = useAI();
+  const {
+    isLoading: aiLoading,
+    ensureGenerationMemoryFresh,
+    generateInterviewQuestions,
+    extractInterviewNotesInsights,
+  } = useAI();
   const {
     setQuestions,
     addQuestion,
@@ -72,6 +78,10 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   const [meetingNotesUsage, setMeetingNotesUsage] = useState<AIUsage | undefined>(
     candidate.aiUsage?.meetingNotesExtraction
   );
+  const [questionMemoryRefreshUsage, setQuestionMemoryRefreshUsage] = useState<AIUsage | undefined>(
+    position.generationMemoryState?.lastQuestionRefreshUsage
+  );
+  const [questionMemoryRefreshStatus, setQuestionMemoryRefreshStatus] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const snapshotButtonRef = useRef<HTMLButtonElement>(null);
   const snapshotPanelRef = useRef<HTMLDivElement>(null);
@@ -168,7 +178,13 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
   useEffect(() => {
     setQuestionGenerationUsage(candidate.aiUsage?.questionGeneration);
     setMeetingNotesUsage(candidate.aiUsage?.meetingNotesExtraction);
-  }, [candidate.aiUsage?.meetingNotesExtraction, candidate.aiUsage?.questionGeneration, candidate.id]);
+    setQuestionMemoryRefreshUsage(position.generationMemoryState?.lastQuestionRefreshUsage);
+  }, [
+    candidate.aiUsage?.meetingNotesExtraction,
+    candidate.aiUsage?.questionGeneration,
+    candidate.id,
+    position.generationMemoryState?.lastQuestionRefreshUsage,
+  ]);
 
   useEffect(() => {
     if (quickNotesTimerRef.current) {
@@ -224,14 +240,30 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
       return;
     }
     const startedAt = Date.now();
+    setQuestionMemoryRefreshStatus('正在更新岗位问题记忆...');
+    const memoryRefreshResult = await ensureGenerationMemoryFresh(position.id, 'question_generation');
+    if (memoryRefreshResult.refreshed) {
+      setQuestionMemoryRefreshUsage(memoryRefreshResult.usage);
+      setQuestionMemoryRefreshStatus(null);
+    } else if (memoryRefreshResult.error) {
+      setQuestionMemoryRefreshStatus(`岗位问题记忆刷新失败：${memoryRefreshResult.error}，继续使用当前指引。`);
+    } else {
+      setQuestionMemoryRefreshStatus(null);
+    }
+    const refreshedPosition = usePositionStore.getState().getPosition(position.id) || position;
+    const questionGuidance = getInjectedGenerationGuidancePrompt(refreshedPosition, 'question_generation');
 
     const generated = await generateInterviewQuestions(
       position.description,
       resumeContent,
       position.criteria,
       candidate.historicalInterviewReviews,
-      position.generationGuidance?.questionGuidance
+      questionGuidance
     );
+
+    if (generated.usage) {
+      setQuestionGenerationUsage(generated.usage);
+    }
 
     if (generated.data.length > 0) {
       const batchId = `qbatch-${Date.now()}`;
@@ -245,7 +277,6 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         }))
       );
       if (generated.usage) {
-        setQuestionGenerationUsage(generated.usage);
         updateCandidate(position.id, candidate.id, {
           aiUsage: {
             ...candidate.aiUsage,
@@ -258,7 +289,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
           lastQuestionBatchId: batchId,
         });
       }
-      if (position.generationGuidance?.questionGuidance) {
+      if (questionGuidance?.trim()) {
         trackEvent({
           eventName: 'guidance_applied_to_question_generation',
           feature: 'feedback_guidance',
@@ -279,7 +310,7 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         ...usageFromAIUsage(generated.usage),
         details: {
           questions: generated.data.length,
-          guidanceApplied: Boolean(position.generationGuidance?.questionGuidance),
+          guidanceApplied: Boolean(questionGuidance?.trim()),
         },
       });
       return;
@@ -467,6 +498,9 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
     : null;
   const isMeetingImportBusy = isImportingMeetingNotes || aiLoading;
   const shouldShowMeetingPermissionHint = isFeishuPermissionError(meetingImportError);
+  const pendingQuestionEventCount = position.generationMemoryState?.pendingQuestionEventCount || 0;
+  const pendingQuestionCandidateCount = position.generationMemoryState?.pendingQuestionCandidateCount || 0;
+  const isQuestionMemoryDirty = position.generationMemoryState?.dirtyScopes.includes('question_generation');
 
   const renderMeetingNotesImporter = () => (
     <Card>
@@ -619,6 +653,11 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               <div>
                 <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
                 <p className="text-xs text-gray-500">{position.title}</p>
+                {isQuestionMemoryDirty && (
+                  <p className="mt-1 text-[11px] text-amber-700">
+                    待合并事件 {pendingQuestionEventCount}，候选人 {pendingQuestionCandidateCount}
+                  </p>
+                )}
               </div>
               {isMissingResume && (
                 <Button
@@ -669,6 +708,12 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               {generateQuestionsHint && (
                 <p className="text-xs text-amber-700">{generateQuestionsHint}</p>
               )}
+              {questionMemoryRefreshStatus && (
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                  {questionMemoryRefreshStatus}
+                </div>
+              )}
+              {renderUsage(questionMemoryRefreshUsage, '问题记忆更新 Token')}
               {renderUsage(questionGenerationUsage, 'AI 问题生成 Token')}
               {renderUsage(meetingNotesUsage, 'AI 纪要提取 Token')}
             </div>
@@ -786,6 +831,11 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               <div>
                 <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
                 <p className="text-xs text-gray-500">{position.title}</p>
+                {isQuestionMemoryDirty && (
+                  <p className="mt-1 text-[11px] text-amber-700">
+                    待合并事件 {pendingQuestionEventCount}，候选人 {pendingQuestionCandidateCount}
+                  </p>
+                )}
               </div>
               {isMissingResume && (
                 <Button
@@ -836,6 +886,12 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
               {generateQuestionsHint && (
                 <p className="text-xs text-amber-700">{generateQuestionsHint}</p>
               )}
+              {questionMemoryRefreshStatus && (
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                  {questionMemoryRefreshStatus}
+                </div>
+              )}
+              {renderUsage(questionMemoryRefreshUsage, '问题记忆更新 Token')}
               {renderUsage(questionGenerationUsage, 'AI 问题生成 Token')}
               {renderUsage(meetingNotesUsage, 'AI 纪要提取 Token')}
             </div>
@@ -859,6 +915,11 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         <div>
           <h2 className="text-sm font-medium text-gray-900">{candidate.name}</h2>
           <p className="text-xs text-gray-500">{position.title}</p>
+          {isQuestionMemoryDirty && (
+            <p className="mt-1 text-[11px] text-amber-700">
+              待合并事件 {pendingQuestionEventCount}，候选人 {pendingQuestionCandidateCount}
+            </p>
+          )}
         </div>
         {isMissingResume && (
           <Button
@@ -952,6 +1013,12 @@ export const InterviewPanel: React.FC<InterviewPanelProps> = ({
         {generateQuestionsHint && (
           <p className="text-sm text-amber-700">{generateQuestionsHint}</p>
         )}
+        {questionMemoryRefreshStatus && (
+          <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+            {questionMemoryRefreshStatus}
+          </div>
+        )}
+        {renderUsage(questionMemoryRefreshUsage, '问题记忆更新 Token')}
         {renderUsage(questionGenerationUsage, 'AI 问题生成 Token')}
         {renderUsage(meetingNotesUsage, 'AI 纪要提取 Token')}
       </div>

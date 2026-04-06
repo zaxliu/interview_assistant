@@ -1,8 +1,30 @@
 import { create } from 'zustand';
-import type { Position, Candidate, Question, InterviewResult, CodingChallenge, FeedbackEvent } from '@/types';
+import type {
+  AIUsage,
+  Position,
+  Candidate,
+  Question,
+  InterviewResult,
+  CodingChallenge,
+  FeedbackEvent,
+  MemoryRefreshScope,
+  GenerationMemory,
+  GenerationMemoryItem,
+} from '@/types';
+import { synthesizePositionMemory } from '@/api/ai';
 import { saveToStorage, loadFromStorage } from '@/utils/storage';
 import { trackEvent } from '@/lib/analytics';
-import { synthesizeGenerationGuidance } from '@/lib/guidance';
+import {
+  buildMemoryEvidencePackets,
+  clearGenerationMemoryStateForScope,
+  createEmptyGenerationMemoryState,
+  GenerationMemoryRefreshResult,
+  ManualGenerationMemoryRefreshResult,
+  getGenerationGuidancePrompt,
+  shouldRefreshGenerationMemory,
+  updateGenerationMemoryStateForFeedback,
+} from '@/lib/generationMemory';
+import { useSettingsStore } from '@/store/settingsStore';
 
 interface PositionState {
   positions: Position[];
@@ -32,12 +54,18 @@ interface PositionState {
     positionId: string,
     event: Omit<FeedbackEvent, 'id' | 'createdAt'>
   ) => void;
+  ensureGenerationMemoryFresh: (positionId: string, scope: MemoryRefreshScope) => Promise<GenerationMemoryRefreshResult>;
+  refreshGenerationMemory: (
+    positionId: string,
+    scope?: MemoryRefreshScope
+  ) => Promise<ManualGenerationMemoryRefreshResult | GenerationMemoryRefreshResult>;
   refreshPositionGuidance: (positionId: string) => void;
   loadFromStorage: () => void;
   saveToStorage: () => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
+const scopeRefreshInFlight = new Map<string, Promise<GenerationMemoryRefreshResult>>();
 
 const shouldSkipDuplicateFeedback = (
   existingEvents: FeedbackEvent[] | undefined,
@@ -89,6 +117,84 @@ const updateCandidateCollection = (
         }
       : position
   );
+
+const mergeGenerationMemory = (
+  position: Position,
+  scope: MemoryRefreshScope,
+  memoryResult: {
+    memoryItems: GenerationMemoryItem[];
+    guidancePrompt: string;
+    updatedAt: string;
+    sampleSize: number;
+    version: number;
+  },
+  nowIso: string
+): Position => {
+  const existingMemory = position.generationMemory;
+  const nextMemory: GenerationMemory = {
+    questionMemoryItems:
+      scope === 'question_generation'
+        ? memoryResult.memoryItems
+        : existingMemory?.questionMemoryItems || [],
+    summaryMemoryItems:
+      scope === 'summary_generation'
+        ? memoryResult.memoryItems
+        : existingMemory?.summaryMemoryItems || [],
+    questionGuidancePrompt:
+      scope === 'question_generation'
+        ? memoryResult.guidancePrompt
+        : existingMemory?.questionGuidancePrompt || getGenerationGuidancePrompt(position, 'question_generation'),
+    summaryGuidancePrompt:
+      scope === 'summary_generation'
+        ? memoryResult.guidancePrompt
+        : existingMemory?.summaryGuidancePrompt || getGenerationGuidancePrompt(position, 'summary_generation'),
+    updatedAt: nowIso,
+    sampleSize: Math.max(existingMemory?.sampleSize || 0, memoryResult.sampleSize),
+    version: memoryResult.version,
+  };
+
+  return {
+    ...position,
+    generationMemory: nextMemory,
+    generationGuidance: {
+      questionGuidance: nextMemory.questionGuidancePrompt,
+      summaryGuidance: nextMemory.summaryGuidancePrompt,
+      updatedAt: nowIso,
+      sampleSize: nextMemory.sampleSize,
+    },
+  };
+};
+
+const applyPositionScopeMemory = (
+  position: Position,
+  scope: MemoryRefreshScope,
+  synthesis: {
+    memoryItems: GenerationMemoryItem[];
+    guidancePrompt: string;
+    updatedAt: string;
+    sampleSize: number;
+    version: number;
+  },
+  usage: AIUsage | undefined,
+  nowIso: string,
+  manualRefresh: boolean = false
+): Position => {
+  const refreshedPosition = mergeGenerationMemory(position, scope, synthesis, nowIso);
+  const refreshedState = clearGenerationMemoryStateForScope(
+    refreshedPosition.generationMemoryState || createEmptyGenerationMemoryState(),
+    scope,
+    usage,
+    manualRefresh,
+    nowIso
+  );
+
+  return {
+    ...refreshedPosition,
+    generationMemoryState: refreshedState,
+  };
+};
+
+const scopeRefreshKey = (positionId: string, scope: MemoryRefreshScope): string => `${positionId}:${scope}`;
 
 export const usePositionStore = create<PositionState>((set, get) => ({
   positions: [],
@@ -379,26 +485,144 @@ export const usePositionStore = create<PositionState>((set, get) => ({
             ...eventData.details,
           },
         });
-        const generationGuidance = synthesizeGenerationGuidance(feedbackEvents);
-        trackEvent({
-          eventName: 'guidance_generated',
-          feature: 'feedback_guidance',
-          success: true,
-          details: {
-            positionId,
-            sampleSize: generationGuidance.sampleSize,
-          },
-        });
+        const scope = eventData.type === 'summary_rewritten' ? 'summary_generation' : 'question_generation';
+        const nextEvent = feedbackEvents[feedbackEvents.length - 1];
+        const generationMemoryState = updateGenerationMemoryStateForFeedback(
+          position.generationMemoryState,
+          feedbackEvents,
+          nextEvent,
+          scope
+        );
 
         return {
           ...position,
           feedbackEvents,
-          generationGuidance,
+          generationMemoryState,
         };
       });
       persistPositions(positions, state.currentUserId);
       return { positions };
     });
+  },
+
+  ensureGenerationMemoryFresh: async (positionId, scope) => {
+    const position = get().getPosition(positionId);
+    if (!position) {
+      return { refreshed: false };
+    }
+
+    const decision = shouldRefreshGenerationMemory(position, scope, {
+      trigger: 'generation',
+      nowIso: new Date().toISOString(),
+    });
+    if (!decision.shouldRefresh) {
+      return { refreshed: false };
+    }
+
+    return get().refreshGenerationMemory(positionId, scope) as Promise<GenerationMemoryRefreshResult>;
+  },
+
+  refreshGenerationMemory: async (positionId, scope) => {
+    const refreshScope = async (
+      currentScope: MemoryRefreshScope,
+      manualRefresh: boolean
+    ): Promise<GenerationMemoryRefreshResult> => {
+      const key = scopeRefreshKey(positionId, currentScope);
+      const existingPromise = scopeRefreshInFlight.get(key);
+      if (existingPromise) {
+        return existingPromise;
+      }
+
+      const task = (async (): Promise<GenerationMemoryRefreshResult> => {
+        const settings = useSettingsStore.getState();
+        if (!settings.aiApiKey) {
+          return { refreshed: false, error: '未配置 AI API Key' };
+        }
+
+        const currentPosition = get().getPosition(positionId);
+        if (!currentPosition) {
+          return { refreshed: false, error: '岗位不存在' };
+        }
+
+        const evidencePackets = buildMemoryEvidencePackets(currentPosition.feedbackEvents || [], currentScope);
+        const existingItems = currentScope === 'question_generation'
+          ? currentPosition.generationMemory?.questionMemoryItems || []
+          : currentPosition.generationMemory?.summaryMemoryItems || [];
+
+        try {
+          const synthesis = await synthesizePositionMemory(
+            { apiKey: settings.aiApiKey, model: settings.aiModel },
+            currentScope,
+            existingItems,
+            evidencePackets
+          );
+          const nowIso = synthesis.data.updatedAt || new Date().toISOString();
+
+          set((state) => {
+            const positions = state.positions.map((position) => (
+              position.id === positionId
+                ? applyPositionScopeMemory(
+                    position,
+                    currentScope,
+                    synthesis.data,
+                    synthesis.usage,
+                    nowIso,
+                    manualRefresh
+                  )
+                : position
+            ));
+            persistPositions(positions, state.currentUserId);
+            return { positions };
+          });
+
+          return {
+            refreshed: true,
+            usage: synthesis.usage,
+          };
+        } catch (error) {
+          return {
+            refreshed: false,
+            error: error instanceof Error ? error.message : '岗位记忆刷新失败',
+          };
+        }
+      })();
+
+      scopeRefreshInFlight.set(key, task);
+      try {
+        return await task;
+      } finally {
+        scopeRefreshInFlight.delete(key);
+      }
+    };
+
+    if (scope) {
+      return refreshScope(scope, false);
+    }
+
+    const scopes = ['question_generation', 'summary_generation'] as MemoryRefreshScope[];
+    const usageByScope: Partial<Record<MemoryRefreshScope, AIUsage>> = {};
+    const scopeErrors: Partial<Record<MemoryRefreshScope, string>> = {};
+    const refreshedScopes: MemoryRefreshScope[] = [];
+
+    for (const currentScope of scopes) {
+      const result = await refreshScope(currentScope, true);
+      if (result.refreshed) {
+        refreshedScopes.push(currentScope);
+        if (result.usage) {
+          usageByScope[currentScope] = result.usage;
+        }
+        continue;
+      }
+      if (result.error) {
+        scopeErrors[currentScope] = result.error;
+      }
+    }
+
+    return {
+      refreshedScopes,
+      usageByScope,
+      scopeErrors,
+    };
   },
 
   refreshPositionGuidance: (positionId) => {
@@ -407,11 +631,7 @@ export const usePositionStore = create<PositionState>((set, get) => ({
         if (position.id !== positionId) {
           return position;
         }
-        const generationGuidance = synthesizeGenerationGuidance(position.feedbackEvents || []);
-        return {
-          ...position,
-          generationGuidance,
-        };
+        return position;
       });
       persistPositions(positions, state.currentUserId);
       return { positions };
