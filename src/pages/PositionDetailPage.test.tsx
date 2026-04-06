@@ -44,7 +44,7 @@ describe('PositionDetailPage', () => {
         {
           id: 'position-1',
           title: 'Backend Engineer',
-          criteria: [],
+          criteria: ['分布式系统设计', 'AI 基础设施经验'],
           createdAt: '2026-04-06T00:00:00.000Z',
           source: 'manual',
           candidates: [],
@@ -72,6 +72,8 @@ describe('PositionDetailPage', () => {
     render(<PositionDetailPage />);
 
     expect(screen.getByText('AI 指引（岗位记忆）')).toBeInTheDocument();
+    expect(screen.getByText('增量职位要求')).toBeInTheDocument();
+    expect(screen.getByLabelText('增量职位要求')).toHaveValue('分布式系统设计\nAI 基础设施经验');
     expect(screen.getByRole('button', { name: '刷新岗位记忆' })).toBeInTheDocument();
     expect(screen.queryByLabelText('问题记忆指引')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('面评记忆指引')).not.toBeInTheDocument();
@@ -134,6 +136,42 @@ describe('PositionDetailPage', () => {
       const position = usePositionStore.getState().getPosition('position-1');
       expect(position?.generationMemory?.questionGuidancePrompt).toBe('新的问题指引');
       expect(position?.generationMemory?.summaryGuidancePrompt).toBe('新的面评指引');
+    });
+  });
+
+  it('allows editing and saving position criteria on the detail page', async () => {
+    usePositionStore.setState({
+      positions: [
+        {
+          id: 'position-1',
+          title: 'Backend Engineer',
+          criteria: ['旧要求A', '旧要求B'],
+          createdAt: '2026-04-06T00:00:00.000Z',
+          source: 'manual',
+          candidates: [],
+          generationMemory: {
+            questionMemoryItems: [],
+            summaryMemoryItems: [],
+            questionGuidancePrompt: '旧问题指引',
+            summaryGuidancePrompt: '旧面评指引',
+            updatedAt: '2026-04-06T09:00:00.000Z',
+            sampleSize: 5,
+            version: 1,
+          },
+        },
+      ],
+    });
+
+    render(<PositionDetailPage />);
+
+    fireEvent.change(screen.getByLabelText('增量职位要求'), {
+      target: { value: '新的要求1\n新的要求2' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存增量职位要求' }));
+
+    await waitFor(() => {
+      const position = usePositionStore.getState().getPosition('position-1');
+      expect(position?.criteria).toEqual(['新的要求1', '新的要求2']);
     });
   });
 

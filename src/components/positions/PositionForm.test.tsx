@@ -72,4 +72,25 @@ describe('PositionForm', () => {
       expect(screen.getByText('已获取最新 JD，请点击“保存修改”生效。')).toBeInTheDocument();
     });
   });
+
+  it('does not show criteria editing in the position form anymore', () => {
+    render(
+      <PositionForm
+        position={{
+          id: 'position-1',
+          title: 'AI Agent应用工程师',
+          team: '平台',
+          description: '',
+          criteria: ['分布式系统设计'],
+          createdAt: '2026-03-01T08:00:00.000Z',
+          source: 'calendar',
+          candidates: [],
+        }}
+        onSave={() => undefined}
+        onCancel={() => undefined}
+      />
+    );
+
+    expect(screen.queryByLabelText('增量职位要求（每行一条）')).not.toBeInTheDocument();
+  });
 });

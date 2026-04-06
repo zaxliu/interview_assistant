@@ -10,6 +10,7 @@ import type { AIUsage } from '@/types';
 export default function PositionDetailPage() {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isGuidanceExpanded, setIsGuidanceExpanded] = useState(true);
+  const [criteriaDraft, setCriteriaDraft] = useState('');
   const [isQuestionGuidanceExpanded, setIsQuestionGuidanceExpanded] = useState(false);
   const [isSummaryGuidanceExpanded, setIsSummaryGuidanceExpanded] = useState(false);
   const [isRefreshingMemory, setIsRefreshingMemory] = useState(false);
@@ -59,6 +60,10 @@ export default function PositionDetailPage() {
   const pendingQuestionCandidateCount = position.generationMemoryState?.pendingQuestionCandidateCount || 0;
   const pendingSummaryEventCount = position.generationMemoryState?.pendingSummaryEventCount || 0;
   const pendingSummaryCandidateCount = position.generationMemoryState?.pendingSummaryCandidateCount || 0;
+
+  useEffect(() => {
+    setCriteriaDraft(position.criteria.join('\n'));
+  }, [position.criteria, position.id]);
 
   useEffect(() => {
     setQuestionGuidanceDraft(questionGuidance);
@@ -122,6 +127,15 @@ export default function PositionDetailPage() {
     setRefreshStatus(scope === 'question_generation' ? '问题指引已保存。' : '面评指引已保存。');
   };
 
+  const handleSaveCriteria = () => {
+    const criteria = criteriaDraft
+      .split('\n')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+
+    updatePosition(position.id, { criteria });
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -158,16 +172,27 @@ export default function PositionDetailPage() {
         </div>
       )}
 
-      {position.criteria.length > 0 && (
-        <div className="bg-white p-3 rounded-lg border border-gray-200">
-          <h3 className="text-sm font-medium text-gray-700 mb-1">增量职位要求</h3>
-          <ul className="text-sm text-gray-600 list-disc list-inside">
-            {position.criteria.map((criterion) => (
-              <li key={criterion}>{criterion}</li>
-            ))}
-          </ul>
+      <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-3">
+        <div>
+          <h3 className="text-sm font-medium text-gray-700">增量职位要求</h3>
+          <p className="mt-1 text-xs text-gray-500">每行一条，保存后立即生效。</p>
         </div>
-      )}
+        <Textarea
+          id="position-criteria-editor"
+          aria-label="增量职位要求"
+          value={criteriaDraft}
+          onChange={(event) => setCriteriaDraft(event.target.value)}
+          autoResize
+          rows={3}
+          className="min-h-[80px]"
+          placeholder="某个特定领域经验&#10;对业务场景的理解&#10;额外加分项"
+        />
+        <div className="flex justify-end">
+          <Button variant="secondary" size="sm" onClick={handleSaveCriteria}>
+            保存增量职位要求
+          </Button>
+        </div>
+      </div>
 
       <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-3">
         <div className="flex items-start justify-between gap-3">

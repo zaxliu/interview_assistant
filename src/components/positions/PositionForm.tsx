@@ -25,9 +25,6 @@ export const PositionForm: React.FC<PositionFormProps> = ({
   const [title, setTitle] = useState(position?.title || '');
   const [team, setTeam] = useState(position?.team || '');
   const [description, setDescription] = useState(position?.description || '');
-  const [criteriaText, setCriteriaText] = useState(
-    position?.criteria.join('\n') || ''
-  );
   const [jdLoading, setJdLoading] = useState(false);
   const [jdStatus, setJdStatus] = useState<string | null>(null);
 
@@ -68,17 +65,11 @@ export const PositionForm: React.FC<PositionFormProps> = ({
   };
 
   const handleSubmit = () => {
-    const criteria = criteriaText
-      .split('\n')
-      .map((c) => c.trim())
-      .filter((c) => c.length > 0);
-
     if (position) {
       updatePosition(position.id, {
         title,
         team,
         description,
-        criteria,
       });
       onSave(position.id);
     } else {
@@ -86,7 +77,7 @@ export const PositionForm: React.FC<PositionFormProps> = ({
         title,
         team,
         description,
-        criteria,
+        criteria: [],
         source: 'manual',
       });
       onSave(newPosition.id);
@@ -141,14 +132,6 @@ export const PositionForm: React.FC<PositionFormProps> = ({
             </p>
           )}
         </div>
-        <Textarea
-          label="增量职位要求（每行一条）"
-          value={criteriaText}
-          onChange={(e) => setCriteriaText(e.target.value)}
-          placeholder="某个特定领域经验&#10;对业务场景的理解&#10;额外加分项"
-          autoResize
-          rows={3}
-        />
       </CardBody>
       <CardFooter className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onCancel}>
