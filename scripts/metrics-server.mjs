@@ -612,6 +612,29 @@ const summarizeTimeseries = (events, interval) => {
   return Array.from(buckets.values()).sort((left, right) => left.bucket.localeCompare(right.bucket));
 };
 
+const summarizeTimeseriesByFeature = (events, interval) => {
+  // bucket -> feature -> count
+  const buckets = new Map();
+  events.forEach((event) => {
+    const key = buildBucketKey(event.occurredAt || event.receivedAt, interval);
+    const feature = event.feature || 'unknown';
+    if (!buckets.has(key)) {
+      buckets.set(key, new Map());
+    }
+    const featureMap = buckets.get(key);
+    featureMap.set(feature, (featureMap.get(feature) || 0) + 1);
+  });
+
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([bucket, featureMap]) => ({
+      bucket,
+      byFeature: Array.from(featureMap.entries())
+        .sort(([, a], [, b]) => b - a)
+        .map(([feature, count]) => ({ feature, count })),
+    }));
+};
+
 const summarizeFeedback = (events) => {
   const feedbackEvents = events.filter((event) => FEEDBACK_EVENT_NAMES.has(event.eventName));
   const byPosition = new Map();
@@ -988,6 +1011,16 @@ const server = createServer(async (req, res) => {
         return;
       }
 
+      if (req.method === 'GET' && requestUrl.pathname === '/api/metrics/dashboard/timeseries-by-feature') {
+        const interval = requestUrl.searchParams.get('interval') === 'hour' ? 'hour' : 'day';
+        sendJson(res, 200, {
+          range: { from: range.from, to: range.to },
+          interval,
+          timeseries: summarizeTimeseriesByFeature(range.events, interval),
+        });
+        return;
+      }
+
       if (req.method === 'GET' && requestUrl.pathname === '/api/metrics/dashboard/feedback') {
         sendJson(res, 200, {
           range: { from: range.from, to: range.to },
@@ -1074,6 +1107,7 @@ server.listen(config.port, config.host, () => {
   console.log('  GET  /api/metrics/dashboard/funnel');
   console.log('  GET  /api/metrics/dashboard/ai');
   console.log('  GET  /api/metrics/dashboard/timeseries');
+  console.log('  GET  /api/metrics/dashboard/timeseries-by-feature');
   console.log('  GET  /api/metrics/dashboard/feedback');
   console.log('  GET  /api/metrics/errors');
   console.log('  GET  /api/metrics/errors/:id');

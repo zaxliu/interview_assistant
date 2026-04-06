@@ -5,21 +5,21 @@ import {
   getMetricsAiFailures,
   getMetricsErrorDetail,
   getMetricsErrors,
-  getMetricsEventsByFeature,
   getMetricsFeedback,
   getMetricsFunnel,
   getMetricsOverview,
   getMetricsTimeseries,
+  getMetricsTimeseriesByFeature,
   loginToUsageAdmin,
   logoutUsageAdmin,
   type MetricsAdminUser,
   type MetricsAiModelSummary,
   type MetricsErrorEvent,
   type MetricsErrorSummary,
-  type MetricsEventByFeature,
   type MetricsFeedbackSummary,
   type MetricsFunnelStep,
   type MetricsOverview,
+  type MetricsTimeseriesByFeaturePoint,
   type MetricsTimeseriesPoint,
 } from '@/api/metrics';
 import { Button, Card, CardBody, CardHeader } from '@/components/ui';
@@ -156,127 +156,144 @@ const FunnelPanel = ({ funnel }: { funnel: MetricsFunnelStep[] }) => {
   );
 };
 
+// Lifecycle order: open app → login → sync → candidate → resume → parse → questions → summary → notes → export → feedback → error
+const FEATURE_ORDER = [
+  'lifecycle',
+  'feishu_oauth',
+  'calendar_sync',
+  'candidate',
+  'resume_import',
+  'resume_pdf_parse',
+  'question_generation',
+  'summary_generation',
+  'meeting_notes_extraction',
+  'feishu_export',
+  'feedback_loop',
+  'feedback_guidance',
+  'global_error_boundary',
+] as const;
+
+const FEATURE_ORDER_INDEX = new Map<string, number>(FEATURE_ORDER.map((f, i) => [f, i]));
+const featureOrderOf = (feature: string) => FEATURE_ORDER_INDEX.get(feature) ?? FEATURE_ORDER.length;
+
 const FEATURE_LABELS: Record<string, string> = {
   lifecycle: '生命周期',
-  candidate: '候选人管理',
-  feedback_loop: '反馈闭环',
-  feedback_guidance: '反馈指引',
-  calendar_sync: '日历同步',
-  feishu_export: '飞书导出',
   feishu_oauth: '飞书登录',
+  calendar_sync: '日历同步',
+  candidate: '候选人管理',
   resume_import: '简历导入',
   resume_pdf_parse: '简历解析',
   question_generation: '问题生成',
   summary_generation: '总结生成',
   meeting_notes_extraction: '会议纪要提取',
+  feishu_export: '飞书导出',
+  feedback_loop: '反馈闭环',
+  feedback_guidance: '反馈指引',
   global_error_boundary: '全局错误',
 };
 
-const FEATURE_COLORS: Record<string, { bar: string; failBar: string }> = {
-  lifecycle: { bar: 'bg-sky-500', failBar: 'bg-sky-300' },
-  candidate: { bar: 'bg-violet-500', failBar: 'bg-violet-300' },
-  calendar_sync: { bar: 'bg-teal-500', failBar: 'bg-teal-300' },
-  feishu_export: { bar: 'bg-indigo-500', failBar: 'bg-indigo-300' },
-  feishu_oauth: { bar: 'bg-blue-500', failBar: 'bg-blue-300' },
-  resume_import: { bar: 'bg-amber-500', failBar: 'bg-amber-300' },
-  resume_pdf_parse: { bar: 'bg-orange-500', failBar: 'bg-orange-300' },
-  question_generation: { bar: 'bg-emerald-500', failBar: 'bg-emerald-300' },
-  summary_generation: { bar: 'bg-green-500', failBar: 'bg-green-300' },
-  meeting_notes_extraction: { bar: 'bg-cyan-500', failBar: 'bg-cyan-300' },
-  feedback_loop: { bar: 'bg-rose-500', failBar: 'bg-rose-300' },
-  feedback_guidance: { bar: 'bg-pink-500', failBar: 'bg-pink-300' },
-  global_error_boundary: { bar: 'bg-red-500', failBar: 'bg-red-300' },
+const FEATURE_COLORS: Record<string, string> = {
+  lifecycle: 'bg-slate-400',
+  feishu_oauth: 'bg-blue-500',
+  calendar_sync: 'bg-sky-500',
+  candidate: 'bg-cyan-500',
+  resume_import: 'bg-teal-500',
+  resume_pdf_parse: 'bg-emerald-500',
+  question_generation: 'bg-green-500',
+  summary_generation: 'bg-lime-500',
+  meeting_notes_extraction: 'bg-amber-500',
+  feishu_export: 'bg-orange-500',
+  feedback_loop: 'bg-violet-500',
+  feedback_guidance: 'bg-purple-500',
+  global_error_boundary: 'bg-red-500',
 };
 
-const DEFAULT_FEATURE_COLOR = { bar: 'bg-gray-500', failBar: 'bg-gray-300' };
+const DEFAULT_FEATURE_COLOR = 'bg-gray-400';
 
-const EventCategoryPanel = ({ byFeature }: { byFeature: MetricsEventByFeature[] }) => {
-  const maxValue = Math.max(...byFeature.map((item) => item.totalEvents), 1);
-  const totalEvents = byFeature.reduce((sum, item) => sum + item.totalEvents, 0);
+const TimeseriesPanel = ({
+  timeseries,
+  timeseriesByFeature,
+}: {
+  timeseries: MetricsTimeseriesPoint[];
+  timeseriesByFeature: MetricsTimeseriesByFeaturePoint[];
+}) => {
+  const maxValue = Math.max(...timeseries.map((item) => item.totalEvents), 1);
+
+  // Build a lookup: bucket -> byFeature[]
+  const byFeatureMap = useMemo(() => {
+    const map = new Map<string, { feature: string; count: number }[]>();
+    for (const point of timeseriesByFeature) {
+      map.set(point.bucket, point.byFeature);
+    }
+    return map;
+  }, [timeseriesByFeature]);
+
+  // Collect all features that appear, sorted by lifecycle order
+  const allFeatures = useMemo(() => {
+    const seen = new Set<string>();
+    for (const point of timeseriesByFeature) {
+      for (const { feature } of point.byFeature) {
+        seen.add(feature);
+      }
+    }
+    return Array.from(seen).sort((a, b) => featureOrderOf(a) - featureOrderOf(b));
+  }, [timeseriesByFeature]);
+
+  const hasFeatureData = timeseriesByFeature.length > 0;
 
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-medium text-gray-900">功能模块事件分布</h2>
-          <span className="text-xs text-gray-500">共 {formatNumber(totalEvents)} 个事件</span>
+          <h2 className="text-sm font-medium text-gray-900">趋势</h2>
         </div>
       </CardHeader>
       <CardBody>
-        {byFeature.length === 0 ? (
-          <div className="text-sm text-gray-500">当前时间范围内暂无数据。</div>
-        ) : (
-          <div className="space-y-3">
-            {byFeature.map((item) => {
-              const colors = FEATURE_COLORS[item.feature] || DEFAULT_FEATURE_COLOR;
-              const successWidth = Math.max(4, (item.totalSuccesses / maxValue) * 100);
-              const failWidth = (item.totalFailures / maxValue) * 100;
-              const failRate = item.totalEvents > 0 ? item.totalFailures / item.totalEvents : 0;
-
-              return (
-                <div key={item.feature}>
-                  <div className="mb-1 flex items-center justify-between text-sm">
-                    <span className="text-gray-700">
-                      {FEATURE_LABELS[item.feature] || item.feature}
-                    </span>
-                    <span className="flex items-center gap-2 text-xs text-gray-500">
-                      <span>{formatNumber(item.totalEvents)}</span>
-                      {item.totalFailures > 0 && (
-                        <span className="text-red-500">
-                          {formatNumber(item.totalFailures)} 失败 ({formatPercent(failRate)})
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex h-2 gap-px rounded-full bg-gray-100 overflow-hidden">
-                    <div
-                      className={`h-2 rounded-l-full ${colors.bar}`}
-                      style={{ width: `${successWidth}%` }}
-                    />
-                    {item.totalFailures > 0 && (
-                      <div
-                        className={`h-2 rounded-r-full ${colors.failBar}`}
-                        style={{ width: `${failWidth}%` }}
-                      />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+        {hasFeatureData && allFeatures.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1.5">
+            {allFeatures.map((feature) => (
+              <span key={feature} className="flex items-center gap-1.5 text-xs text-gray-600">
+                <span className={`inline-block h-2.5 w-2.5 rounded-sm ${FEATURE_COLORS[feature] || DEFAULT_FEATURE_COLOR}`} />
+                {FEATURE_LABELS[feature] || feature}
+              </span>
+            ))}
           </div>
         )}
-      </CardBody>
-    </Card>
-  );
-};
-
-const TimeseriesPanel = ({ timeseries }: { timeseries: MetricsTimeseriesPoint[] }) => {
-  const maxValue = Math.max(...timeseries.map((item) => item.totalEvents), 1);
-
-  return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-medium text-gray-900">趋势</h2>
-      </CardHeader>
-      <CardBody>
         <div className="grid grid-cols-1 gap-3">
           {timeseries.length === 0 && (
             <div className="text-sm text-gray-500">当前时间范围内暂无数据。</div>
           )}
-          {timeseries.map((point) => (
-            <div key={point.bucket} className="grid gap-2 text-xs md:grid-cols-[130px,1fr,140px] md:items-center md:gap-3">
-              <span className="text-gray-500">{point.bucket}</span>
-              <div className="h-2 rounded-full bg-gray-100">
-                <div
-                  className="h-2 rounded-full bg-emerald-500"
-                  style={{ width: `${Math.max(6, (point.totalEvents / maxValue) * 100)}%` }}
-                />
+          {timeseries.map((point) => {
+            const featureBreakdown = byFeatureMap.get(point.bucket);
+
+            return (
+              <div key={point.bucket} className="grid gap-2 text-xs md:grid-cols-[130px,1fr,140px] md:items-center md:gap-3">
+                <span className="text-gray-500">{point.bucket}</span>
+                <div className="flex h-2 rounded-full bg-gray-100 overflow-hidden">
+                  {featureBreakdown && featureBreakdown.length > 0 ? (
+                    [...featureBreakdown]
+                      .sort((a, b) => featureOrderOf(a.feature) - featureOrderOf(b.feature))
+                      .map(({ feature, count }) => (
+                      <div
+                        key={feature}
+                        className={`h-2 ${FEATURE_COLORS[feature] || DEFAULT_FEATURE_COLOR}`}
+                        style={{ width: `${(count / maxValue) * 100}%` }}
+                        title={`${FEATURE_LABELS[feature] || feature}: ${formatNumber(count)}`}
+                      />
+                    ))
+                  ) : (
+                    <div
+                      className="h-2 rounded-full bg-emerald-500"
+                      style={{ width: `${Math.max(6, (point.totalEvents / maxValue) * 100)}%` }}
+                    />
+                  )}
+                </div>
+                <span className="text-gray-700 md:text-right">
+                  {formatNumber(point.totalEvents)} 事件 / {formatNumber(point.totalAiCalls)} AI
+                </span>
               </div>
-              <span className="text-gray-700 md:text-right">
-                {formatNumber(point.totalEvents)} 事件 / {formatNumber(point.totalAiCalls)} AI
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </CardBody>
     </Card>
@@ -726,7 +743,7 @@ export default function UsageAdminPage() {
     byModel: MetricsAiModelSummary[];
   } | null>(null);
   const [feedbackSummary, setFeedbackSummary] = useState<MetricsFeedbackSummary | null>(null);
-  const [eventsByFeature, setEventsByFeature] = useState<MetricsEventByFeature[]>([]);
+  const [timeseriesByFeature, setTimeseriesByFeature] = useState<MetricsTimeseriesByFeaturePoint[]>([]);
   const [errors, setErrors] = useState<MetricsErrorSummary[]>([]);
   const [aiFailures, setAiFailures] = useState<MetricsErrorEvent[]>([]);
   const [selectedErrorId, setSelectedErrorId] = useState<string | null>(null);
@@ -809,7 +826,7 @@ export default function UsageAdminPage() {
             feature: featureFilter || undefined,
             errorCategory: categoryFilter || undefined,
           }),
-          getMetricsEventsByFeature(range.from, range.to),
+          getMetricsTimeseriesByFeature(range.from, range.to),
         ]);
 
         if (cancelled) {
@@ -817,7 +834,7 @@ export default function UsageAdminPage() {
         }
 
         // Extract successful results, set null for failed ones
-        const [overviewResult, funnelResult, timeseriesResult, aiResult, feedbackResult, errorsResult, aiFailuresResult, eventsByFeatureResult] = results;
+        const [overviewResult, funnelResult, timeseriesResult, aiResult, feedbackResult, errorsResult, aiFailuresResult, timeseriesByFeatureResult] = results;
 
         if (overviewResult.status === 'fulfilled') {
           setOverview(overviewResult.value.overview);
@@ -843,8 +860,10 @@ export default function UsageAdminPage() {
         if (aiFailuresResult.status === 'fulfilled') {
           setAiFailures(aiFailuresResult.value.events);
         }
-        if (eventsByFeatureResult.status === 'fulfilled') {
-          setEventsByFeature(eventsByFeatureResult.value.byFeature);
+        if (timeseriesByFeatureResult.status === 'fulfilled') {
+          setTimeseriesByFeature(timeseriesByFeatureResult.value.timeseries);
+        } else {
+          setTimeseriesByFeature([]);
         }
 
         setSelectedErrorId((current) => {
@@ -987,11 +1006,10 @@ export default function UsageAdminPage() {
       </Card>
 
       <OverviewCards overview={overview} />
-      <EventCategoryPanel byFeature={eventsByFeature} />
 
       <div className="grid gap-4 xl:grid-cols-[0.9fr,1.1fr]">
         <FunnelPanel funnel={funnel} />
-        <TimeseriesPanel timeseries={timeseries} />
+        <TimeseriesPanel timeseries={timeseries} timeseriesByFeature={timeseriesByFeature} />
       </div>
 
       <AiPanel totals={aiSummary.totals} byModel={aiSummary.byModel} />
