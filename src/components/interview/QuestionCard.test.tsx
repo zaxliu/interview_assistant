@@ -24,7 +24,7 @@ describe('QuestionCard', () => {
           id: 'question-1',
           text: '请介绍一次系统设计决策',
           status: 'not_reached',
-          source: 'ai',
+          source: 'common',
           isAIGenerated: true,
           evaluationDimension: '专业能力',
         }}
@@ -43,7 +43,7 @@ describe('QuestionCard', () => {
       candidateId: 'candidate-1',
       questionId: 'question-1',
       details: {
-        source: 'ai',
+        source: 'common',
         evaluationDimension: '专业能力',
       },
     });
