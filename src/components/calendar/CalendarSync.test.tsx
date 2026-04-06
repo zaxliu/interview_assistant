@@ -50,6 +50,7 @@ const emptySyncResult = {
 
 const setLoggedInUser = (loginTime: string) => {
   useSettingsStore.setState({
+    feishuUserAccessToken: 'access-token',
     feishuUser: {
       id: 'user-1',
       name: 'Lewis',
@@ -380,6 +381,18 @@ describe('CalendarSync', () => {
     await waitFor(() => {
       expect(syncCalendarMock).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('does not auto sync when token is missing even if user profile exists', () => {
+    setLoggedInUser('2026-03-13T01:00:00.000Z');
+    useSettingsStore.setState({
+      ...useSettingsStore.getState(),
+      feishuUserAccessToken: '',
+    });
+
+    render(<CalendarSync />);
+
+    expect(syncCalendarMock).not.toHaveBeenCalled();
   });
 
   it('auto-fills empty calendar position description from wintalent link', async () => {

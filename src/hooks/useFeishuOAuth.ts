@@ -31,6 +31,24 @@ export const useFeishuOAuth = () => {
 
   // Track if we're currently processing an OAuth callback
   const isProcessingRef = useRef(false);
+  const isHydratingUserRef = useRef(false);
+
+  const hydrateUserProfile = useCallback(async (accessToken: string) => {
+    if (!accessToken || isHydratingUserRef.current) {
+      return;
+    }
+
+    isHydratingUserRef.current = true;
+    try {
+      const user = await getUserInfo(accessToken);
+      setFeishuUser(user);
+      console.log('User info fetched:', user);
+    } catch (error) {
+      console.error('Failed to fetch user info:', error);
+    } finally {
+      isHydratingUserRef.current = false;
+    }
+  }, [setFeishuUser]);
 
   // Handle OAuth callback - check for code in URL
   useEffect(() => {
@@ -60,20 +78,12 @@ export const useFeishuOAuth = () => {
         setFeishuUserAccessToken(tokens.accessToken);
         setFeishuRefreshToken(tokens.refreshToken);
 
-        // Fetch user info
-        try {
-          const user = await getUserInfo(tokens.accessToken);
-          setFeishuUser(user);
-          trackEvent({
-            eventName: 'feishu_login_succeeded',
-            feature: 'feishu_oauth',
-            success: true,
-          });
-          console.log('User info fetched:', user);
-        } catch (error) {
-          console.error('Failed to fetch user info:', error);
-          // Don't fail the whole login if user info fetch fails
-        }
+        await hydrateUserProfile(tokens.accessToken);
+        trackEvent({
+          eventName: 'feishu_login_succeeded',
+          feature: 'feishu_oauth',
+          success: true,
+        });
 
         // Clear callback params and return to where login was initiated.
         if (returnTo === window.location.pathname) {
@@ -118,7 +128,22 @@ export const useFeishuOAuth = () => {
       .finally(() => {
         isProcessingRef.current = false;
       });
-  }, [feishuAppId, feishuAppSecret, feishuUserAccessToken, setFeishuUserAccessToken, setFeishuRefreshToken, setFeishuUser]);
+  }, [
+    feishuAppId,
+    feishuAppSecret,
+    feishuUserAccessToken,
+    hydrateUserProfile,
+    setFeishuUserAccessToken,
+    setFeishuRefreshToken,
+  ]);
+
+  useEffect(() => {
+    if (!feishuUserAccessToken || feishuUser) {
+      return;
+    }
+
+    void hydrateUserProfile(feishuUserAccessToken);
+  }, [feishuUser, feishuUserAccessToken, hydrateUserProfile]);
 
   // Start OAuth flow
   const startOAuth = useCallback((returnTo?: string) => {
@@ -155,6 +180,9 @@ export const useFeishuOAuth = () => {
       );
       setFeishuUserAccessToken(tokens.accessToken);
       setFeishuRefreshToken(tokens.refreshToken);
+      if (!feishuUser) {
+        await hydrateUserProfile(tokens.accessToken);
+      }
       return true;
     } catch (error) {
       console.error('Token refresh failed:', error);
@@ -184,7 +212,9 @@ export const useFeishuOAuth = () => {
     feishuRefreshToken,
     feishuAppId,
     feishuAppSecret,
+    feishuUser,
     feishuUserAccessToken,
+    hydrateUserProfile,
     setFeishuUserAccessToken,
     setFeishuRefreshToken,
     setFeishuUser,
@@ -199,6 +229,7 @@ export const useFeishuOAuth = () => {
 
   return {
     isAuthenticated: !!feishuUserAccessToken,
+    isProfileLoaded: !!feishuUser,
     user: feishuUser,
     startOAuth,
     refreshTokenIfNeeded,

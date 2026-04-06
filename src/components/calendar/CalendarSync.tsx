@@ -256,6 +256,7 @@ const toLocalDateKey = (date: Date): string => {
 export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) => {
   const { isLoading, error, syncCalendar } = useFeishuCalendar();
   const { addPosition, addCandidate, updateCandidate, updatePosition } = usePositionStore();
+  const feishuUserAccessToken = useSettingsStore((state) => state.feishuUserAccessToken);
   const feishuUser = useSettingsStore((state) => state.feishuUser);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const autoSyncAttempted = useRef(new Set<string>());
@@ -461,7 +462,7 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
   }, [runSync]);
 
   useEffect(() => {
-    if (!feishuUser?.id || !feishuUser.loginTime || isLoading) {
+    if (!feishuUserAccessToken || !feishuUser?.id || !feishuUser.loginTime || isLoading) {
       return;
     }
 
@@ -490,7 +491,7 @@ export const CalendarSync: React.FC<CalendarSyncProps> = ({ onSyncComplete }) =>
       localStorage.setItem(loginSyncKey, feishuUser.loginTime);
       localStorage.setItem(dateSyncKey, today);
     })();
-  }, [feishuUser?.id, feishuUser?.loginTime, isLoading, runSync]);
+  }, [feishuUserAccessToken, feishuUser?.id, feishuUser?.loginTime, isLoading, runSync]);
 
   return (
     <div className="flex items-center gap-3">

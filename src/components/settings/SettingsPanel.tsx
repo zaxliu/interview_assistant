@@ -64,9 +64,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                 {isAuthenticated ? (
                   <div className="flex items-center gap-2">
                     <span className="text-green-600">已连接</span>
-                    {user && (
-                      <span className="text-gray-500">账号：{user.name}</span>
-                    )}
+                    <span className="text-gray-500">{user ? `账号：${user.name}` : '账号信息获取中'}</span>
                   </div>
                 ) : (
                   <span className="text-gray-500">未连接，请在页头点击登录</span>
