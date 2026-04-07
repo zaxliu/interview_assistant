@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { SummaryEditor } from './SummaryEditor';
 import { usePositionStore } from '@/store/positionStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -58,6 +59,14 @@ const createDeferred = <T,>() => {
   return { promise, resolve };
 };
 
+const renderWithRouter = (ui: React.ReactElement) => {
+  const router = createMemoryRouter(
+    [{ path: '/', element: ui }],
+    { initialEntries: ['/'] }
+  );
+  return render(<RouterProvider router={router} />);
+};
+
 describe('SummaryEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -79,7 +88,7 @@ describe('SummaryEditor', () => {
       candidateLinkUrl: candidate.candidateLink,
     });
 
-    render(<SummaryEditor position={position} candidate={candidate} />);
+    renderWithRouter(<SummaryEditor position={position} candidate={candidate} />);
 
     fireEvent.click(screen.getAllByRole('button', { name: '一键回填到 Wintalent' })[0]);
 
@@ -94,7 +103,7 @@ describe('SummaryEditor', () => {
   });
 
   it('auto fills interviewer and autosaves edits', async () => {
-    render(<SummaryEditor position={position} candidate={candidate} />);
+    renderWithRouter(<SummaryEditor position={position} candidate={candidate} />);
 
     expect(screen.getByDisplayValue('Lewis')).toBeInTheDocument();
 
@@ -143,7 +152,7 @@ describe('SummaryEditor', () => {
       usage: { input: 10, cached: 2, output: 20 },
     });
 
-    render(<SummaryEditor position={position} candidate={candidate} autoGenerate />);
+    renderWithRouter(<SummaryEditor position={position} candidate={candidate} autoGenerate />);
 
     expect(screen.queryByText(/面评记忆更新 Token/)).not.toBeInTheDocument();
 
@@ -206,7 +215,7 @@ describe('SummaryEditor', () => {
       usage: { input: 10, cached: 2, output: 20 },
     });
 
-    render(<SummaryEditor position={position} candidate={candidate} autoGenerate />);
+    renderWithRouter(<SummaryEditor position={position} candidate={candidate} autoGenerate />);
 
     await waitFor(() => {
       expect(generateInterviewSummary).toHaveBeenCalled();
@@ -217,7 +226,7 @@ describe('SummaryEditor', () => {
   });
 
   it('marks summary memory dirty after a substantial rewrite even after autosave runs', async () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     ensureGenerationMemoryFresh.mockResolvedValue({ refreshed: false });
     generateInterviewSummary.mockResolvedValue({
       data: {
@@ -244,30 +253,43 @@ describe('SummaryEditor', () => {
       },
     });
 
-    const view = render(<SummaryEditor position={position} candidate={candidate} autoGenerate />);
+    // Wrapper that re-reads position/candidate from the store so prop updates
+    // are picked up without needing rerender (which isn't available with RouterProvider).
+    const StoreConnectedEditor = () => {
+      const pos = usePositionStore((s) => s.getPosition(position.id)) || position;
+      const cand = pos.candidates.find((c) => c.id === candidate.id) || candidate;
+      return <SummaryEditor position={pos} candidate={cand} autoGenerate />;
+    };
 
+    renderWithRouter(<StoreConnectedEditor />);
+
+    // Wait for auto-generation to complete
     await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(100);
     });
     expect(generateInterviewSummary).toHaveBeenCalled();
 
-    const latestPosition = usePositionStore.getState().getPosition(position.id)!;
-    const latestCandidate = latestPosition.candidates.find((item) => item.id === candidate.id)!;
-    view.rerender(<SummaryEditor position={latestPosition} candidate={latestCandidate} autoGenerate />);
+    // Wait for store to update (lastGeneratedSummaryDraft saved)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    const posAfterGen = usePositionStore.getState().getPosition(position.id);
+    const candAfterGen = posAfterGen?.candidates.find((c) => c.id === candidate.id);
+    expect(candAfterGen?.lastGeneratedSummaryDraft).toBeTruthy();
 
+    // Make a substantial edit
     fireEvent.change(screen.getByPlaceholderText('请输入对候选人的综合评价...'), {
       target: { value: 'Strong candidate with clear execution ownership, but delivery risk needs explicit follow-up.' },
     });
 
+    // Advance past auto-save (2s)
     await act(async () => {
-      vi.advanceTimersByTime(2000);
+      await vi.advanceTimersByTimeAsync(2500);
     });
 
+    // Advance past rewrite analysis debounce (15s)
     await act(async () => {
-      vi.advanceTimersByTime(15000);
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(16000);
     });
 
     const updatedPosition = usePositionStore.getState().getPosition(position.id);
@@ -296,7 +318,7 @@ describe('SummaryEditor', () => {
       currentUserId: 'user-1',
     });
 
-    render(
+    renderWithRouter(
       <SummaryEditor
         position={{
           ...position,
