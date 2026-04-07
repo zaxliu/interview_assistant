@@ -531,17 +531,23 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       // Flush auto-save synchronously (localStorage.setItem is sync)
       handleSaveDraft();
-      // Fire rewrite analysis (async, best-effort)
-      if (rewriteAnalysisTimerRef.current) {
-        clearTimeout(rewriteAnalysisTimerRef.current);
-        rewriteAnalysisTimerRef.current = null;
-        fireRewriteAnalysis();
-      }
       e.preventDefault();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges, handleSaveDraft, fireRewriteAnalysis]);
+  }, [hasUnsavedChanges, handleSaveDraft]);
+
+  // Flush pending rewrite analysis on component unmount (more reliable than beforeunload)
+  useEffect(() => {
+    return () => {
+      if (rewriteAnalysisTimerRef.current) {
+        clearTimeout(rewriteAnalysisTimerRef.current);
+        rewriteAnalysisTimerRef.current = null;
+      }
+      fireRewriteAnalysis();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updateDimension = (index: number, updates: Partial<EvaluationDimension>) => {
     const newDimensions = [...result.evaluation_dimensions];
