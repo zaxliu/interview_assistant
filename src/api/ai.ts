@@ -134,7 +134,9 @@ const normalizeSynthesizePositionMemoryResult = (
     })
     .filter((item): item is GenerationMemoryItem => Boolean(item));
 
-  const memoryItems = normalizedItems;
+  const memoryItems = normalizedItems
+    .sort((a, b) => (b.evidenceCount * b.confidence) - (a.evidenceCount * a.confidence))
+    .slice(0, MAX_MEMORY_ITEMS);
   if (!memoryItems.length && existingMemoryItems.length > 0) {
     throw new Error('AI 返回了空的岗位记忆结果');
   }
@@ -520,6 +522,9 @@ const mergeAIUsage = (base?: AIUsage, extra?: AIUsage): AIUsage | undefined => {
   };
 };
 
+const MAX_MEMORY_ITEMS = 12;
+const MAX_PROMPT_ESTIMATE_TOKENS = 6000;
+
 export const synthesizePositionMemory = async (
   config: AIServiceConfig,
   scope: MemoryRefreshScope,
@@ -529,6 +534,18 @@ export const synthesizePositionMemory = async (
 ): Promise<AIResultWithUsage<SynthesizePositionMemoryResult>> => {
   const scopeLabel = scope === 'question_generation' ? '问题生成' : '面评生成';
   const systemPrompt = '你负责维护岗位级生成记忆。你会根据历史 memory items 和最新 evidence，输出稳定、可执行、可复用的结构化 memory items 与 guidance prompt。只返回 JSON。';
+
+  const truncatedMemoryItems = existingMemoryItems.slice(0, MAX_MEMORY_ITEMS);
+  const memoryItemsJson = JSON.stringify(truncatedMemoryItems);
+
+  let truncatedPackets = evidencePackets;
+  let packetsJson = JSON.stringify(truncatedPackets);
+  const estimateTokens = (memJson: string, pktJson: string) => Math.ceil((memJson.length + pktJson.length) / 4);
+  while (truncatedPackets.length > 5 && estimateTokens(memoryItemsJson, packetsJson) > MAX_PROMPT_ESTIMATE_TOKENS) {
+    truncatedPackets = truncatedPackets.slice(Math.ceil(truncatedPackets.length * 0.2));
+    packetsJson = JSON.stringify(truncatedPackets);
+  }
+
   const userPrompt = `请为岗位 ${scopeLabel} 刷新记忆。
 
 目标：
@@ -537,6 +554,7 @@ export const synthesizePositionMemory = async (
 - 保留仍然有效的高置信旧记忆
 - 如有新证据冲突，按新证据调整
 - 输出简洁、可执行的 instruction
+- memoryItems 最多 ${MAX_MEMORY_ITEMS} 条，按置信度降序排列
 
 返回 JSON 对象，格式：
 {
@@ -554,10 +572,10 @@ export const synthesizePositionMemory = async (
 }
 
 已有 memory items:
-${JSON.stringify(existingMemoryItems, null, 2)}
+${memoryItemsJson}
 
 最新 evidence packets:
-${JSON.stringify(evidencePackets, null, 2)}
+${packetsJson}
 `;
 
   const completion = await requestAICompletionContent(config, systemPrompt, userPrompt);
@@ -1169,7 +1187,7 @@ export const generateSummary = async (
     : '';
 
   const guidanceSection = guidance?.trim()
-    ? `\n岗位历史反馈指引（请优先遵守）：\n${guidance.trim()}\n`
+    ? `\n## 岗位历史反馈指引（请优先遵守）\n${guidance.trim()}\n`
     : '';
 
   const prompt = `请根据以下面试记录生成结构化的面试评估结果。${guidanceSection}
@@ -1348,13 +1366,23 @@ export const analyzeSummaryRewrite = async (
   generatedSummaryDraft: InterviewResult,
   finalSummary: InterviewResult
 ): Promise<AIResultWithUsage<SummaryRewriteInsight>> => {
+  const stripForComparison = (r: InterviewResult) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { aiUsage, ...rest } = r;
+    return {
+      ...rest,
+      interview_info: {
+        overall_result: rest.interview_info?.overall_result,
+      },
+    };
+  };
   const prompt = `你是面试评语质量分析助手。请比较 AI 初稿和用户终稿，输出改写偏好。
 
 AI 初稿：
-${JSON.stringify(generatedSummaryDraft)}
+${JSON.stringify(stripForComparison(generatedSummaryDraft))}
 
 用户终稿：
-${JSON.stringify(finalSummary)}
+${JSON.stringify(stripForComparison(finalSummary))}
 
 请输出 JSON：
 {

@@ -19,6 +19,10 @@ const REFRESH_CANDIDATE_THRESHOLD = 2;
 const REFRESH_COOLDOWN_MS = 30 * 60 * 1000;
 const STALE_REFRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const RECENT_CANDIDATE_LIMIT = 20;
+const MAX_EVIDENCE_PACKETS = 40;
+const MAX_MEMORY_ITEMS = 12;
+const MAX_TEXT_FIELD_LENGTH = 300;
+const MAX_CONTEXT_FIELD_LENGTH = 200;
 const MEMORY_VERSION = 1;
 
 export type MemoryRefreshTrigger = 'lazy' | 'generation' | 'manual';
@@ -74,6 +78,9 @@ const uniqueBy = <T>(items: T[], keyBuilder: (item: T) => string): T[] => {
 
   return result;
 };
+
+const truncateString = (value: string, maxLength: number): string =>
+  value.length > maxLength ? value.slice(0, maxLength) + '…' : value;
 
 const normalizeForKey = (value: string): string =>
   value.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -141,7 +148,7 @@ const getQuestionPacketSummary = (event: FeedbackEvent): { summary: string; payl
         source,
         evaluationDimension: dimension,
         text: questionText,
-        context: safeString(details.context),
+        context: truncateString(safeString(details.context), MAX_CONTEXT_FIELD_LENGTH),
         isAIGenerated: Boolean(details.isAIGenerated),
         cameFromMeetingNotes: Boolean(details.cameFromMeetingNotes),
         historicalReviewSummary: safeString(details.historicalReviewSummary),
@@ -167,8 +174,8 @@ const getQuestionPacketSummary = (event: FeedbackEvent): { summary: string; payl
         source,
         evaluationDimension: dimension,
         editPattern: inferredPattern,
-        originalText,
-        editedText,
+        originalText: truncateString(originalText, MAX_TEXT_FIELD_LENGTH),
+        editedText: truncateString(editedText, MAX_TEXT_FIELD_LENGTH),
         questionText,
       }),
     };
@@ -194,8 +201,6 @@ const getSummaryPacketSummary = (event: FeedbackEvent): { summary: string; paylo
     : [];
   const preference = safeString(details.preference);
   const intensity = safeString(details.rewriteIntensity);
-  const draft = safeString(details.generatedSummaryDraft || details.aiDraft);
-  const finalSummary = safeString(details.finalSummary);
   const collectedPreferences = uniqueBy(
     [...preferences, preference].filter(Boolean).map((item) => item.trim()),
     (item) => normalizeForKey(item)
@@ -208,8 +213,6 @@ const getSummaryPacketSummary = (event: FeedbackEvent): { summary: string; paylo
       questionId: event.questionId,
       rewriteIntensity: intensity,
       preferences: collectedPreferences,
-      draft,
-      finalSummary,
       changedConclusion: Boolean(details.changedConclusion),
       changedScore: Boolean(details.changedScore),
       changedStructure: Boolean(details.changedStructure),
@@ -353,7 +356,7 @@ const mergeMemoryItems = (
       return b.evidenceCount - a.evidenceCount;
     }
     return b.lastSeenAt.localeCompare(a.lastSeenAt);
-  });
+  }).slice(0, MAX_MEMORY_ITEMS);
 };
 
 const renderGuidancePrompt = (scope: MemoryRefreshScope, items: GenerationMemoryItem[]): string => {
@@ -363,7 +366,7 @@ const renderGuidancePrompt = (scope: MemoryRefreshScope, items: GenerationMemory
 
   const lines = items
     .slice(0, 8)
-    .map((item) => `- ${item.instruction}（证据 ${item.evidenceCount}，置信度 ${item.confidence.toFixed(2)}）`);
+    .map((item) => `- ${item.instruction}`);
 
   return `【岗位记忆-${getScopePrompt(scope)}】\n${lines.join('\n')}`;
 };
@@ -416,7 +419,8 @@ export const buildMemoryEvidencePackets = (
   return scopedEvents
   .filter((event) => recentCandidateIds.has(event.candidateId))
   .map((event) => packetFromEvent(event, scope))
-  .filter((packet): packet is MemoryEvidencePacket => Boolean(packet));
+  .filter((packet): packet is MemoryEvidencePacket => Boolean(packet))
+  .slice(-MAX_EVIDENCE_PACKETS);
 };
 
 export const getGenerationGuidancePrompt = (
@@ -585,7 +589,7 @@ export const updateGenerationMemoryStateForFeedback = (
     return {
       ...base,
       dirtyScopes,
-      pendingQuestionEventCount: base.pendingQuestionEventCount + 1,
+      pendingQuestionEventCount: pendingEvents.length,
       pendingQuestionCandidateCount: pendingCandidateCount || (nextEvent.candidateId ? 1 : 0),
     };
   }
@@ -593,7 +597,7 @@ export const updateGenerationMemoryStateForFeedback = (
   return {
     ...base,
     dirtyScopes,
-    pendingSummaryEventCount: base.pendingSummaryEventCount + 1,
+    pendingSummaryEventCount: pendingEvents.length,
     pendingSummaryCandidateCount: pendingCandidateCount || (nextEvent.candidateId ? 1 : 0),
   };
 };

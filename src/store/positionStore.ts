@@ -59,7 +59,6 @@ interface PositionState {
     positionId: string,
     scope?: MemoryRefreshScope
   ) => Promise<ManualGenerationMemoryRefreshResult | GenerationMemoryRefreshResult>;
-  refreshPositionGuidance: (positionId: string) => void;
   loadFromStorage: () => void;
   saveToStorage: () => void;
 }
@@ -466,14 +465,22 @@ export const usePositionStore = create<PositionState>((set, get) => ({
           return position;
         }
 
-        const feedbackEvents = [
-          ...(position.feedbackEvents || []),
-          {
-            ...eventData,
-            id: generateId(),
-            createdAt: new Date().toISOString(),
-          },
-        ].slice(-500);
+        const feedbackEvents = (() => {
+          const existing = position.feedbackEvents || [];
+          // For summary_rewritten, replace the previous event for the same candidate
+          // (each rewrite carries updated preferences, so only the latest matters)
+          const base = eventData.type === 'summary_rewritten'
+            ? existing.filter((e) => !(e.type === 'summary_rewritten' && e.candidateId === eventData.candidateId))
+            : existing;
+          return [
+            ...base,
+            {
+              ...eventData,
+              id: generateId(),
+              createdAt: new Date().toISOString(),
+            },
+          ].slice(-500);
+        })();
         trackEvent({
           eventName: eventData.type,
           feature: 'feedback_loop',
@@ -623,19 +630,6 @@ export const usePositionStore = create<PositionState>((set, get) => ({
       usageByScope,
       scopeErrors,
     };
-  },
-
-  refreshPositionGuidance: (positionId) => {
-    set((state) => {
-      const positions = state.positions.map((position) => {
-        if (position.id !== positionId) {
-          return position;
-        }
-        return position;
-      });
-      persistPositions(positions, state.currentUserId);
-      return { positions };
-    });
   },
 
   loadFromStorage: () => {
