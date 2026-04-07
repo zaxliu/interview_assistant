@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSettingsStore } from '@/store/settingsStore';
 import {
   getOAuthAuthorizationUrl,
@@ -18,6 +19,7 @@ import { reportError, trackEvent } from '@/lib/analytics';
 const processedCodes = new Set<string>();
 
 export const useFeishuOAuth = () => {
+  const navigate = useNavigate();
   const {
     feishuAppId,
     feishuAppSecret,
@@ -86,11 +88,10 @@ export const useFeishuOAuth = () => {
         });
 
         // Clear callback params and return to where login was initiated.
-        if (returnTo === window.location.pathname) {
-          window.history.replaceState({}, '', returnTo);
-        } else {
-          window.location.assign(returnTo);
-        }
+        // Use navigate() instead of window.location.assign() to avoid a
+        // full page reload, which would lose the in-memory tokens (they
+        // are not persisted to localStorage).
+        navigate(returnTo, { replace: true });
         console.warn('OAuth login successful!');
       })
       .catch((error) => {
@@ -118,16 +119,13 @@ export const useFeishuOAuth = () => {
             returnTo,
           },
         });
-        if (returnTo === window.location.pathname) {
-          window.history.replaceState({}, '', returnTo);
-        } else {
-          window.location.assign(returnTo);
-        }
+        navigate(returnTo, { replace: true });
       })
       .finally(() => {
         isProcessingRef.current = false;
       });
   }, [
+    navigate,
     feishuAppId,
     feishuAppSecret,
     feishuUserAccessToken,
