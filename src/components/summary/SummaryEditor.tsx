@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useBlocker } from 'react-router-dom';
 import type { AIUsage, Position, Candidate, InterviewResult, EvaluationDimension } from '@/types';
 import { EvaluationDimensionCard } from './EvaluationDimensionCard';
 import { ExportButtons } from './ExportButtons';
@@ -301,13 +302,100 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     setSaveStatus('saved');
   }, [buildFinalResult, position.id, candidate.id, setInterviewResult]);
 
+  // Fire rewrite analysis immediately (fire-and-forget).
+  // Returns true if analysis was triggered, false if skipped (no meaningful edits).
+  const fireRewriteAnalysis = useCallback(() => {
+    if (!candidate.lastGeneratedSummaryDraft || !hasUserEditedSinceGenerationRef.current) {
+      return false;
+    }
+
+    const finalResult = buildFinalResult();
+    const draftContent = stripVolatileFields(candidate.lastGeneratedSummaryDraft);
+    const finalContent = stripVolatileFields(finalResult);
+    const draftJson = JSON.stringify(draftContent);
+    const finalJson = JSON.stringify(finalContent);
+    if (draftJson === finalJson) {
+      return false;
+    }
+
+    const lengthDiffRatio = Math.abs(finalJson.length - draftJson.length) / Math.max(draftJson.length, 1);
+    const draft = candidate.lastGeneratedSummaryDraft;
+    const structuralFieldChanged =
+      draft.interview_info?.overall_result !== finalResult.interview_info?.overall_result ||
+      draft.summary?.comprehensive_score !== finalResult.summary?.comprehensive_score ||
+      draft.summary?.interview_conclusion !== finalResult.summary?.interview_conclusion;
+    if (lengthDiffRatio < 0.05 && !structuralFieldChanged) {
+      return false;
+    }
+
+    const signature = JSON.stringify({ draft: draftContent, final: finalContent });
+    if (signature === lastRewriteSignatureRef.current) {
+      return false;
+    }
+
+    // Fire immediately (no timer)
+    void (async () => {
+      const insight = await analyzeInterviewSummaryRewrite(
+        candidate.lastGeneratedSummaryDraft as InterviewResult,
+        finalResult
+      );
+      if (!insight) {
+        return;
+      }
+      lastRewriteSignatureRef.current = signature;
+      const preferences = insight.data.preferences.length
+        ? insight.data.preferences
+        : ['保持结构化输出'];
+      recordFeedbackEvent(position.id, {
+        type: 'summary_rewritten',
+        candidateId: candidate.id,
+        details: {
+          preferences,
+          rewriteIntensity: insight.data.rewriteIntensity,
+        },
+      });
+    })();
+    return true;
+  }, [
+    analyzeInterviewSummaryRewrite,
+    buildFinalResult,
+    candidate.id,
+    candidate.lastGeneratedSummaryDraft,
+    position.id,
+    recordFeedbackEvent,
+  ]);
+
+  // Flush all pending timers and save immediately
+  const flushPendingSaves = useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    if (rewriteAnalysisTimerRef.current) {
+      clearTimeout(rewriteAnalysisTimerRef.current);
+      rewriteAnalysisTimerRef.current = null;
+      fireRewriteAnalysis();
+    }
+    handleSaveDraft();
+  }, [fireRewriteAnalysis, handleSaveDraft]);
+
   // Complete interview function
   const handleComplete = useCallback(() => {
+    // Flush any pending rewrite analysis before completing
+    if (rewriteAnalysisTimerRef.current) {
+      clearTimeout(rewriteAnalysisTimerRef.current);
+      rewriteAnalysisTimerRef.current = null;
+      fireRewriteAnalysis();
+    }
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
     setSaveStatus('saving');
     const finalResult = buildFinalResult();
     completeInterview(position.id, candidate.id, finalResult);
     setSaveStatus('saved');
-  }, [buildFinalResult, position.id, candidate.id, completeInterview]);
+  }, [buildFinalResult, position.id, candidate.id, completeInterview, fireRewriteAnalysis]);
 
   // Auto-save with debounce on user edits
   useEffect(() => {
@@ -338,19 +426,13 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     };
   }, [concerns, followUps, handleSaveDraft, result, strengths]);
 
+  // Debounced rewrite analysis (15s after edits stabilize)
   useEffect(() => {
-    if (!candidate.lastGeneratedSummaryDraft) {
-      return;
-    }
-
-    // Only analyze if the user has actually edited since the last generation/mount
-    if (!hasUserEditedSinceGenerationRef.current) {
+    if (!candidate.lastGeneratedSummaryDraft || !hasUserEditedSinceGenerationRef.current) {
       return;
     }
 
     const finalResult = buildFinalResult();
-
-    // Normalize: strip volatile metadata (aiUsage) for content-only comparison
     const draftContent = stripVolatileFields(candidate.lastGeneratedSummaryDraft);
     const finalContent = stripVolatileFields(finalResult);
     const draftJson = JSON.stringify(draftContent);
@@ -359,7 +441,6 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       return;
     }
 
-    // Minimum rewrite threshold: skip analysis for trivial edits
     const lengthDiffRatio = Math.abs(finalJson.length - draftJson.length) / Math.max(draftJson.length, 1);
     const draft = candidate.lastGeneratedSummaryDraft;
     const structuralFieldChanged =
@@ -370,10 +451,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       return;
     }
 
-    const signature = JSON.stringify({
-      draft: draftContent,
-      final: finalContent,
-    });
+    const signature = JSON.stringify({ draft: draftContent, final: finalContent });
     if (signature === lastRewriteSignatureRef.current) {
       return;
     }
@@ -383,27 +461,7 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     }
 
     rewriteAnalysisTimerRef.current = setTimeout(() => {
-      void (async () => {
-        const insight = await analyzeInterviewSummaryRewrite(
-          candidate.lastGeneratedSummaryDraft as InterviewResult,
-          finalResult
-        );
-        if (!insight) {
-          return;
-        }
-        lastRewriteSignatureRef.current = signature;
-        const preferences = insight.data.preferences.length
-          ? insight.data.preferences
-          : ['保持结构化输出'];
-        recordFeedbackEvent(position.id, {
-          type: 'summary_rewritten',
-          candidateId: candidate.id,
-          details: {
-            preferences,
-            rewriteIntensity: insight.data.rewriteIntensity,
-          },
-        });
-      })();
+      fireRewriteAnalysis();
     }, 15000);
 
     return () => {
@@ -412,14 +470,11 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
       }
     };
   }, [
-    analyzeInterviewSummaryRewrite,
     buildFinalResult,
-    candidate.id,
     candidate.lastGeneratedSummaryDraft,
     concerns,
+    fireRewriteAnalysis,
     followUps,
-    position.id,
-    recordFeedbackEvent,
     result,
     strengths,
   ]);
@@ -453,6 +508,40 @@ export const SummaryEditor: React.FC<SummaryEditorProps> = ({
     handleGenerateSummary,
     setInterviewResult,
   ]);
+
+  // Block in-app navigation when there are unsaved changes
+  const hasUnsavedChanges = saveStatus === 'unsaved';
+  const blocker = useBlocker(hasUnsavedChanges);
+
+  // Handle blocker state: flush saves and proceed, or show confirmation
+  useEffect(() => {
+    if (blocker.state !== 'blocked') {
+      return;
+    }
+    // Auto-flush: save draft + fire rewrite analysis, then proceed
+    flushPendingSaves();
+    blocker.proceed();
+  }, [blocker, flushPendingSaves]);
+
+  // Warn on browser close/refresh when there are unsaved changes
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      return;
+    }
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Flush auto-save synchronously (localStorage.setItem is sync)
+      handleSaveDraft();
+      // Fire rewrite analysis (async, best-effort)
+      if (rewriteAnalysisTimerRef.current) {
+        clearTimeout(rewriteAnalysisTimerRef.current);
+        rewriteAnalysisTimerRef.current = null;
+        fireRewriteAnalysis();
+      }
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges, handleSaveDraft, fireRewriteAnalysis]);
 
   const updateDimension = (index: number, updates: Partial<EvaluationDimension>) => {
     const newDimensions = [...result.evaluation_dimensions];
